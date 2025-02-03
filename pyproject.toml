@@ -49,4 +49,9 @@ aipserver = "social.graze.aip.server:main"
 distribution = true
 
 [tool.pdm.build]
-includes = ["src/social/graze/aip", "LICENSE"]
+includes = ["src/", "LICENSE"]
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src/"
+]
