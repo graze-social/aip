@@ -1,0 +1,3 @@
+-- aip
+CREATE DATABASE aip;
+GRANT ALL PRIVILEGES ON DATABASE aip TO postgres;

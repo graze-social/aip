@@ -1,5 +1,9 @@
 import os
 import logging
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
+import jinja2
+from aiohttp import web
+import aiohttp_jinja2
 
 logger = logging.getLogger(__name__)
 
@@ -13,15 +17,12 @@ async def start_web_server():
 
     app.add_routes([web.static("/static", os.path.join(os.getcwd(), "static"), append_version=True)])
 
-    app.add_routes([web.get("/", handle_index, name="surge")])
+    app.add_routes([web.get("/", handle_index)])
+    app.add_routes([web.get("/auth/", handle_index)])
+    app.add_routes([web.get("/", handle_index)])
 
     jinja_env = aiohttp_jinja2.setup(
         app, enable_async=True, loader=jinja2.FileSystemLoader(os.path.join(os.getcwd(), "templates"))
-    )
-    jinja_env.globals.update(
-        {
-            "url": url_with_globals,
-        }
     )
 
     app["static_root_url"] = "/static"

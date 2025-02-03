@@ -50,7 +50,7 @@ aipserver = "social.graze.aip.app.cli:invoke"
 distribution = true
 
 [tool.pdm.build]
-includes = ["src/", "LICENSE"]
+includes = ["src/social", "LICENSE"]
 
 [tool.pytest.ini_options]
 pythonpath = [
