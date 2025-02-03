@@ -1,0 +1,52 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[project]
+name = "aip"
+version = "0.1.0"
+description = "ATmosphere Authentication, Identity, and Permission Proxy"
+requires-python = ">=3.13"
+
+license = { file = "LICENSE" }
+
+authors = [
+    { name = "Nick Gerakines", email = "nick.gerakines@gmail.com" },
+]
+maintainers = [{ name = "Nick Gerakines", email = "nick.gerakines@gmail.com" }]
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13"
+]
+
+dependencies = [
+    "peppercorn",
+    "fastapi>=0.115.8",
+    "sqlalchemy>=2.0.37",
+    "aioredis>=2.0.1",
+    "pydantic>=2.10.6",
+]
+readme = "README.md"
+
+[project.optional-dependencies]
+dev = [
+    "flake8>=7.1.1",
+    "pytest>=8.3.4",
+]
+test = ["coverage"]
+
+[project.urls]
+"Homepage" = "https://github.com/graze-social/aip"
+"Bug Reports" = "https://github.com/graze-social/aip/issues"
+"Source" = "https://github.com/graze-social/aip"
+
+[project.scripts]
+aipserver = "social.graze.aip.server:main"
+
+[tool.pdm]
+distribution = true
+
+[tool.pdm.build]
+includes = ["src/social/graze/aip", "LICENSE"]
