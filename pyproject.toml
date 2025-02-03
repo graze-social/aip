@@ -22,11 +22,12 @@ classifiers = [
 ]
 
 dependencies = [
-    "peppercorn",
-    "fastapi>=0.115.8",
     "sqlalchemy>=2.0.37",
     "aioredis>=2.0.1",
     "pydantic>=2.10.6",
+    "aiohttp>=3.11.11",
+    "jinja2>=3.1.5",
+    "aiohttp-jinja2>=1.6",
 ]
 readme = "README.md"
 
@@ -43,7 +44,7 @@ test = ["coverage"]
 "Source" = "https://github.com/graze-social/aip"
 
 [project.scripts]
-aipserver = "social.graze.aip.server:main"
+aipserver = "social.graze.aip.app.cli:invoke"
 
 [tool.pdm]
 distribution = true
