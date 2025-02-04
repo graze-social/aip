@@ -1,8 +1,5 @@
-from typing import List
+from typing import Set
 import logging
-import os
-import json
-from logging.config import dictConfig
 from jwcrypto import jwk
 from typing_extensions import Annotated
 from pydantic import (
@@ -13,6 +10,7 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, NoDecode
 from aiohttp import web
+import json
 
 
 logger = logging.getLogger(__name__)
@@ -27,12 +25,16 @@ class Settings(BaseSettings):
 
     pg_dsn: PostgresDsn = "postgresql+asyncpg://postgres:password@postgres/aip"
 
-    json_web_keys: Annotated[List[jwk.JWK], NoDecode] = []
+    json_web_keys: Annotated[jwk.JWKSet, NoDecode] = []
+
+    active_signing_keys: Set[str] = set()
 
     @field_validator("json_web_keys", mode="before")
     @classmethod
-    def decode_json_web_keys(cls, v: str) -> List[jwk.JWK]:
-        logger.debug("Parsing json_web_keys", extra={"json_web_keys": v})
-        return []
+    def decode_json_web_keys(cls, v: str) -> jwk.JWKSet:
+        with open(v) as fd:
+            data = fd.read()
+            return jwk.JWKSet.from_json(data)
+
 
 SettingsAppKey = web.AppKey("settings", Settings)

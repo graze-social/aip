@@ -9,8 +9,8 @@
 <main>
     <section>
         <h2>Login</h2>
-        <form>
-            <input type="text" name="handle" placeholder="@you.bsky.social" aria-label="Handle" required=required>
+        <form method="post" action="/auth/atproto">
+            <input type="text" name="subject" placeholder="@you.bsky.social" aria-label="Handle" required=required>
             <button type="submit">Submit</button>
             <fieldset>
               <label for="terms">

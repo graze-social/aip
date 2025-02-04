@@ -1,4 +1,3 @@
-import asyncio
 from enum import IntEnum
 from aiohttp import ClientSession
 from pydantic import BaseModel
@@ -102,7 +101,9 @@ async def resolve_did_method_plc(
         pds = next(filter(pds_predicate, body.get("service", [])), None)
         if handle is not None and pds is not None:
             return ResolvedSubject(
-                did=did, handle=handle.removeprefix("at://"), pds=pds.get("serviceEndpoint")
+                did=did,
+                handle=handle.removeprefix("at://"),
+                pds=pds.get("serviceEndpoint"),
             )
     return None
 
@@ -114,11 +115,11 @@ async def resolve_did_method_web(
     parts = did.removeprefix("did:web:").split(":")
     if len(parts) == 0:
         return None
-    
+
     if len(parts) == 1:
         parts.append(".well-known")
 
-    url = "https://{inner}/did.json".format(inner = "/".join(parts))
+    url = "https://{inner}/did.json".format(inner="/".join(parts))
 
     async with session.get(url) as resp:
         if resp.status != 200:
@@ -130,7 +131,9 @@ async def resolve_did_method_web(
         pds = next(filter(pds_predicate, body.get("service", [])), None)
         if handle is not None and pds is not None:
             return ResolvedSubject(
-                did=did, handle=handle.removeprefix("at://"), pds=pds.get("serviceEndpoint")
+                did=did,
+                handle=handle.removeprefix("at://"),
+                pds=pds.get("serviceEndpoint"),
             )
     return None
 
