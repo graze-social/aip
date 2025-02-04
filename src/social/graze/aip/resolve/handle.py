@@ -138,16 +138,16 @@ async def resolve_did_method_web(
     return None
 
 
-async def resolve_did(session: ClientSession, did: str) -> Optional[ResolvedSubject]:
+async def resolve_did(session: ClientSession, plc_hostname: str, did: str) -> Optional[ResolvedSubject]:
     if did.startswith("did:plc:"):
-        return await resolve_did_method_plc("plc.directory", session, did)
+        return await resolve_did_method_plc(plc_hostname, session, did)
     elif did.startswith("did:web:"):
         return await resolve_did_method_web(session, did)
     return None
 
 
 async def resolve_subject(
-    session: ClientSession, subject: str
+    session: ClientSession, plc_hostname: str, subject: str
 ) -> Optional[ResolvedSubject]:
     parsed_subject = parse_input(subject)
     if parsed_subject is None:
@@ -164,7 +164,7 @@ async def resolve_subject(
     if did is None:
         return None
 
-    return await resolve_did(session, did)
+    return await resolve_did(session, plc_hostname, did)
 
 
 def parse_input(subject: str) -> Optional[ParsedSubject]:

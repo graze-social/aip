@@ -36,6 +36,7 @@ dependencies = [
     "aiodns>=3.2.0",
     "asyncpg>=0.30.0",
     "python-ulid>=3.0.0",
+    "cryptography>=44.0.0",
 ]
 readme = "README.md"
 

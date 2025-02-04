@@ -1,5 +1,4 @@
 import argparse
-import aiohttp
 import asyncio
 import logging
 from jwcrypto import jwk
@@ -18,7 +17,7 @@ async def realMain() -> None:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    gen_jwk_command = subparsers.add_parser("gen-jwk", help="Generate a JWK")
+    _ = subparsers.add_parser("gen-jwk", help="Generate a JWK")
 
     args = vars(parser.parse_args())
     command = args.get("command", None)

@@ -10,13 +10,18 @@
     <section>
         <h2>Login</h2>
         <form method="post" action="/auth/atproto">
-            <input type="text" name="subject" placeholder="@you.bsky.social" aria-label="Handle" required=required>
-            <button type="submit">Submit</button>
+          <fieldset>
+            <input type="text" name="subject" {% if subject %}value="{{ subject }}"{% else %}placeholder="@you.bsky.social" {% endif %} aria-label="Handle" {% if error_message %} aria-invalid="true" aria-describedby="subject-error"{% endif %}  required=required>
+            {% if error_message %}
+            <small id="subject-error" class="pico-text-red-450">{{ error_message }}</small>
+            {% endif %}
+          </fieldset>
+          <button type="submit">Submit</button>
             <fieldset>
               <label for="terms">
                 <input type="checkbox" role="switch" id="terms" name="terms">
                 I agree to the
-                <a href="#" onclick="event.preventDefault()">Privacy Policy</a>
+                <a href="#" onclick="event.preventDefault()">Privacy Policy and Terms of Service</a>
               </label>
             </fieldset>
           </form>

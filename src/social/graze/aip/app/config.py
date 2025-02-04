@@ -1,4 +1,4 @@
-from typing import Set
+from typing import List
 import logging
 from jwcrypto import jwk
 from typing_extensions import Annotated
@@ -21,13 +21,15 @@ class Settings(BaseSettings):
 
     external_hostname: str = "localhost:5100"
 
+    plc_hostname: str = "plc.directory"
+
     redis_dsn: RedisDsn = Field("redis://localhost:6379/1")
 
     pg_dsn: PostgresDsn = "postgresql+asyncpg://postgres:password@postgres/aip"
 
     json_web_keys: Annotated[jwk.JWKSet, NoDecode] = []
 
-    active_signing_keys: Set[str] = set()
+    active_signing_keys: List[str] = list()
 
     @field_validator("json_web_keys", mode="before")
     @classmethod
