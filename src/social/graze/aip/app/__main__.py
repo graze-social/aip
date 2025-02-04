@@ -17,7 +17,7 @@ def configure_logging():
     logging.getLogger().setLevel(logging.DEBUG)
 
 
-def invoke():
+def main():
     configure_logging()
 
     from social.graze.aip.app.server import start_web_server
@@ -26,4 +26,4 @@ def invoke():
 
 
 if __name__ == "__main__":
-    invoke()
+    main()

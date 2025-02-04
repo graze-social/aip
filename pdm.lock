@@ -5,7 +5,7 @@
 groups = ["default", "dev"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:c7cbe92b262ae141bd2aea9acbf4f8c3b09dc52023d076ba39ebf4fd7ef61539"
+content_hash = "sha256:31e51e89fed068a227a6982e56ba1d56b2ea72126437415bedbbd018ee88b696"
 
 [[metadata.targets]]
 requires_python = ">=3.13"
@@ -753,6 +753,17 @@ dependencies = [
 files = [
     {file = "python_json_logger-3.2.1-py3-none-any.whl", hash = "sha256:cdc17047eb5374bd311e748b42f99d71223f3b0e186f4206cc5d52aefe85b090"},
     {file = "python_json_logger-3.2.1.tar.gz", hash = "sha256:8eb0554ea17cb75b05d2848bc14fb02fbdbd9d6972120781b974380bfa162008"},
+]
+
+[[package]]
+name = "python-ulid"
+version = "3.0.0"
+requires_python = ">=3.9"
+summary = "Universally unique lexicographically sortable identifier"
+groups = ["default"]
+files = [
+    {file = "python_ulid-3.0.0-py3-none-any.whl", hash = "sha256:e4c4942ff50dbd79167ad01ac725ec58f924b4018025ce22c858bfcff99a5e31"},
+    {file = "python_ulid-3.0.0.tar.gz", hash = "sha256:e50296a47dc8209d28629a22fc81ca26c00982c78934bd7766377ba37ea49a9f"},
 ]
 
 [[package]]
