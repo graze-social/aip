@@ -13,6 +13,7 @@ services:
       - HTTP_PORT=5100
       - TZ=America/New_York
       - DATABASE_URL=postgres://postgres:password@postgres/aip
+      - JSON_WEB_KEYS=/workspace/signing_keys.json
       
   postgres:
     image: postgres:17-alpine

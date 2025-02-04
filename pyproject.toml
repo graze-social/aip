@@ -30,6 +30,11 @@ dependencies = [
     "aiohttp-jinja2>=1.6",
     "alembic>=1.14.1",
     "psycopg2>=2.9.10",
+    "jwcrypto>=1.5.6",
+    "pydantic-settings>=2.7.1",
+    "python-json-logger>=3.2.1",
+    "aiodns>=3.2.0",
+    "asyncpg>=0.30.0",
 ]
 readme = "README.md"
 
@@ -37,6 +42,7 @@ readme = "README.md"
 dev = [
     "flake8>=7.1.1",
     "pytest>=8.3.4",
+    "black>=25.1.0",
 ]
 test = ["coverage"]
 
@@ -47,6 +53,7 @@ test = ["coverage"]
 
 [project.scripts]
 aipserver = "social.graze.aip.app.cli:invoke"
+resolve = "social.graze.aip.resolve.__main__:main"
 
 [tool.pdm]
 distribution = true

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<header>
+    <hgroup>
+        <h1>AIP</h1>
+        <p>The Graze Social Authentication, Identity, and Permissions Server</p>
+    </hgroup>
+</header>
+<main>
+    <section>
+        <h2>Login</h2>
+        <form>
+            <input type="text" name="handle" placeholder="@you.bsky.social" aria-label="Handle" required=required>
+            <button type="submit">Submit</button>
+            <fieldset>
+              <label for="terms">
+                <input type="checkbox" role="switch" id="terms" name="terms">
+                I agree to the
+                <a href="#" onclick="event.preventDefault()">Privacy Policy</a>
+              </label>
+            </fieldset>
+          </form>
+    </section>
+</main>
+{% endblock %}
