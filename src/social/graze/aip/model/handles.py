@@ -33,4 +33,5 @@ def upsert_handle_stmt(did: str, handle: str, pds: str):
                 "pds": pds,
             },
         )
+        .returning(Handle.guid)
     )

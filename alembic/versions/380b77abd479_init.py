@@ -35,7 +35,6 @@ def upgrade() -> None:
         sa.Column("oauth_state", sa.String(64), primary_key=True),
         sa.Column("issuer", sa.String(512), nullable=False),
         sa.Column("guid", sa.String(512), nullable=False),
-        sa.Column("nonce", sa.String(64), nullable=False),
         sa.Column("pkce_verifier", sa.String(128), nullable=False),
         sa.Column("secret_jwk_id", sa.String(32), nullable=False),
         sa.Column("dpop_jwk", sa.JSON, nullable=False),
@@ -49,3 +48,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("handles")
+    op.drop_table("oauth_requests")

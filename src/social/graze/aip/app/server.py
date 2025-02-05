@@ -2,7 +2,6 @@ import datetime
 import os
 import logging
 import secrets
-import time
 from typing import Optional, Dict, List, Any, Tuple
 import jinja2
 from aiohttp import web
@@ -10,10 +9,12 @@ import aiohttp_jinja2
 import aiohttp
 import hashlib
 import base64
-from jwcrypto import jwt, jwk
+from jwcrypto import jwk
 from ulid import ULID
 from pydantic import BaseModel
+from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     create_async_engine,
@@ -23,7 +24,8 @@ from sqlalchemy.ext.asyncio import (
 
 from social.graze.aip.app.config import Settings, SettingsAppKey
 from social.graze.aip.resolve.handle import resolve_subject
-from social.graze.aip.model.handles import upsert_handle_stmt
+from social.graze.aip.model.handles import upsert_handle_stmt, Handle
+from social.graze.aip.model.oauth import OAuthRequest
 from social.graze.aip.atproto.pds import (
     oauth_protected_resource,
     oauth_authorization_server,
@@ -70,7 +72,7 @@ def generate_pkce_verifier() -> Tuple[str, str]:
 
     hashed = hashlib.sha256(pkce_token.encode("ascii")).digest()
     encoded = base64.urlsafe_b64encode(hashed)
-    pkce_challenge = encoded.decode("ascii")[:-1]
+    pkce_challenge = encoded.decode("ascii").rstrip("=")
     return (pkce_token, pkce_challenge)
 
 
@@ -90,12 +92,10 @@ async def handle_atproto_login_submit(request: web.Request):
     signing_key_id = next(iter(settings.active_signing_keys), None)
     if signing_key_id is None:
         raise Exception("No active signing keys configured")
-    print(f"signing_key_id = {signing_key_id}")
 
     signing_key = settings.json_web_keys.get_key(signing_key_id)
     if signing_key is None:
         raise Exception("No active signing key available")
-    print(f"signing_key = {signing_key}")
 
     resolved_handle = await resolve_subject(session, settings.plc_hostname, subject)
     if resolved_handle is None:
@@ -106,15 +106,9 @@ async def handle_atproto_login_submit(request: web.Request):
         )
 
     state = secrets.token_urlsafe(32)
-    nonce = secrets.token_urlsafe(32)
-    print(f"state = {state}")
-    print(f"nonce = {nonce}")
-    (pkce_token, pkce_challenge) = generate_pkce_verifier()
-    print(f"pkce_token = {pkce_token}")
-    print(f"pkce_challenge = {pkce_challenge}")
+    (pkce_verifier, code_challenge) = generate_pkce_verifier()
 
     protected_resource = await oauth_protected_resource(session, resolved_handle.pds)
-    print(f"protected_resource = {protected_resource}")
 
     first_authorization_servers = next(
         iter(protected_resource.get("authorization_servers", [])), None
@@ -125,7 +119,14 @@ async def handle_atproto_login_submit(request: web.Request):
     authorization_server = await oauth_authorization_server(
         session, first_authorization_servers
     )
-    print(f"authorization_server = {authorization_server}")
+
+    authorization_endpoint = authorization_server.get("authorization_endpoint", None)
+    if authorization_endpoint is None:
+        raise Exception("No authorization endpoint found")
+
+    issuer = authorization_server.get("issuer", None)
+    if issuer is None:
+        raise Exception("No authorization issuer found")
 
     par_url = authorization_server.get("pushed_authorization_request_endpoint", None)
     if par_url is None:
@@ -138,64 +139,59 @@ async def handle_atproto_login_submit(request: web.Request):
         f"https://{settings.external_hostname}/auth/atproto/client-metadata.json"
     )
     redirect_url = f"https://{settings.external_hostname}/auth/atproto/callback"
-    client_assertion_jti = secrets.token_urlsafe(32)
 
-    now = int(datetime.datetime.now().timestamp())
+    now = datetime.datetime.now()
 
-    client_assertion = jwt.JWT(
-        header={"alg": "ES256", "kid": signing_key_id},
-        claims={
-            "iss": client_id,
-            "sub": client_id,
-            "aud": authorization_server.get("issuer", ""),
-            "jti": client_assertion_jti,
-            "iat": int(now),
-        },
-    )
-    client_assertion.make_signed_token(signing_key)
-    client_assertion_token = client_assertion.serialize()
-    print(f"client_assertion_token = {client_assertion_token}")
-
-    dpop_assertation_jti = secrets.token_urlsafe(32)
-    dpop_assertation_header = {"alg": "ES256", "jwk": dpop_key_public_key, "type": "dpop+jwt"}
-    dpop_assertation_claims = {
-            "jti": dpop_assertation_jti,
-            "htm": "post",
-            "htu": par_url,
-            "iat": int(now),
-            "exp": int(now) + 30,
-        }
-
-    par_form = aiohttp.FormData({
-        "response_type": "code",
-        "code_challenge": pkce_challenge,
-        "code_challenge_method": "S256",
-        "state": state,
-        "client_id": client_id,
-        "redirect_uri": redirect_url,
-        "scope": "atproto transition:generic",
-        "login_hint": resolved_handle.handle,
-        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-        "client_assertion": client_assertion_token,
-    })
-    print(f"par_form = {par_form.__dict__}")
-    headers = {
-        # "DPoP": dpop_assertation_token,
-        # "Content-Type": "application/x-www-form-urlencoded"
+    client_assertion_header = {"alg": "ES256", "kid": signing_key_id}
+    client_assertion_claims = {
+        "iss": client_id,
+        "sub": client_id,
+        "aud": issuer,
+        "iat": int(now.timestamp()),
     }
+
+    dpop_assertation_header = {
+        "alg": "ES256",
+        "jwk": dpop_key_public_key,
+        "typ": "dpop+jwt",
+    }
+    dpop_assertation_claims = {
+        "htm": "POST",
+        "htu": par_url,
+        "iat": int(now.timestamp()),
+        "exp": int(now.timestamp()) + 30,
+        "nonce": "tmp",
+    }
+
+    data = aiohttp.FormData(
+        {
+            "response_type": "code",
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+            "state": state,
+            "client_id": client_id,
+            "redirect_uri": redirect_url,
+            "scope": "atproto transition:generic",
+            "login_hint": resolved_handle.handle,
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        }
+    )
 
     par_resp = await dpop_request(
         session,
+        par_url,
         dpop_key,
         dpop_assertation_header,
         dpop_assertation_claims,
-        "POST",
-        # "https://tip-ngerakines.requestcatcher.com/oauth/par",
-        authorization_server["pushed_authorization_request_endpoint"],
-        headers=headers,
-        data=par_form,
+        signing_key,
+        client_assertion_header,
+        client_assertion_claims,
+        data=data,
     )
-    print(f"par_resp = {par_resp}")
+    par_expires = par_resp.get("expires_in", 60)
+    par_request_uri = par_resp.get("request_uri", None)
+    if par_request_uri is None:
+        raise Exception("No PAR request URI found")
 
     # TODO: Use the following redis command to implement a 120 second lock on the resolved subject.
     #       SET "login:{resolved_handle.did}" "1" NX EX 120
@@ -208,15 +204,141 @@ async def handle_atproto_login_submit(request: web.Request):
             stmt = upsert_handle_stmt(
                 resolved_handle.did, resolved_handle.handle, resolved_handle.pds
             )
-            await session.execute(stmt)
+            guid_result = await session.execute(stmt)
+            guid = guid_result.scalars().one()
+
+            session.add(
+                OAuthRequest(
+                    oauth_state=state,
+                    issuer=issuer,
+                    guid=guid,
+                    pkce_verifier=pkce_verifier,
+                    secret_jwk_id=signing_key_id,
+                    dpop_jwk=dpop_key.export(private_key=True, as_dict=True),
+                    destination="/settings",
+                    created_at=now,
+                    expires_at=now + datetime.timedelta(0, par_expires),
+                )
+            )
+
             await session.commit()
 
-    return await aiohttp_jinja2.render_template_async(
-        "atproto_login.html", request, context={"subject": subject}
+    parsed_authorization_endpoint = urlparse(authorization_endpoint)
+    query = dict(parse_qsl(parsed_authorization_endpoint.query))
+    query.update({"client_id": client_id, "request_uri": par_request_uri})
+    parsed_authorization_endpoint = parsed_authorization_endpoint._replace(
+        query=urlencode(query)
     )
+    redirect_destination = urlunparse(parsed_authorization_endpoint)
+
+    raise web.HTTPFound(redirect_destination)
 
 
 async def handle_atproto_callback(request: web.Request):
+    settings = request.app[SettingsAppKey]
+    http_session = request.app[SessionAppKey]
+    db_session = request.app[DatabaseSessionAppKey]
+
+    state = request.query.get("state", None)
+    issuer = request.query.get("iss", None)
+    code = request.query.get("code", None)
+
+    if state is None or issuer is None or code is None:
+        raise Exception("Invalid request")
+
+    async with db_session() as session:
+
+        async with session.begin():
+
+            oauth_request_stmt = select(OAuthRequest).where(
+                OAuthRequest.oauth_state == state
+            )
+            oauth_request = (await session.scalars(oauth_request_stmt)).first()
+
+            handle_stmt = select(Handle).where(Handle.guid == oauth_request.guid)
+            handle = (await session.scalars(handle_stmt)).first()
+
+            await session.commit()
+
+        if oauth_request.issuer != issuer:
+            raise Exception("Invalid request: issuer mismatch")
+
+        signing_key = settings.json_web_keys.get_key(oauth_request.secret_jwk_id)
+        if signing_key is None:
+            raise Exception("No active signing key available")
+
+        dpop_key = jwk.JWK(**oauth_request.dpop_jwk)
+        dpop_key_public_key = dpop_key.export_public(as_dict=True)
+
+        client_id = (
+            f"https://{settings.external_hostname}/auth/atproto/client-metadata.json"
+        )
+        redirect_url = f"https://{settings.external_hostname}/auth/atproto/callback"
+        client_assertion_jti = str(ULID())
+
+        protected_resource = await oauth_protected_resource(http_session, handle.pds)
+
+        first_authorization_servers = next(
+            iter(protected_resource.get("authorization_servers", [])), None
+        )
+        if first_authorization_servers is None:
+            raise Exception("No authorization server found")
+
+        authorization_server = await oauth_authorization_server(
+            http_session, first_authorization_servers
+        )
+        token_endpoint = authorization_server.get("token_endpoint", None)
+        if token_endpoint is None:
+            raise Exception("No authorization endpoint found")
+
+        now = datetime.datetime.now()
+
+        client_assertion_header = {"alg": "ES256", "kid": oauth_request.secret_jwk_id}
+        client_assertion_claims = {
+            "iss": client_id,
+            "sub": client_id,
+            "aud": issuer,
+            "jti": client_assertion_jti,
+            "iat": int(now.timestamp()),
+        }
+
+        dpop_assertation_header = {
+            "alg": "ES256",
+            "jwk": dpop_key_public_key,
+            "typ": "dpop+jwt",
+        }
+        dpop_assertation_claims = {
+            "htm": "POST",
+            "htu": token_endpoint,
+            "iat": int(now.timestamp()),
+            "exp": int(now.timestamp()) + 30,
+            "nonce": "tmp",
+        }
+
+        data = aiohttp.FormData(
+            {
+                "client_id": client_id,
+                "redirect_uri": redirect_url,
+                "grant_type": "authorization_code",
+                "code": code,
+                "code_verifier": oauth_request.pkce_verifier,
+                "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            }
+        )
+
+        token_response = await dpop_request(
+            http_session,
+            token_endpoint,
+            dpop_key,
+            dpop_assertation_header,
+            dpop_assertation_claims,
+            signing_key,
+            client_assertion_header,
+            client_assertion_claims,
+            data=data,
+        )
+        print(f"token_response: {token_response}")
+
     raise web.HTTPFound("/auth/atproto/debug")
 
 
@@ -311,7 +433,7 @@ async def handle_internal_resolve(request):
         return web.json_response([])
 
     db_session = request.app[DatabaseSessionAppKey]
-    settings  = request.app[SettingsAppKey]
+    settings = request.app[SettingsAppKey]
 
     # TODO: Use a pydantic list structure for this.
     results = []

@@ -10,7 +10,6 @@ class OAuthRequest(Base):
     oauth_state = Column(String(64), primary_key=True)
     issuer = Column(String(512), nullable=False)
     guid = Column(String(512), nullable=False)
-    nonce = Column(String(64), nullable=False)
     pkce_verifier = Column(String(128), nullable=False)
     secret_jwk_id = Column(String(32), nullable=False)
     dpop_jwk = Column(JSON, nullable=False)

@@ -138,7 +138,9 @@ async def resolve_did_method_web(
     return None
 
 
-async def resolve_did(session: ClientSession, plc_hostname: str, did: str) -> Optional[ResolvedSubject]:
+async def resolve_did(
+    session: ClientSession, plc_hostname: str, did: str
+) -> Optional[ResolvedSubject]:
     if did.startswith("did:plc:"):
         return await resolve_did_method_plc(plc_hostname, session, did)
     elif did.startswith("did:web:"):
