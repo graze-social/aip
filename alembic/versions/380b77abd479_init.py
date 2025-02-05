@@ -45,6 +45,24 @@ def upgrade() -> None:
     op.create_index("idx_oauth_requests_guid", "oauth_requests", ["guid"])
     op.create_index("idx_oauth_requests_expires", "oauth_requests", ["expires_at"])
 
+    op.create_table(
+        "oauth_sessions",
+        sa.Column("session_group", sa.String(64), primary_key=True),
+        sa.Column("access_token", sa.String(512), nullable=False),
+        sa.Column("guid", sa.String(512), nullable=False),
+        sa.Column("refresh_token", sa.String(512), nullable=False),
+        sa.Column("issuer", sa.String(512), nullable=False),
+        sa.Column("secret_jwk_id", sa.String(32), nullable=False),
+        sa.Column("dpop_jwk", sa.JSON, nullable=False),
+        sa.Column("created_at", sa.DateTime, nullable=False),
+        sa.Column("access_token_expires_at", sa.DateTime, nullable=False),
+        sa.Column("hard_expires_at", sa.DateTime, nullable=False),
+    )
+    op.create_index("idx_oauth_sessions_guid", "oauth_sessions", ["guid"])
+    op.create_index(
+        "idx_oauth_sessions_expires", "oauth_sessions", ["access_token_expires_at"]
+    )
+
 
 def downgrade() -> None:
     op.drop_table("handles")

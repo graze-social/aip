@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import (
 from social.graze.aip.app.config import Settings, SettingsAppKey
 from social.graze.aip.resolve.handle import resolve_subject
 from social.graze.aip.model.handles import upsert_handle_stmt, Handle
-from social.graze.aip.model.oauth import OAuthRequest
+from social.graze.aip.model.oauth import OAuthRequest, OAuthSession
 from social.graze.aip.atproto.pds import (
     oauth_protected_resource,
     oauth_authorization_server,
@@ -337,9 +337,38 @@ async def handle_atproto_callback(request: web.Request):
             client_assertion_claims,
             data=data,
         )
-        print(f"token_response: {token_response}")
 
-    raise web.HTTPFound("/auth/atproto/debug")
+        access_token = token_response.get("access_token", None)
+        if access_token is None:
+            raise Exception("No access token")
+
+        refresh_token = token_response.get("refresh_token", None)
+        if refresh_token is None:
+            raise Exception("No refresh token")
+
+        expires_in = token_response.get("expires_in", 1800)
+
+        session_group = str(ULID())
+
+        async with session.begin():
+            session.add(
+                OAuthSession(
+                    session_group=session_group,
+                    issuer=issuer,
+                    guid=oauth_request.guid,
+                    access_token=access_token,
+                    refresh_token=refresh_token,
+                    secret_jwk_id=oauth_request.secret_jwk_id,
+                    dpop_jwk=oauth_request.dpop_jwk,
+                    created_at=now,
+                    access_token_expires_at=now + datetime.timedelta(0, expires_in),
+                    hard_expires_at=now + datetime.timedelta(1),
+                )
+            )
+
+            await session.commit()
+
+        raise web.HTTPFound(f"/auth/atproto/debug?session_group={session_group}")
 
 
 async def handle_atproto_debug(request: web.Request):
