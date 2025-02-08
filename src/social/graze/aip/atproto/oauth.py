@@ -4,7 +4,7 @@ from aiohttp import ClientSession, FormData
 from jwcrypto import jwt, jwk
 
 
-async def dpop_request(
+async def dpop_oauth_request(
     session: ClientSession,
     url: str,
     dpop_key: jwk.JWK,

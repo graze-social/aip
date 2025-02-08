@@ -1,8 +1,10 @@
+import asyncio
+import contextlib
 import datetime
 import os
 import logging
 import secrets
-from typing import Optional, Dict, List, Any, Tuple
+from typing import NoReturn, Optional, Dict, List, Any, Tuple
 import jinja2
 from aiohttp import web
 import aiohttp_jinja2
@@ -30,7 +32,7 @@ from social.graze.aip.atproto.pds import (
     oauth_protected_resource,
     oauth_authorization_server,
 )
-from social.graze.aip.atproto.dpop import dpop_request
+from social.graze.aip.atproto.oauth import dpop_oauth_request
 
 logger = logging.getLogger(__name__)
 DatabaseAppKey = web.AppKey("database", AsyncEngine)
@@ -80,7 +82,7 @@ async def handle_atproto_login_submit(request: web.Request):
     settings = request.app[SettingsAppKey]
     session = request.app[SessionAppKey]
     data = await request.post()
-    subject = data.get("subject", None)
+    subject: Optional[str] = data.get("subject", None)  # type: ignore
 
     if subject is None:
         return await aiohttp_jinja2.render_template_async(
@@ -109,6 +111,8 @@ async def handle_atproto_login_submit(request: web.Request):
     (pkce_verifier, code_challenge) = generate_pkce_verifier()
 
     protected_resource = await oauth_protected_resource(session, resolved_handle.pds)
+    if protected_resource is None:
+        raise Exception("No protected resource found")
 
     first_authorization_servers = next(
         iter(protected_resource.get("authorization_servers", [])), None
@@ -119,6 +123,8 @@ async def handle_atproto_login_submit(request: web.Request):
     authorization_server = await oauth_authorization_server(
         session, first_authorization_servers
     )
+    if authorization_server is None:
+        raise Exception("No authorization server found")
 
     authorization_endpoint = authorization_server.get("authorization_endpoint", None)
     if authorization_endpoint is None:
@@ -140,7 +146,7 @@ async def handle_atproto_login_submit(request: web.Request):
     )
     redirect_url = f"https://{settings.external_hostname}/auth/atproto/callback"
 
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(datetime.timezone.utc)
 
     client_assertion_header = {"alg": "ES256", "kid": signing_key_id}
     client_assertion_claims = {
@@ -177,7 +183,7 @@ async def handle_atproto_login_submit(request: web.Request):
         }
     )
 
-    par_resp = await dpop_request(
+    par_resp = await dpop_oauth_request(
         session,
         par_url,
         dpop_key,
@@ -231,7 +237,7 @@ async def handle_atproto_login_submit(request: web.Request):
     )
     redirect_destination = urlunparse(parsed_authorization_endpoint)
 
-    raise web.HTTPFound(redirect_destination)
+    raise web.HTTPFound(str(redirect_destination))
 
 
 async def handle_atproto_callback(request: web.Request):
@@ -239,9 +245,9 @@ async def handle_atproto_callback(request: web.Request):
     http_session = request.app[SessionAppKey]
     db_session = request.app[DatabaseSessionAppKey]
 
-    state = request.query.get("state", None)
-    issuer = request.query.get("iss", None)
-    code = request.query.get("code", None)
+    state: Optional[str] = request.query.get("state", None)
+    issuer: Optional[str] = request.query.get("iss", None)
+    code: Optional[str] = request.query.get("code", None)
 
     if state is None or issuer is None or code is None:
         raise Exception("Invalid request")
@@ -253,10 +259,16 @@ async def handle_atproto_callback(request: web.Request):
             oauth_request_stmt = select(OAuthRequest).where(
                 OAuthRequest.oauth_state == state
             )
-            oauth_request = (await session.scalars(oauth_request_stmt)).first()
+            oauth_request: Optional[OAuthRequest] = (
+                await session.scalars(oauth_request_stmt)
+            ).first()
+            if oauth_request is None:
+                raise Exception("Invalid request: no matching state")
 
             handle_stmt = select(Handle).where(Handle.guid == oauth_request.guid)
-            handle = (await session.scalars(handle_stmt)).first()
+            handle: Optional[Handle] = (await session.scalars(handle_stmt)).first()
+            if handle is None:
+                raise Exception("Invalid request: no matching handle")
 
             await session.commit()
 
@@ -277,6 +289,8 @@ async def handle_atproto_callback(request: web.Request):
         client_assertion_jti = str(ULID())
 
         protected_resource = await oauth_protected_resource(http_session, handle.pds)
+        if protected_resource is None:
+            raise Exception("No protected resource found")
 
         first_authorization_servers = next(
             iter(protected_resource.get("authorization_servers", [])), None
@@ -287,11 +301,14 @@ async def handle_atproto_callback(request: web.Request):
         authorization_server = await oauth_authorization_server(
             http_session, first_authorization_servers
         )
+        if authorization_server is None:
+            raise Exception("No authorization server found")
+
         token_endpoint = authorization_server.get("token_endpoint", None)
         if token_endpoint is None:
             raise Exception("No authorization endpoint found")
 
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(datetime.timezone.utc)
 
         client_assertion_header = {"alg": "ES256", "kid": oauth_request.secret_jwk_id}
         client_assertion_claims = {
@@ -326,7 +343,7 @@ async def handle_atproto_callback(request: web.Request):
             }
         )
 
-        token_response = await dpop_request(
+        token_response = await dpop_oauth_request(
             http_session,
             token_endpoint,
             dpop_key,
@@ -502,6 +519,52 @@ async def startup(app):
     app[SessionAppKey] = aiohttp.ClientSession()
 
 
+tick_task_app_key = web.AppKey("tick_task_app_key", asyncio.Task[None])
+
+
+async def tick_task(app: web.Application) -> NoReturn:
+    while True:
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        db_session = app[DatabaseSessionAppKey]
+        async with db_session() as session:
+
+            async with session.begin():
+
+                # Nick: In the future, this should go to a centralize queue (redis) and multiple aip instances would be
+                # able to fetch and process the queue in parallel.
+                stmt = (
+                    select(OAuthSession)
+                    .where(OAuthSession.access_token_expires_at > now)
+                    .order_by(OAuthSession.created_at)
+                )
+                oauth_sessions = (await session.execute(stmt)).scalars().all()
+
+                for oauth_session in oauth_sessions:
+                    print(f"Session: {oauth_session}")
+
+                    # TODO: Continue if `now - access_token_expires_at > 10 minutes`
+
+                    # TODO: Refresh the access token
+                    # TODO: On failure to refresh the access token, remove the oauth_session record.
+
+                await session.commit()
+
+        # print(f"Tick")
+        await asyncio.sleep(30)
+
+
+async def background_tasks(app):
+    app[tick_task_app_key] = asyncio.create_task(tick_task(app))
+
+    yield
+
+    app[tick_task_app_key].cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await app[tick_task_app_key]
+
+
 async def shutdown(app):
     await app[SessionAppKey].close()
     await app[DatabaseAppKey].dispose()
@@ -570,5 +633,6 @@ async def start_web_server(settings: Optional[Settings] = None):
 
     app.on_startup.append(startup)
     app.on_cleanup.append(shutdown)
+    app.cleanup_ctx.append(background_tasks)
 
     return app

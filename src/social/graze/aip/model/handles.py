@@ -1,16 +1,18 @@
-from sqlalchemy import String, Column
+from typing import Any
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import insert
 from ulid import ULID
-from social.graze.aip.model.base import Base
+
+from social.graze.aip.model.base import Base, str512, guidpk
 
 
 class Handle(Base):
     __tablename__ = "handles"
 
-    guid = Column(String(512), primary_key=True)
-    did = Column(String(512))
-    handle = Column(String(512), nullable=False)
-    pds = Column(String(512), nullable=False)
+    guid: Mapped[guidpk]
+    did: Mapped[str512]
+    handle: Mapped[str512]
+    pds: Mapped[str512]
 
 
 def upsert_handle_stmt(did: str, handle: str, pds: str):

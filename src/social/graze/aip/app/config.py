@@ -6,11 +6,9 @@ from pydantic import (
     field_validator,
     PostgresDsn,
     RedisDsn,
-    Field,
 )
 from pydantic_settings import BaseSettings, NoDecode
 from aiohttp import web
-import json
 
 
 logger = logging.getLogger(__name__)
@@ -23,11 +21,13 @@ class Settings(BaseSettings):
 
     plc_hostname: str = "plc.directory"
 
-    redis_dsn: RedisDsn = Field("redis://localhost:6379/1")
+    redis_dsn: RedisDsn = RedisDsn("redis://localhost:6379/1")
 
-    pg_dsn: PostgresDsn = "postgresql+asyncpg://postgres:password@postgres/aip"
+    pg_dsn: PostgresDsn = PostgresDsn(
+        "postgresql+asyncpg://postgres:password@postgres/aip"
+    )
 
-    json_web_keys: Annotated[jwk.JWKSet, NoDecode] = []
+    json_web_keys: Annotated[jwk.JWKSet, NoDecode] = jwk.JWKSet()
 
     active_signing_keys: List[str] = list()
 
