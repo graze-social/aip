@@ -501,7 +501,7 @@ async def handle_jwks(request: web.Request):
     return web.json_response({"keys": results})
 
 
-async def handle_atproto_client_metadata(request):
+async def handle_atproto_client_metadata(request: web.Request):
     settings = request.app[SettingsAppKey]
     client_id = (
         f"https://{settings.external_hostname}/auth/atproto/client-metadata.json"
@@ -532,25 +532,6 @@ async def handle_atproto_client_metadata(request):
     )
     return web.json_response(client_metadata.dict())
 
-
-async def handle_settings(request):
-    return await aiohttp_jinja2.render_template_async(
-        "settings.html", request, context={}
-    )
-
-
-async def handle_set_app_password(request):
-    return await aiohttp_jinja2.render_template_async(
-        "settings.html", request, context={}
-    )
-
-
-async def handle_change_permission(request):
-    return await aiohttp_jinja2.render_template_async(
-        "settings.html", request, context={}
-    )
-
-
 async def handle_internal_me(request: web.Request):
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     redis_pool = request.app[RedisPoolAppKey]
@@ -572,6 +553,8 @@ async def handle_internal_me(request: web.Request):
                 database_session, redis_session, auth_token, attempt_refresh=False
             )
 
+            # TODO: Include has_app_password boolean in the response.
+
             return web.json_response(
                 {
                     "handle": auth_token.handle,
@@ -590,19 +573,15 @@ async def handle_internal_me(request: web.Request):
         )
 
 
-async def handle_internal_ready(request):
-    return await aiohttp_jinja2.render_template_async(
-        "settings.html", request, context={}
-    )
+async def handle_internal_ready(request: web.Request):
+    return web.Response(status=200)
 
 
-async def handle_internal_alive(request):
-    return await aiohttp_jinja2.render_template_async(
-        "settings.html", request, context={}
-    )
+async def handle_internal_alive(request: web.Request):
+    return web.Response(status=200)
 
 
-async def handle_internal_resolve(request):
+async def handle_internal_resolve(request: web.Request):
     subjects = request.query.getall("subject", [])
     if len(subjects) == 0:
         return web.json_response([])
@@ -715,6 +694,8 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
                     body=json.dumps({"error": "Not Authorized"}),
                     content_type="application/json",
                 )
+
+            # TODO: Fail with error if the user does not have an app-password set.
 
             now = datetime.datetime.now(datetime.timezone.utc)
 
@@ -847,7 +828,10 @@ async def handle_internal_app_password(request: web.Request) -> web.Response:
             app_password_key = f"auth_session:app-password:{auth_token.guid}"
             await redis_session.delete(app_password_key)
 
-            return web.json_response({})
+            # TODO: Add the guid to the refresh queue to create an AT Protocol auth token using the app-password.
+            # ZADD "auth_session:app_password:refresh" <now + 5 seconds> guid
+
+            return web.Response(status=200)
     except web.HTTPException as e:
         logging.exception("handle_internal_permissions: web.HTTPException")
         raise e
@@ -1167,14 +1151,6 @@ async def start_web_server(settings: Optional[Settings] = None):
     app.add_routes([web.get("/auth/atproto/debug", handle_atproto_debug)])
     app.add_routes(
         [web.get("/auth/atproto/client-metadata.json", handle_atproto_client_metadata)]
-    )
-
-    app.add_routes(
-        [
-            web.get("/settings", handle_settings),
-            web.post("/settings/app_password", handle_set_app_password),
-            web.post("/settings/permissions", handle_change_permission),
-        ]
     )
 
     app.add_routes(
