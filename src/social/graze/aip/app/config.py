@@ -7,8 +7,10 @@ from pydantic import (
     PostgresDsn,
     RedisDsn,
 )
+import base64
 from pydantic_settings import BaseSettings, NoDecode
 from aiohttp import web
+from cryptography.fernet import Fernet
 
 
 logger = logging.getLogger(__name__)
@@ -31,12 +33,22 @@ class Settings(BaseSettings):
 
     active_signing_keys: List[str] = list()
 
+    service_auth_keys: List[str] = list()
+
+    encryption_key: Fernet = Fernet(Fernet.generate_key())
+
     @field_validator("json_web_keys", mode="before")
     @classmethod
     def decode_json_web_keys(cls, v: str) -> jwk.JWKSet:
         with open(v) as fd:
             data = fd.read()
             return jwk.JWKSet.from_json(data)
+
+    @field_validator("encryption_key", mode="before")
+    @classmethod
+    def decode_encryption_key(cls, v: str) -> Fernet:
+        key_data = base64.b64decode(v)
+        return Fernet(key_data)
 
 
 SettingsAppKey = web.AppKey("settings", Settings)

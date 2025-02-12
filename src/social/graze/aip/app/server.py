@@ -1,21 +1,22 @@
 import asyncio
 import contextlib
 import datetime
+import json
 import os
 import logging
 import secrets
-from typing import NoReturn, Optional, Dict, List, Any, Tuple
+from typing import Literal, NoReturn, Optional, Dict, List, Any, Tuple
 import jinja2
 from aiohttp import web
 import aiohttp_jinja2
 import aiohttp
 import hashlib
 import base64
-from jwcrypto import jwk
+from jwcrypto import jwt, jwk
 from ulid import ULID
 from pydantic import BaseModel
 from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
-
+import redis.asyncio as redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -27,7 +28,7 @@ from sqlalchemy.ext.asyncio import (
 from social.graze.aip.app.config import Settings, SettingsAppKey
 from social.graze.aip.resolve.handle import resolve_subject
 from social.graze.aip.model.handles import upsert_handle_stmt, Handle
-from social.graze.aip.model.oauth import OAuthRequest, OAuthSession
+from social.graze.aip.model.oauth import OAuthRequest, OAuthSession, Permission
 from social.graze.aip.atproto.pds import (
     oauth_protected_resource,
     oauth_authorization_server,
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 DatabaseAppKey = web.AppKey("database", AsyncEngine)
 DatabaseSessionAppKey = web.AppKey("session_maker", async_sessionmaker[AsyncSession])
 SessionAppKey = web.AppKey("http_session", aiohttp.ClientSession)
+RedisPoolAppKey = web.AppKey("redis_pool", redis.ConnectionPool)
 
 
 class ATProtocolOAuthClientMetadata(BaseModel):
@@ -252,6 +254,14 @@ async def handle_atproto_callback(request: web.Request):
     if state is None or issuer is None or code is None:
         raise Exception("Invalid request")
 
+    service_auth_key_id = next(iter(settings.service_auth_keys), None)
+    if service_auth_key_id is None:
+        raise Exception("No service auth keys configured")
+
+    service_auth_key = settings.json_web_keys.get_key(service_auth_key_id)
+    if service_auth_key is None:
+        raise Exception("No service auth key available")
+
     async with db_session() as session:
 
         async with session.begin():
@@ -385,12 +395,66 @@ async def handle_atproto_callback(request: web.Request):
 
             await session.commit()
 
-        raise web.HTTPFound(f"/auth/atproto/debug?session_group={session_group}")
+    auth_token = jwt.JWT(
+        header={"alg": "ES256", "kid": service_auth_key_id},
+        claims={
+            "sub": str(oauth_request.guid),
+            "grp": session_group,
+            "iat": int(now.timestamp()),
+        },
+    )
+    auth_token.make_signed_token(service_auth_key)
+    serialized_auth_token = auth_token.serialize()
+
+    raise web.HTTPFound(f"/auth/atproto/debug?auth_token={serialized_auth_token}")
 
 
 async def handle_atproto_debug(request: web.Request):
+    settings = request.app[SettingsAppKey]
+    db_session = request.app[DatabaseSessionAppKey]
+
+    serialized_auth_token: Optional[str] = request.query.get("auth_token", None)
+    if serialized_auth_token is None:
+        raise Exception("Invalid request")
+
+    validated_auth_token = jwt.JWT(
+        jwt=serialized_auth_token, key=settings.json_web_keys, algs=["ES256"]
+    )
+    auth_token_claims = json.loads(validated_auth_token.claims)
+    auth_token_header = json.loads(validated_auth_token.header)
+
+    auth_token_subject: Optional[str] = auth_token_claims.get("sub", None)
+    auth_token_session_group: Optional[str] = auth_token_claims.get("grp", None)
+
+    async with db_session() as session:
+
+        async with session.begin():
+
+            oauth_session_stmt = select(OAuthSession).where(
+                OAuthSession.guid == auth_token_subject,
+                OAuthSession.session_group == auth_token_session_group,
+            )
+            oauth_session: Optional[OAuthSession] = (
+                await session.scalars(oauth_session_stmt)
+            ).first()
+            if oauth_session is None:
+                raise Exception("Invalid request: no matching session")
+
+            handle_stmt = select(Handle).where(Handle.guid == oauth_session.guid)
+            handle: Optional[Handle] = (await session.scalars(handle_stmt)).first()
+            if handle is None:
+                raise Exception("Invalid request: no matching handle")
+
+            await session.commit()
+
     return await aiohttp_jinja2.render_template_async(
-        "atproto_debug.html", request, context={}
+        "atproto_debug.html",
+        request,
+        context={
+            "auth_token": {"claims": auth_token_claims, "header": auth_token_header},
+            "oauth_session": oauth_session,
+            "handle": handle,
+        },
     )
 
 
@@ -455,9 +519,77 @@ async def handle_change_permission(request):
     )
 
 
-async def handle_internal_me(request):
-    return await aiohttp_jinja2.render_template_async(
-        "settings.html", request, context={}
+async def handle_internal_me(request: web.Request):
+    authorizations: Optional[str] = request.headers.getone("Authorization", None)
+    if (
+        authorizations is None
+        or not authorizations.startswith("Bearer ")
+        or len(authorizations) < 8
+    ):
+        raise web.HTTPUnauthorized(
+            body=json.dumps({"error": "Not Authorized"}),
+            content_type="application/json",
+        )
+
+    serialized_auth_token = authorizations[7:]
+
+    settings = request.app[SettingsAppKey]
+
+    try:
+        validated_auth_token = jwt.JWT(
+            jwt=serialized_auth_token, key=settings.json_web_keys, algs=["ES256"]
+        )
+        # TODO: Validate this against a pydantic model
+        auth_token_header: Dict[str, str] = json.loads(validated_auth_token.header)
+        # TODO: Validate this against a pydantic model
+        auth_token_claims: Dict[str, str] = json.loads(validated_auth_token.claims)
+
+        auth_token_subject: Optional[str] = auth_token_claims.get("sub", None)
+        if auth_token_subject is None:
+            raise Exception("Invalid request: no subject")
+
+        auth_token_session_group: Optional[str] = auth_token_claims.get("grp", None)
+        if auth_token_session_group is None:
+            raise Exception("Invalid request: no session group")
+
+    except Exception as e:
+        raise web.HTTPUnauthorized(
+            body=json.dumps({"error": "Not Authorized"}),
+            content_type="application/json",
+        )
+
+    db_session = request.app[DatabaseSessionAppKey]
+
+    try:
+        async with db_session() as session:
+
+            async with session.begin():
+
+                oauth_session_stmt = select(OAuthSession).where(
+                    OAuthSession.guid == auth_token_subject,
+                    OAuthSession.session_group == auth_token_session_group,
+                )
+                oauth_session: OAuthSession = (
+                    await session.scalars(oauth_session_stmt)
+                ).one()
+
+                handle_stmt = select(Handle).where(Handle.guid == oauth_session.guid)
+                handle: Handle = (await session.scalars(handle_stmt)).one()
+
+                await session.commit()
+    except Exception as e:
+        raise web.HTTPBadRequest(
+            body=json.dumps({"error": "Bad Request"}), content_type="application/json"
+        )
+
+    return web.json_response(
+        {
+            "handle": handle.handle,
+            "pds": handle.pds,
+            "did": handle.did,
+            "guid": handle.guid,
+            "session_group": oauth_session.session_group,
+        }
     )
 
 
@@ -500,14 +632,212 @@ async def handle_internal_resolve(request):
     return web.json_response(results)
 
 
-async def handle_xrpc_proxy(request):
-    return await aiohttp_jinja2.render_template_async(
-        "settings.html", request, context={}
-    )
+async def handle_xrpc_proxy(request: web.Request):
+    # TODO: Validate this against an allowlist.
+    xrpc_method: Optional[str] = request.match_info.get("method", None)
+    print(f"XRPC Method: {xrpc_method}")
+    if xrpc_method is None:
+        raise web.HTTPBadRequest(
+            body=json.dumps({"error": "Invalid XRPC method"}),
+            content_type="application/json",
+        )
+
+    db_session = request.app[DatabaseSessionAppKey]
+
+    try:
+        async with db_session() as session:
+            auth_token = await auth_token_helper(request, session)
+            if auth_token is None:
+                raise web.HTTPUnauthorized(
+                    body=json.dumps({"error": "Not Authorized"}),
+                    content_type="application/json",
+                )
+            auth_session = await auth_session_helper(request, session, auth_token)
+    except web.HTTPException as e:
+        raise e
+    except Exception as e:
+        raise web.HTTPInternalServerError(
+            body=json.dumps({"error": "Internal Server Error"}),
+            content_type="application/json",
+        )
+
+    http_session = request.app[SessionAppKey]
+
+    xrpc_url = f"{auth_token.pds}/xrpc/{xrpc_method}"
+    print(f"XRPC URL: {xrpc_url}")
+
+    headers = {
+        "Authorization": f"Bearer {auth_session}",
+    }
+
+    web.Response(text="Hello, World!")
+
+    async with http_session.get(
+        xrpc_url,
+        headers=headers,
+    ) as resp:
+        if resp.status == 200:
+            return await resp.json()
+        return await resp.json()
+
+
+async def handle_internal_permissions(request: web.Request) -> web.Response:
+    return web.Response(text="Hello, World!")
+
+
+class AuthToken(BaseModel):
+    auth_token: str
+
+    guid: str
+    subject: str
+    handle: str
+    pds: str
+
+    context_guid: str
+    context_subject: str
+    context_pds: str
+
+
+# The goal is to do something like this.
+# class EncodedException(Exception):
+#     CODE = None
+
+# class AuthHelperException(EncodedException):
+#     CODE: Literal["error-auth-5000"] = "error-auth-5000"
+
+
+class AuthHelperException(Exception):
+    CODE: Literal["error-auth-5000"] = "error-auth-5000"
+
+
+async def auth_session_helper(
+    request: web.Request, db_session: AsyncSession, auth_token: AuthToken
+) -> str:
+    try:
+        async with db_session.begin():
+
+            is_self = auth_token.subject == auth_token.context_subject
+
+            # First, look for a valid app-password access token in the cache.
+
+            # Select the most recent, valid session.
+
+            oauth_session_stmt = select(OAuthSession).where(
+                OAuthSession.guid == auth_token.context_guid
+            )
+            oauth_session: OAuthSession = (
+                await db_session.scalars(oauth_session_stmt)
+            ).one()
+
+            await db_session.commit()
+
+            return oauth_session.access_token
+    finally:
+        pass
+
+
+async def auth_token_helper(
+    request: web.Request, db_session: AsyncSession
+) -> Optional[AuthToken]:
+    authorizations: Optional[str] = request.headers.getone("Authorization", None)
+    if (
+        authorizations is None
+        or not authorizations.startswith("Bearer ")
+        or len(authorizations) < 8
+    ):
+        return None
+
+    serialized_auth_token = authorizations[7:]
+
+    settings = request.app[SettingsAppKey]
+
+    try:
+        # TODO: Figure out what this raises.
+        validated_auth_token = jwt.JWT(
+            jwt=serialized_auth_token, key=settings.json_web_keys, algs=["ES256"]
+        )
+        # TODO: Validate this against a pydantic model
+        # auth_token_header: Dict[str, str] = json.loads(validated_auth_token.header)
+
+        # TODO: Validate this against a pydantic model
+        auth_token_claims: Dict[str, str] = json.loads(validated_auth_token.claims)
+
+        auth_token_subject: Optional[str] = auth_token_claims.get("sub", None)
+        if auth_token_subject is None:
+            raise ValueError("auth_token invalid: sub missing")
+
+        auth_token_session_group: Optional[str] = auth_token_claims.get("grp", None)
+        if auth_token_session_group is None:
+            raise ValueError("auth_token invalid: grp missing")
+
+    except Exception as e:
+        raise AuthHelperException()
+
+    try:
+
+        async with db_session.begin():
+
+            oauth_session_stmt = select(OAuthSession).where(
+                OAuthSession.guid == auth_token_subject,
+                OAuthSession.session_group == auth_token_session_group,
+            )
+            oauth_session: OAuthSession = (
+                await db_session.scalars(oauth_session_stmt)
+            ).one()
+
+            handle_stmt = select(Handle).where(Handle.guid == oauth_session.guid)
+            handle: Handle = (await db_session.scalars(handle_stmt)).one()
+
+            x_repository: str = request.headers.getone("X-Repository", handle.did)
+
+            # If the subject of the request is the same as the subject of the auth token, then we have everything we need and can return a full formed AuthToken.
+            if x_repository == handle.did:
+                x_pds: str = request.headers.getone("X-Pds", handle.pds)
+                return AuthToken(
+                    auth_token=serialized_auth_token,
+                    guid=handle.guid,
+                    subject=handle.did,
+                    handle=handle.handle,
+                    pds=handle.pds,
+                    context_guid=handle.guid,
+                    context_subject=auth_token_subject,
+                    context_pds=request.headers.getone("X-Pds", handle.pds),
+                )
+
+            permission_stmt = select(Permission).where(
+                Permission.guid == handle.guid,
+                Permission.target_guid == x_repository,
+                Permission.permission > 0,
+            )
+            permission: Permission = (await db_session.scalars(permission_stmt)).one()
+
+            subject_handle_stmt = select(Handle).where(
+                Handle.guid == permission.target_guid
+            )
+            subject_handle: Handle = (
+                await db_session.scalars(subject_handle_stmt)
+            ).one()
+
+            x_pds: str = request.headers.getone("X-Pds", subject_handle.pds)
+
+            await db_session.commit()
+
+            return AuthToken(
+                auth_token=serialized_auth_token,
+                guid=handle.guid,
+                subject=handle.did,
+                handle=handle.handle,
+                pds=handle.pds,
+                context_guid=subject_handle.guid,
+                context_subject=subject_handle.did,
+                context_pds=x_pds,
+            )
+    except Exception as e:
+        raise AuthHelperException()
 
 
 async def startup(app):
-    settings = app[SettingsAppKey]
+    settings: Settings = app[SettingsAppKey]
 
     engine = create_async_engine(str(settings.pg_dsn))
     app[DatabaseAppKey] = engine
@@ -517,6 +847,8 @@ async def startup(app):
     app[DatabaseSessionAppKey] = database_session
 
     app[SessionAppKey] = aiohttp.ClientSession()
+
+    app[RedisPoolAppKey] = redis.ConnectionPool.from_url(str(settings.redis_dsn))
 
 
 tick_task_app_key = web.AppKey("tick_task_app_key", asyncio.Task[None])
@@ -561,14 +893,14 @@ async def background_tasks(app):
     yield
 
     app[tick_task_app_key].cancel()
-    with contextlib.suppress(asyncio.CancelledError):
+    with contextlib.suppress(asyncio.exceptions.CancelledError):
         await app[tick_task_app_key]
 
 
 async def shutdown(app):
-    await app[SessionAppKey].close()
     await app[DatabaseAppKey].dispose()
     await app[SessionAppKey].close()
+    await app[RedisPoolAppKey].aclose()
 
 
 async def start_web_server(settings: Optional[Settings] = None):
@@ -609,10 +941,11 @@ async def start_web_server(settings: Optional[Settings] = None):
 
     app.add_routes(
         [
-            web.get("/internal/alive", handle_internal_me),
-            web.get("/internal/ready", handle_internal_me),
+            web.get("/internal/alive", handle_internal_alive),
+            web.get("/internal/ready", handle_internal_ready),
             web.get("/internal/api/me", handle_internal_me),
             web.get("/internal/api/resolve", handle_internal_resolve),
+            web.get("/internal/api/permissions", handle_internal_permissions),
         ]
     )
 

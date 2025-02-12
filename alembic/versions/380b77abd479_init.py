@@ -63,8 +63,31 @@ def upgrade() -> None:
         "idx_oauth_sessions_expires", "oauth_sessions", ["access_token_expires_at"]
     )
 
+    op.create_table(
+        "atproto_app_passwords",
+        sa.Column("guid", sa.String(512), nullable=False),
+        sa.Column("app_password", sa.String(512), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    )
+
+    # `guid` has permission `permission` on `target_guid`
+    op.create_table(
+        "guid_permissions",
+        sa.Column("guid", sa.String(512), nullable=False),
+        sa.Column("target_guid", sa.String(512), nullable=False),
+        sa.Column("permission", sa.Integer, nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    )
+    op.create_primary_key(
+        "pk_guid_permissions", "guid_permissions",
+        ["guid", "target_guid"]
+    )
+    op.create_index("idx_guid_permissions_target_guid", "guid_permissions", ["target_guid"])
+
 
 def downgrade() -> None:
     op.drop_table("handles")
     op.drop_table("oauth_requests")
     op.drop_table("oauth_sessions")
+    op.drop_table("atproto_app_passwords")
+    op.drop_table("guid_permissions")

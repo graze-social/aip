@@ -1,6 +1,6 @@
 from typing import Any
 from datetime import datetime
-from sqlalchemy import String, DateTime
+from sqlalchemy import Integer, String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSON
 
@@ -44,5 +44,16 @@ class OAuthSession(Base):
         DateTime(timezone=True), nullable=False
     )
     hard_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
+class Permission(Base):
+    __tablename__ = "guid_permissions"
+
+    guid: Mapped[str] = mapped_column(String(512), primary_key=True)
+    target_guid: Mapped[str] = mapped_column(String(512), primary_key=True)
+    permission: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

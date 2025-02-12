@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-<hgroup>
-    <h1>AIP</h1>
-    <p>The Graze Social Authentication, Identity, and Permissions Server</p>
-</hgroup>
-<section>
-    <h1>Debug</h1>
-</section>
+<main>
+    <section>
+        <h1>Debug</h1>
+        <pre><code>{{ auth_token.header }}</code></pre>
+        <pre><code>{{ auth_token.claims }}</code></pre>
+        <pre><code>{{ handle.__dict__ }}</code></pre>
+        <pre><code>{{ oauth_session.__dict__ }}</code></pre>
+    </section>
+</main>
 {% endblock %}
