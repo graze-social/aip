@@ -532,6 +532,7 @@ async def handle_atproto_client_metadata(request: web.Request):
     )
     return web.json_response(client_metadata.dict())
 
+
 async def handle_internal_me(request: web.Request):
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     redis_pool = request.app[RedisPoolAppKey]
@@ -586,6 +587,10 @@ async def handle_internal_resolve(request: web.Request):
     if len(subjects) == 0:
         return web.json_response([])
 
+    # Nick: This could be improved by using Redis to cache results. Eventually inputs should go into a queue to be
+    # processed in the background and the results streamed back to the client via SSE. If this becomes a high volume
+    # endpoint, then we should run our own PLC replica or consider tapping into jetstream.
+
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     settings = request.app[SettingsAppKey]
 
@@ -604,7 +609,7 @@ async def handle_internal_resolve(request: web.Request):
                 )
                 await database_session.execute(stmt)
                 await database_session.commit()
-            results.append(resolved_subject.dict())
+            results.append(resolved_subject.model_dump())
     return web.json_response(results)
 
 
@@ -625,12 +630,14 @@ async def handle_xrpc_proxy(request: web.Request):
             database_session_maker() as database_session,
             redis.Redis.from_pool(redis_pool) as redis_session,
         ):
+            # TODO: Allow optional auth here.
             auth_token = await auth_token_helper(request, database_session)
             if auth_token is None:
                 raise web.HTTPUnauthorized(
                     body=json.dumps({"error": "Not Authorized"}),
                     content_type="application/json",
                 )
+            # TODO:
             auth_session = await auth_session_helper(
                 database_session, redis_session, auth_token
             )
@@ -644,27 +651,41 @@ async def handle_xrpc_proxy(request: web.Request):
 
     http_session = request.app[SessionAppKey]
 
+    # TODO: Look for endpoint header and fallback to context PDS value.
     xrpc_url = f"{auth_token.pds}/xrpc/{xrpc_method}"
-    print(f"XRPC URL: {xrpc_url}")
 
+    # TODO: Support more complex URLs that include prefixes and or suffixes.
+
+    # TODO: Selectively add auth header.
     headers = {
         "Authorization": f"Bearer {auth_session}",
     }
 
-    web.Response(text="Hello, World!")
+    # TODO: This will need to support DPoP.
 
+    # TODO: Support query string parameters.
+
+    # TODO: Use `session.request(method, url, headers=headers, **kwargs)` instead.
     async with http_session.get(
         xrpc_url,
         headers=headers,
     ) as resp:
+        # TODO: Figure out if websockets or SSE support is needed. Gut says no.
+
         if resp.status == 200:
             return await resp.json()
+
+        # TODO: Think about using a header like `X-AIP-Error` for additional error context.
+
+        # TODO: This should return the status code and body as-is.
         return await resp.json()
 
 
 class PermissionOperation(BaseModel):
     op: Literal["test", "add", "remove", "replace"]
     path: str
+
+    # TODO: Make these permission values mean something.
     value: Optional[PositiveInt] = None
 
 
@@ -674,6 +695,8 @@ PermissionOperations = RootModel[list[PermissionOperation]]
 async def handle_internal_permissions(request: web.Request) -> web.Response:
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     redis_pool = request.app[RedisPoolAppKey]
+
+    # TODO: Support GET requests that returns paginated permission objects.
 
     try:
         data = await request.read()
@@ -706,6 +729,9 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
                     if (
                         operation.op == "add" or operation.op == "replace"
                     ) and operation.value is not None:
+
+                        # TODO: Fail if the guid is unknown. Clients should use /internal/api/resolve on all subjects prior to setting permissions.
+
                         guid = operation.path.removeprefix("/")
                         stmt = upsert_permission_stmt(
                             guid=guid,
@@ -780,6 +806,7 @@ async def handle_internal_app_password(request: web.Request) -> web.Response:
         data = await request.read()
         app_password_operation = AppPasswordOperation.model_validate_json(data)
     except (OSError, ValidationError):
+        # TODO: Fix the returned error message when JSON fails because of pydantic validation functions.
         return web.Response(text="Invalid JSON", status=400)
 
     try:

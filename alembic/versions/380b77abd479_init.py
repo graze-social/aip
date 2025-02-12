@@ -55,7 +55,9 @@ def upgrade() -> None:
         sa.Column("secret_jwk_id", sa.String(32), nullable=False),
         sa.Column("dpop_jwk", sa.JSON, nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("access_token_expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            "access_token_expires_at", sa.DateTime(timezone=True), nullable=False
+        ),
         sa.Column("hard_expires_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index("idx_oauth_sessions_guid", "oauth_sessions", ["guid"])
@@ -79,10 +81,11 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_primary_key(
-        "pk_guid_permissions", "guid_permissions",
-        ["guid", "target_guid"]
+        "pk_guid_permissions", "guid_permissions", ["guid", "target_guid"]
     )
-    op.create_index("idx_guid_permissions_target_guid", "guid_permissions", ["target_guid"])
+    op.create_index(
+        "idx_guid_permissions_target_guid", "guid_permissions", ["target_guid"]
+    )
 
 
 def downgrade() -> None:
