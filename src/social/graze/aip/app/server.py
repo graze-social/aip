@@ -5,7 +5,7 @@ import json
 import os
 import logging
 import secrets
-from typing import Literal, NoReturn, Optional, Dict, List, Any, Tuple
+from typing import Final, NoReturn, Optional, Dict, List, Any, Tuple, Final
 import jinja2
 from aiohttp import web
 import aiohttp_jinja2
@@ -36,10 +36,12 @@ from social.graze.aip.atproto.pds import (
 from social.graze.aip.atproto.oauth import dpop_oauth_request
 
 logger = logging.getLogger(__name__)
-DatabaseAppKey = web.AppKey("database", AsyncEngine)
-DatabaseSessionAppKey = web.AppKey("session_maker", async_sessionmaker[AsyncSession])
-SessionAppKey = web.AppKey("http_session", aiohttp.ClientSession)
-RedisPoolAppKey = web.AppKey("redis_pool", redis.ConnectionPool)
+DatabaseAppKey: Final = web.AppKey("database", AsyncEngine)
+DatabaseSessionMakerAppKey: Final = web.AppKey(
+    "database_session_maker", async_sessionmaker[AsyncSession]
+)
+SessionAppKey: Final = web.AppKey("http_session", aiohttp.ClientSession)
+RedisPoolAppKey: Final = web.AppKey("redis_pool", redis.ConnectionPool)
 
 
 class ATProtocolOAuthClientMetadata(BaseModel):
@@ -82,7 +84,7 @@ def generate_pkce_verifier() -> Tuple[str, str]:
 
 async def handle_atproto_login_submit(request: web.Request):
     settings = request.app[SettingsAppKey]
-    session = request.app[SessionAppKey]
+    database_session = request.app[SessionAppKey]
     data = await request.post()
     subject: Optional[str] = data.get("subject", None)  # type: ignore
 
@@ -101,7 +103,9 @@ async def handle_atproto_login_submit(request: web.Request):
     if signing_key is None:
         raise Exception("No active signing key available")
 
-    resolved_handle = await resolve_subject(session, settings.plc_hostname, subject)
+    resolved_handle = await resolve_subject(
+        database_session, settings.plc_hostname, subject
+    )
     if resolved_handle is None:
         return await aiohttp_jinja2.render_template_async(
             "atproto_login.html",
@@ -112,7 +116,9 @@ async def handle_atproto_login_submit(request: web.Request):
     state = secrets.token_urlsafe(32)
     (pkce_verifier, code_challenge) = generate_pkce_verifier()
 
-    protected_resource = await oauth_protected_resource(session, resolved_handle.pds)
+    protected_resource = await oauth_protected_resource(
+        database_session, resolved_handle.pds
+    )
     if protected_resource is None:
         raise Exception("No protected resource found")
 
@@ -123,7 +129,7 @@ async def handle_atproto_login_submit(request: web.Request):
         raise Exception("No authorization server found")
 
     authorization_server = await oauth_authorization_server(
-        session, first_authorization_servers
+        database_session, first_authorization_servers
     )
     if authorization_server is None:
         raise Exception("No authorization server found")
@@ -186,7 +192,7 @@ async def handle_atproto_login_submit(request: web.Request):
     )
 
     par_resp = await dpop_oauth_request(
-        session,
+        database_session,
         par_url,
         dpop_key,
         dpop_assertation_header,
@@ -205,17 +211,18 @@ async def handle_atproto_login_submit(request: web.Request):
     #       SET "login:{resolved_handle.did}" "1" NX EX 120
     #       https://redis.io/docs/latest/commands/set/
 
-    db_session = request.app[DatabaseSessionAppKey]
-    async with db_session() as session:
+    database_session_maker = request.app[DatabaseSessionMakerAppKey]
 
-        async with session.begin():
+    async with database_session_maker() as database_session:
+
+        async with database_session.begin():
             stmt = upsert_handle_stmt(
                 resolved_handle.did, resolved_handle.handle, resolved_handle.pds
             )
-            guid_result = await session.execute(stmt)
+            guid_result = await database_session.execute(stmt)
             guid = guid_result.scalars().one()
 
-            session.add(
+            database_session.add(
                 OAuthRequest(
                     oauth_state=state,
                     issuer=issuer,
@@ -229,7 +236,7 @@ async def handle_atproto_login_submit(request: web.Request):
                 )
             )
 
-            await session.commit()
+            await database_session.commit()
 
     parsed_authorization_endpoint = urlparse(authorization_endpoint)
     query = dict(parse_qsl(parsed_authorization_endpoint.query))
@@ -245,7 +252,6 @@ async def handle_atproto_login_submit(request: web.Request):
 async def handle_atproto_callback(request: web.Request):
     settings = request.app[SettingsAppKey]
     http_session = request.app[SessionAppKey]
-    db_session = request.app[DatabaseSessionAppKey]
 
     state: Optional[str] = request.query.get("state", None)
     issuer: Optional[str] = request.query.get("iss", None)
@@ -262,25 +268,33 @@ async def handle_atproto_callback(request: web.Request):
     if service_auth_key is None:
         raise Exception("No service auth key available")
 
-    async with db_session() as session:
+    database_session_maker = request.app[DatabaseSessionMakerAppKey]
+    redis_pool = request.app[RedisPoolAppKey]
 
-        async with session.begin():
+    async with (
+        database_session_maker() as database_session,
+        redis.Redis.from_pool(redis_pool) as redis_session,
+    ):
+
+        async with database_session.begin():
 
             oauth_request_stmt = select(OAuthRequest).where(
                 OAuthRequest.oauth_state == state
             )
             oauth_request: Optional[OAuthRequest] = (
-                await session.scalars(oauth_request_stmt)
+                await database_session.scalars(oauth_request_stmt)
             ).first()
             if oauth_request is None:
                 raise Exception("Invalid request: no matching state")
 
             handle_stmt = select(Handle).where(Handle.guid == oauth_request.guid)
-            handle: Optional[Handle] = (await session.scalars(handle_stmt)).first()
+            handle: Optional[Handle] = (
+                await database_session.scalars(handle_stmt)
+            ).first()
             if handle is None:
                 raise Exception("Invalid request: no matching handle")
 
-            await session.commit()
+            await database_session.commit()
 
         if oauth_request.issuer != issuer:
             raise Exception("Invalid request: issuer mismatch")
@@ -377,8 +391,8 @@ async def handle_atproto_callback(request: web.Request):
 
         session_group = str(ULID())
 
-        async with session.begin():
-            session.add(
+        async with database_session.begin():
+            database_session.add(
                 OAuthSession(
                     session_group=session_group,
                     issuer=issuer,
@@ -393,7 +407,16 @@ async def handle_atproto_callback(request: web.Request):
                 )
             )
 
-            await session.commit()
+            await database_session.commit()
+
+        # Cache the access token in redis. For users with multiple devices, this just shoves the latest one into the
+        # cache keyed on the guid, which is probably fine.
+        oauth_session_key = f"auth_session:oauth:{str(oauth_request.guid)}"
+        await redis_session.set(oauth_session_key, access_token, ex=expires_in)
+
+        # TODO: Execute a Redis ZADD operation to create a time-sorted queue of session_group keys for refresh jobs.
+        # expires_diff = expires_in * 0.8
+        # ZADD "auth_session:oauth:refresh" <now + expires_diff> <session_group>
 
     auth_token = jwt.JWT(
         header={"alg": "ES256", "kid": service_auth_key_id},
@@ -411,7 +434,7 @@ async def handle_atproto_callback(request: web.Request):
 
 async def handle_atproto_debug(request: web.Request):
     settings = request.app[SettingsAppKey]
-    db_session = request.app[DatabaseSessionAppKey]
+    database_session_maker = request.app[DatabaseSessionMakerAppKey]
 
     serialized_auth_token: Optional[str] = request.query.get("auth_token", None)
     if serialized_auth_token is None:
@@ -426,26 +449,28 @@ async def handle_atproto_debug(request: web.Request):
     auth_token_subject: Optional[str] = auth_token_claims.get("sub", None)
     auth_token_session_group: Optional[str] = auth_token_claims.get("grp", None)
 
-    async with db_session() as session:
+    async with database_session_maker() as database_session:
 
-        async with session.begin():
+        async with database_session.begin():
 
             oauth_session_stmt = select(OAuthSession).where(
                 OAuthSession.guid == auth_token_subject,
                 OAuthSession.session_group == auth_token_session_group,
             )
             oauth_session: Optional[OAuthSession] = (
-                await session.scalars(oauth_session_stmt)
+                await database_session.scalars(oauth_session_stmt)
             ).first()
             if oauth_session is None:
                 raise Exception("Invalid request: no matching session")
 
             handle_stmt = select(Handle).where(Handle.guid == oauth_session.guid)
-            handle: Optional[Handle] = (await session.scalars(handle_stmt)).first()
+            handle: Optional[Handle] = (
+                await database_session.scalars(handle_stmt)
+            ).first()
             if handle is None:
                 raise Exception("Invalid request: no matching handle")
 
-            await session.commit()
+            await database_session.commit()
 
     return await aiohttp_jinja2.render_template_async(
         "atproto_debug.html",
@@ -558,25 +583,25 @@ async def handle_internal_me(request: web.Request):
             content_type="application/json",
         )
 
-    db_session = request.app[DatabaseSessionAppKey]
+    database_session_maker = request.app[DatabaseSessionMakerAppKey]
 
     try:
-        async with db_session() as session:
+        async with database_session_maker() as database_session:
 
-            async with session.begin():
+            async with database_session.begin():
 
                 oauth_session_stmt = select(OAuthSession).where(
                     OAuthSession.guid == auth_token_subject,
                     OAuthSession.session_group == auth_token_session_group,
                 )
                 oauth_session: OAuthSession = (
-                    await session.scalars(oauth_session_stmt)
+                    await database_session.scalars(oauth_session_stmt)
                 ).one()
 
                 handle_stmt = select(Handle).where(Handle.guid == oauth_session.guid)
-                handle: Handle = (await session.scalars(handle_stmt)).one()
+                handle: Handle = (await database_session.scalars(handle_stmt)).one()
 
-                await session.commit()
+                await database_session.commit()
     except Exception as e:
         raise web.HTTPBadRequest(
             body=json.dumps({"error": "Bad Request"}), content_type="application/json"
@@ -610,24 +635,24 @@ async def handle_internal_resolve(request):
     if len(subjects) == 0:
         return web.json_response([])
 
-    db_session = request.app[DatabaseSessionAppKey]
+    database_session_maker = request.app[DatabaseSessionMakerAppKey]
     settings = request.app[SettingsAppKey]
 
     # TODO: Use a pydantic list structure for this.
     results = []
-    async with db_session() as session:
+    async with database_session_maker() as database_session:
         for subject in subjects:
             resolved_subject = await resolve_subject(
                 request.app[SessionAppKey], settings.plc_hostname, subject
             )
             if resolved_subject is None:
                 continue
-            async with session.begin():
+            async with database_session.begin():
                 stmt = upsert_handle_stmt(
                     resolved_subject.did, resolved_subject.handle, resolved_subject.pds
                 )
-                await session.execute(stmt)
-                await session.commit()
+                await database_session.execute(stmt)
+                await database_session.commit()
             results.append(resolved_subject.dict())
     return web.json_response(results)
 
@@ -635,24 +660,29 @@ async def handle_internal_resolve(request):
 async def handle_xrpc_proxy(request: web.Request):
     # TODO: Validate this against an allowlist.
     xrpc_method: Optional[str] = request.match_info.get("method", None)
-    print(f"XRPC Method: {xrpc_method}")
     if xrpc_method is None:
         raise web.HTTPBadRequest(
             body=json.dumps({"error": "Invalid XRPC method"}),
             content_type="application/json",
         )
 
-    db_session = request.app[DatabaseSessionAppKey]
+    database_session_maker = request.app[DatabaseSessionMakerAppKey]
+    redis_pool = request.app[RedisPoolAppKey]
 
     try:
-        async with db_session() as session:
-            auth_token = await auth_token_helper(request, session)
+        async with (
+            database_session_maker() as database_session,
+            redis.Redis.from_pool(redis_pool) as redis_session,
+        ):
+            auth_token = await auth_token_helper(request, database_session)
             if auth_token is None:
                 raise web.HTTPUnauthorized(
                     body=json.dumps({"error": "Not Authorized"}),
                     content_type="application/json",
                 )
-            auth_session = await auth_session_helper(request, session, auth_token)
+            auth_session = await auth_session_helper(
+                database_session, redis_session, auth_token
+            )
     except web.HTTPException as e:
         raise e
     except Exception as e:
@@ -699,45 +729,76 @@ class AuthToken(BaseModel):
 
 
 # The goal is to do something like this.
-# class EncodedException(Exception):
-#     CODE = None
+class EncodedException(Exception):
+    pass
 
-# class AuthHelperException(EncodedException):
+
+class AuthHelperException(EncodedException):
+    CODE: Final[str] = "error-auth-5000"
+
+
+# class AuthHelperException(Exception):
 #     CODE: Literal["error-auth-5000"] = "error-auth-5000"
 
 
-class AuthHelperException(Exception):
-    CODE: Literal["error-auth-5000"] = "error-auth-5000"
-
-
 async def auth_session_helper(
-    request: web.Request, db_session: AsyncSession, auth_token: AuthToken
+    # request: web.Request,
+    database_session: AsyncSession,
+    redis_session: redis.Redis,
+    auth_token: AuthToken,
 ) -> str:
     try:
-        async with db_session.begin():
-
+        async with database_session.begin():
             is_self = auth_token.subject == auth_token.context_subject
 
-            # First, look for a valid app-password access token in the cache.
+            # 1. Get an app-password session from redis if it exists. This is a cheap operation, so get it out of the way up front.
+            app_password_key = f"auth_session:app-password:{auth_token.context_guid}"
+            cached_app_password_value: bytes = await redis_session.get(app_password_key)
+            if cached_app_password_value is not None:
+                # TODO: Deccrypt the value
+                return cached_app_password_value.decode("utf-8")
 
-            # Select the most recent, valid session.
+            # 2. If is_self, then get an oauth session from redis if it exists.
+            oauth_session_key = f"auth_session:oauth:{auth_token.context_guid}"
+            cached_oauth_session_value: bytes = await redis_session.get(
+                oauth_session_key
+            )
+            if cached_oauth_session_value is not None:
+                # TODO: Deccrypt the value
+                return cached_oauth_session_value.decode("utf-8")
+
+            # TODO: Make the above redis calls a single mget operation.
+
+            # 3. If not is_self, then get the app-password from the DB, create a session, cache it, and return it.
+            # TODO: Implement this.
+
+            # 4. If not is_self, return an error because a valid app-password session is required.
+            if not is_self:
+                raise AuthHelperException("No valid session")
+
+            # 5. If is_self, then get an oauth session from the database if it exists.
+            # TODO: Implement this.
 
             oauth_session_stmt = select(OAuthSession).where(
                 OAuthSession.guid == auth_token.context_guid
             )
-            oauth_session: OAuthSession = (
-                await db_session.scalars(oauth_session_stmt)
-            ).one()
+            oauth_session: Optional[OAuthSession] = (
+                await database_session.scalars(oauth_session_stmt)
+            ).first()
+            await database_session.commit()
 
-            await db_session.commit()
+            if oauth_session is not None:
+                return str(oauth_session.access_token)
 
-            return oauth_session.access_token
+            # Lastly, return an error because all scenarios have been exhausted.
+            if not is_self:
+                raise AuthHelperException("No valid session")
     finally:
         pass
 
 
 async def auth_token_helper(
-    request: web.Request, db_session: AsyncSession
+    request: web.Request, database_session: AsyncSession
 ) -> Optional[AuthToken]:
     authorizations: Optional[str] = request.headers.getone("Authorization", None)
     if (
@@ -775,18 +836,18 @@ async def auth_token_helper(
 
     try:
 
-        async with db_session.begin():
+        async with database_session.begin():
 
             oauth_session_stmt = select(OAuthSession).where(
                 OAuthSession.guid == auth_token_subject,
                 OAuthSession.session_group == auth_token_session_group,
             )
             oauth_session: OAuthSession = (
-                await db_session.scalars(oauth_session_stmt)
+                await database_session.scalars(oauth_session_stmt)
             ).one()
 
             handle_stmt = select(Handle).where(Handle.guid == oauth_session.guid)
-            handle: Handle = (await db_session.scalars(handle_stmt)).one()
+            handle: Handle = (await database_session.scalars(handle_stmt)).one()
 
             x_repository: str = request.headers.getone("X-Repository", handle.did)
 
@@ -800,8 +861,8 @@ async def auth_token_helper(
                     handle=handle.handle,
                     pds=handle.pds,
                     context_guid=handle.guid,
-                    context_subject=auth_token_subject,
-                    context_pds=request.headers.getone("X-Pds", handle.pds),
+                    context_subject=handle.did,
+                    context_pds=x_pds,
                 )
 
             permission_stmt = select(Permission).where(
@@ -809,18 +870,20 @@ async def auth_token_helper(
                 Permission.target_guid == x_repository,
                 Permission.permission > 0,
             )
-            permission: Permission = (await db_session.scalars(permission_stmt)).one()
+            permission: Permission = (
+                await database_session.scalars(permission_stmt)
+            ).one()
 
             subject_handle_stmt = select(Handle).where(
                 Handle.guid == permission.target_guid
             )
             subject_handle: Handle = (
-                await db_session.scalars(subject_handle_stmt)
+                await database_session.scalars(subject_handle_stmt)
             ).one()
 
             x_pds: str = request.headers.getone("X-Pds", subject_handle.pds)
 
-            await db_session.commit()
+            await database_session.commit()
 
             return AuthToken(
                 auth_token=serialized_auth_token,
@@ -844,7 +907,7 @@ async def startup(app):
     database_session = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
-    app[DatabaseSessionAppKey] = database_session
+    app[DatabaseSessionMakerAppKey] = database_session
 
     app[SessionAppKey] = aiohttp.ClientSession()
 
@@ -859,10 +922,10 @@ async def tick_task(app: web.Application) -> NoReturn:
 
         now = datetime.datetime.now(datetime.timezone.utc)
 
-        db_session = app[DatabaseSessionAppKey]
-        async with db_session() as session:
+        database_session_maker = app[DatabaseSessionMakerAppKey]
+        async with database_session_maker() as database_session:
 
-            async with session.begin():
+            async with database_session.begin():
 
                 # Nick: In the future, this should go to a centralize queue (redis) and multiple aip instances would be
                 # able to fetch and process the queue in parallel.
@@ -871,7 +934,7 @@ async def tick_task(app: web.Application) -> NoReturn:
                     .where(OAuthSession.access_token_expires_at > now)
                     .order_by(OAuthSession.created_at)
                 )
-                oauth_sessions = (await session.execute(stmt)).scalars().all()
+                oauth_sessions = (await database_session.execute(stmt)).scalars().all()
 
                 for oauth_session in oauth_sessions:
                     print(f"Session: {oauth_session}")
@@ -881,7 +944,7 @@ async def tick_task(app: web.Application) -> NoReturn:
                     # TODO: Refresh the access token
                     # TODO: On failure to refresh the access token, remove the oauth_session record.
 
-                await session.commit()
+                await database_session.commit()
 
         # print(f"Tick")
         await asyncio.sleep(30)
