@@ -65,7 +65,7 @@ def upgrade() -> None:
 
     op.create_table(
         "atproto_app_passwords",
-        sa.Column("guid", sa.String(512), nullable=False),
+        sa.Column("guid", sa.String(512), primary_key=True),
         sa.Column("app_password", sa.String(512), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )

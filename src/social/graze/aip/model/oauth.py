@@ -2,9 +2,9 @@ from typing import Any
 from datetime import datetime
 from sqlalchemy import Integer, String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.dialects.postgresql import JSON, insert
 
-from social.graze.aip.model.base import Base, str512
+from social.graze.aip.model.base import Base, str512, guidpk
 
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,6 +48,16 @@ class OAuthSession(Base):
     )
 
 
+class ATProtoAppPassword(Base):
+    __tablename__ = "atproto_app_passwords"
+
+    guid: Mapped[guidpk]
+    app_password: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
 class Permission(Base):
     __tablename__ = "guid_permissions"
 
@@ -56,4 +66,28 @@ class Permission(Base):
     permission: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
+    )
+
+
+def upsert_permission_stmt(
+    guid: str, target_guid: str, permission: int, created_at: datetime
+):
+    return (
+        insert(Permission)
+        .values(
+            [
+                {
+                    "guid": guid,
+                    "target_guid": target_guid,
+                    "permission": permission,
+                    "created_at": created_at,
+                }
+            ]
+        )
+        .on_conflict_do_update(
+            index_elements=["guid", "target_guid"],
+            set_={
+                "permission": permission,
+            },
+        )
     )

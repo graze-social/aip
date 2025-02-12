@@ -5,7 +5,7 @@ import json
 import os
 import logging
 import secrets
-from typing import Final, NoReturn, Optional, Dict, List, Any, Tuple, Final
+from typing import Final, Literal, NoReturn, Optional, Dict, List, Any, Tuple, Final
 import jinja2
 from aiohttp import web
 import aiohttp_jinja2
@@ -14,21 +14,28 @@ import hashlib
 import base64
 from jwcrypto import jwt, jwk
 from ulid import ULID
-from pydantic import BaseModel
+from pydantic import BaseModel, PositiveInt, RootModel, ValidationError, field_validator
 from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
 import redis.asyncio as redis
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     create_async_engine,
     async_sessionmaker,
     AsyncSession,
 )
+from sqlalchemy.dialects.postgresql import insert
 
 from social.graze.aip.app.config import Settings, SettingsAppKey
 from social.graze.aip.resolve.handle import resolve_subject
 from social.graze.aip.model.handles import upsert_handle_stmt, Handle
-from social.graze.aip.model.oauth import OAuthRequest, OAuthSession, Permission
+from social.graze.aip.model.oauth import (
+    OAuthRequest,
+    OAuthSession,
+    ATProtoAppPassword,
+    Permission,
+    upsert_permission_stmt,
+)
 from social.graze.aip.atproto.pds import (
     oauth_protected_resource,
     oauth_authorization_server,
@@ -545,77 +552,42 @@ async def handle_change_permission(request):
 
 
 async def handle_internal_me(request: web.Request):
-    authorizations: Optional[str] = request.headers.getone("Authorization", None)
-    if (
-        authorizations is None
-        or not authorizations.startswith("Bearer ")
-        or len(authorizations) < 8
-    ):
-        raise web.HTTPUnauthorized(
-            body=json.dumps({"error": "Not Authorized"}),
-            content_type="application/json",
-        )
-
-    serialized_auth_token = authorizations[7:]
-
-    settings = request.app[SettingsAppKey]
-
-    try:
-        validated_auth_token = jwt.JWT(
-            jwt=serialized_auth_token, key=settings.json_web_keys, algs=["ES256"]
-        )
-        # TODO: Validate this against a pydantic model
-        auth_token_header: Dict[str, str] = json.loads(validated_auth_token.header)
-        # TODO: Validate this against a pydantic model
-        auth_token_claims: Dict[str, str] = json.loads(validated_auth_token.claims)
-
-        auth_token_subject: Optional[str] = auth_token_claims.get("sub", None)
-        if auth_token_subject is None:
-            raise Exception("Invalid request: no subject")
-
-        auth_token_session_group: Optional[str] = auth_token_claims.get("grp", None)
-        if auth_token_session_group is None:
-            raise Exception("Invalid request: no session group")
-
-    except Exception as e:
-        raise web.HTTPUnauthorized(
-            body=json.dumps({"error": "Not Authorized"}),
-            content_type="application/json",
-        )
-
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
+    redis_pool = request.app[RedisPoolAppKey]
 
     try:
-        async with database_session_maker() as database_session:
-
-            async with database_session.begin():
-
-                oauth_session_stmt = select(OAuthSession).where(
-                    OAuthSession.guid == auth_token_subject,
-                    OAuthSession.session_group == auth_token_session_group,
+        async with (
+            database_session_maker() as database_session,
+            redis.Redis.from_pool(redis_pool) as redis_session,
+        ):
+            auth_token = await auth_token_helper(
+                request, database_session, allow_permissions=False
+            )
+            if auth_token is None:
+                raise web.HTTPUnauthorized(
+                    body=json.dumps({"error": "Not Authorized"}),
+                    content_type="application/json",
                 )
-                oauth_session: OAuthSession = (
-                    await database_session.scalars(oauth_session_stmt)
-                ).one()
+            auth_session = await auth_session_helper(
+                database_session, redis_session, auth_token, attempt_refresh=False
+            )
 
-                handle_stmt = select(Handle).where(Handle.guid == oauth_session.guid)
-                handle: Handle = (await database_session.scalars(handle_stmt)).one()
-
-                await database_session.commit()
+            return web.json_response(
+                {
+                    "handle": auth_token.handle,
+                    "pds": auth_token.pds,
+                    "did": auth_token.subject,
+                    "guid": auth_token.guid,
+                    "session_valid": auth_session is not None,
+                }
+            )
+    except web.HTTPException as e:
+        raise e
     except Exception as e:
-        raise web.HTTPBadRequest(
-            body=json.dumps({"error": "Bad Request"}), content_type="application/json"
+        raise web.HTTPInternalServerError(
+            body=json.dumps({"error": "Internal Server Error"}),
+            content_type="application/json",
         )
-
-    return web.json_response(
-        {
-            "handle": handle.handle,
-            "pds": handle.pds,
-            "did": handle.did,
-            "guid": handle.guid,
-            "session_group": oauth_session.session_group,
-        }
-    )
 
 
 async def handle_internal_ready(request):
@@ -711,8 +683,180 @@ async def handle_xrpc_proxy(request: web.Request):
         return await resp.json()
 
 
+class PermissionOperation(BaseModel):
+    op: Literal["test", "add", "remove", "replace"]
+    path: str
+    value: Optional[PositiveInt] = None
+
+
+PermissionOperations = RootModel[list[PermissionOperation]]
+
+
 async def handle_internal_permissions(request: web.Request) -> web.Response:
-    return web.Response(text="Hello, World!")
+    database_session_maker = request.app[DatabaseSessionMakerAppKey]
+    redis_pool = request.app[RedisPoolAppKey]
+
+    try:
+        data = await request.read()
+        operations = PermissionOperations.model_validate_json(data)
+    except (OSError, ValidationError):
+        return web.Response(text="Invalid JSON", status=400)
+
+    try:
+        async with (
+            database_session_maker() as database_session,
+            redis.Redis.from_pool(redis_pool) as redis_session,
+        ):
+            auth_token = await auth_token_helper(
+                request, database_session, allow_permissions=False
+            )
+            if auth_token is None:
+                raise web.HTTPUnauthorized(
+                    body=json.dumps({"error": "Not Authorized"}),
+                    content_type="application/json",
+                )
+
+            now = datetime.datetime.now(datetime.timezone.utc)
+
+            async with database_session.begin():
+                results: List[Dict[str, Any]] = []
+
+                for operation in operations.root:
+                    if (
+                        operation.op == "add" or operation.op == "replace"
+                    ) and operation.value is not None:
+                        guid = operation.path.removeprefix("/")
+                        stmt = upsert_permission_stmt(
+                            guid=guid,
+                            target_guid=auth_token.guid,
+                            permission=operation.value,
+                            created_at=now,
+                        )
+                        await database_session.execute(stmt)
+
+                    if operation.op == "remove":
+                        guid = operation.path.removeprefix("/")
+                        stmt = delete(Permission).where(
+                            Permission.guid == guid,
+                            Permission.target_guid == auth_token.guid,
+                        )
+                        await database_session.execute(stmt)
+
+                    if operation.op == "test":
+                        guid = operation.path.removeprefix("/")
+                        permission_stmt = select(Permission).where(
+                            Permission.guid == guid,
+                            Permission.target_guid == auth_token.guid,
+                        )
+                        if operation.value is not None:
+                            permission_stmt = permission_stmt.where(
+                                Permission.permission == operation.value
+                            )
+                        permission: Optional[Permission] = (
+                            await database_session.scalars(permission_stmt)
+                        ).first()
+                        if permission is not None:
+                            results.append(
+                                {"path": operation.path, "value": permission.permission}
+                            )
+
+                await database_session.commit()
+
+                return web.json_response(results)
+    except web.HTTPException as e:
+        logging.exception("handle_internal_permissions: web.HTTPException")
+        raise e
+    except Exception as e:
+        logging.exception("handle_internal_permissions: Exception")
+        raise web.HTTPInternalServerError(
+            body=json.dumps({"error": "Internal Server Error"}),
+            content_type="application/json",
+        )
+
+
+class AppPasswordOperation(BaseModel):
+    value: Optional[str] = None
+
+    @field_validator("value")
+    def app_password_check(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+
+        if len(v) != 19:
+            raise ValueError("invalid format")
+
+        if v.count("-") != 3:
+            raise ValueError("invalid format")
+
+        return v
+
+
+async def handle_internal_app_password(request: web.Request) -> web.Response:
+    database_session_maker = request.app[DatabaseSessionMakerAppKey]
+    redis_pool = request.app[RedisPoolAppKey]
+
+    try:
+        data = await request.read()
+        app_password_operation = AppPasswordOperation.model_validate_json(data)
+    except (OSError, ValidationError):
+        return web.Response(text="Invalid JSON", status=400)
+
+    try:
+        async with (
+            database_session_maker() as database_session,
+            redis.Redis.from_pool(redis_pool) as redis_session,
+        ):
+            auth_token = await auth_token_helper(
+                request, database_session, allow_permissions=False
+            )
+            if auth_token is None:
+                raise web.HTTPUnauthorized(
+                    body=json.dumps({"error": "Not Authorized"}),
+                    content_type="application/json",
+                )
+
+            now = datetime.datetime.now(datetime.timezone.utc)
+
+            async with database_session.begin():
+                if app_password_operation.value is None:
+                    stmt = delete(ATProtoAppPassword).where(
+                        ATProtoAppPassword.guid == auth_token.guid
+                    )
+                    await database_session.execute(stmt)
+                else:
+                    stmt = (
+                        insert(ATProtoAppPassword)
+                        .values(
+                            [
+                                {
+                                    "guid": auth_token.guid,
+                                    "app_password": app_password_operation.value,
+                                    "created_at": now,
+                                }
+                            ]
+                        )
+                        .on_conflict_do_update(
+                            index_elements=["guid"],
+                            set_={"app_password": app_password_operation.value},
+                        )
+                    )
+                    await database_session.execute(stmt)
+
+                await database_session.commit()
+
+            app_password_key = f"auth_session:app-password:{auth_token.guid}"
+            await redis_session.delete(app_password_key)
+
+            return web.json_response({})
+    except web.HTTPException as e:
+        logging.exception("handle_internal_permissions: web.HTTPException")
+        raise e
+    except Exception as e:
+        logging.exception("handle_internal_permissions: Exception")
+        raise web.HTTPInternalServerError(
+            body=json.dumps({"error": "Internal Server Error"}),
+            content_type="application/json",
+        )
 
 
 class AuthToken(BaseModel):
@@ -728,7 +872,6 @@ class AuthToken(BaseModel):
     context_pds: str
 
 
-# The goal is to do something like this.
 class EncodedException(Exception):
     pass
 
@@ -737,16 +880,13 @@ class AuthHelperException(EncodedException):
     CODE: Final[str] = "error-auth-5000"
 
 
-# class AuthHelperException(Exception):
-#     CODE: Literal["error-auth-5000"] = "error-auth-5000"
-
-
 async def auth_session_helper(
     # request: web.Request,
     database_session: AsyncSession,
     redis_session: redis.Redis,
     auth_token: AuthToken,
-) -> str:
+    attempt_refresh: bool = False,
+) -> Optional[str]:
     try:
         async with database_session.begin():
             is_self = auth_token.subject == auth_token.context_subject
@@ -759,13 +899,17 @@ async def auth_session_helper(
                 return cached_app_password_value.decode("utf-8")
 
             # 2. If is_self, then get an oauth session from redis if it exists.
-            oauth_session_key = f"auth_session:oauth:{auth_token.context_guid}"
-            cached_oauth_session_value: bytes = await redis_session.get(
-                oauth_session_key
-            )
-            if cached_oauth_session_value is not None:
-                # TODO: Deccrypt the value
-                return cached_oauth_session_value.decode("utf-8")
+            if is_self:
+                oauth_session_key = f"auth_session:oauth:{auth_token.context_guid}"
+                cached_oauth_session_value: bytes = await redis_session.get(
+                    oauth_session_key
+                )
+                if cached_oauth_session_value is not None:
+                    # TODO: Deccrypt the value
+                    return cached_oauth_session_value.decode("utf-8")
+
+            if attempt_refresh is False:
+                return None
 
             # TODO: Make the above redis calls a single mget operation.
 
@@ -774,7 +918,7 @@ async def auth_session_helper(
 
             # 4. If not is_self, return an error because a valid app-password session is required.
             if not is_self:
-                raise AuthHelperException("No valid session")
+                return None
 
             # 5. If is_self, then get an oauth session from the database if it exists.
             # TODO: Implement this.
@@ -790,15 +934,18 @@ async def auth_session_helper(
             if oauth_session is not None:
                 return str(oauth_session.access_token)
 
-            # Lastly, return an error because all scenarios have been exhausted.
-            if not is_self:
-                raise AuthHelperException("No valid session")
-    finally:
-        pass
+            # Lastly, all options have been exhausted.
+            return None
+    except AuthHelperException:
+        logging.exception("auth_session_helper: AuthHelperException")
+        return None
+    except Exception:
+        logging.exception("auth_session_helper: Exception")
+        return None
 
 
 async def auth_token_helper(
-    request: web.Request, database_session: AsyncSession
+    request: web.Request, database_session: AsyncSession, allow_permissions: bool = True
 ) -> Optional[AuthToken]:
     authorizations: Optional[str] = request.headers.getone("Authorization", None)
     if (
@@ -832,6 +979,7 @@ async def auth_token_helper(
             raise ValueError("auth_token invalid: grp missing")
 
     except Exception as e:
+        logging.exception("auth_token_helper: exception")
         raise AuthHelperException()
 
     try:
@@ -865,6 +1013,9 @@ async def auth_token_helper(
                     context_pds=x_pds,
                 )
 
+            if allow_permissions is False:
+                raise Exception("policy violation: permissions not allowed")
+
             permission_stmt = select(Permission).where(
                 Permission.guid == handle.guid,
                 Permission.target_guid == x_repository,
@@ -896,6 +1047,7 @@ async def auth_token_helper(
                 context_pds=x_pds,
             )
     except Exception as e:
+        logging.exception("auth_token_helper: exception")
         raise AuthHelperException()
 
 
@@ -923,28 +1075,51 @@ async def tick_task(app: web.Application) -> NoReturn:
         now = datetime.datetime.now(datetime.timezone.utc)
 
         database_session_maker = app[DatabaseSessionMakerAppKey]
-        async with database_session_maker() as database_session:
+        redis_pool = app[RedisPoolAppKey]
 
-            async with database_session.begin():
+        async with (
+            database_session_maker() as database_session,
+            redis.Redis.from_pool(redis_pool) as redis_session,
+        ):
 
-                # Nick: In the future, this should go to a centralize queue (redis) and multiple aip instances would be
-                # able to fetch and process the queue in parallel.
-                stmt = (
-                    select(OAuthSession)
-                    .where(OAuthSession.access_token_expires_at > now)
-                    .order_by(OAuthSession.created_at)
-                )
-                oauth_sessions = (await database_session.execute(stmt)).scalars().all()
+            # Nick: Buckle up, this is stupid.
+            #
+            # Given the queue name is "auth_refresh"
+            # Given the worker id is "worker1"
+            # Given `now = datetime.datetime.now(datetime.timezone.utc)`
+            #
+            # 1. In a redis pipeline, get some work.
+            #    * Populate the worker queue with work. This stores a range of things from the begining of time to "now" into a new queue
+            #      ZRANGESTORE "auth_refresh_worker1" "auth_refresh" 1 {now} LIMIT 5
+            #
+            #    * Get the work that we just populated.
+            #      ZRANGE "auth_refresh_worker1" 0 -1
+            #
+            #    * Store the difference between the worker queue and the main queue to remove the pulled work from the main queue
+            #      ZDIFFSTORE "auth_refresh" 2 "auth_refresh" "auth_refresh_worker1"
+            #
+            # 2. For the work that we just got, process it all and remove each from the worker queue.
+            #    ZREM "auth_refresh_worker1" {work_id}
+            #
+            # 3. Sleep 15-30 seconds and repeat.
 
-                for oauth_session in oauth_sessions:
-                    print(f"Session: {oauth_session}")
+            # Nick: This does a few things that are important to note.
+            #
+            # 1. Work is queued up and indexed (redis zindex) against the time that it needs to be processed, not when
+            #    it was queued. This lets the queue be lazily evaluated and also pull work that needs to be processed
+            #    soonest.
+            #
+            # 2. Work is batched into a worker queue outside of app instances, so it can be processed in parallel. If
+            #    we need to scale up workers, we can do so by adjusting the deployment replica count.
+            #
+            # 3. Work is grabbed in batches that don't need to be uniform, so there is no arbitrary delay. Workers
+            #    don't have to wait for 5 jobs to be ready before taking them.
+            #
+            # 4. If a worker dies, we have the temporary worker queue to recover the work that was in progress. If
+            #    needed, we can create a watchdog worker that looks at orphaned worker queues and adds the work back to
+            #    the main queue.
 
-                    # TODO: Continue if `now - access_token_expires_at > 10 minutes`
-
-                    # TODO: Refresh the access token
-                    # TODO: On failure to refresh the access token, remove the oauth_session record.
-
-                await database_session.commit()
+            pass
 
         # print(f"Tick")
         await asyncio.sleep(30)
@@ -969,7 +1144,7 @@ async def shutdown(app):
 async def start_web_server(settings: Optional[Settings] = None):
 
     if settings is None:
-        settings = Settings()
+        settings = Settings()  # type: ignore
 
     app = web.Application()
 
@@ -1008,7 +1183,8 @@ async def start_web_server(settings: Optional[Settings] = None):
             web.get("/internal/ready", handle_internal_ready),
             web.get("/internal/api/me", handle_internal_me),
             web.get("/internal/api/resolve", handle_internal_resolve),
-            web.get("/internal/api/permissions", handle_internal_permissions),
+            web.post("/internal/api/permissions", handle_internal_permissions),
+            web.post("/internal/api/app_password", handle_internal_app_password),
         ]
     )
 

@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     plc_hostname: str = "plc.directory"
 
-    redis_dsn: RedisDsn = RedisDsn("redis://localhost:6379/1")
+    redis_dsn: RedisDsn = RedisDsn("redis://valkey:6379/1")
 
     pg_dsn: PostgresDsn = PostgresDsn(
         "postgresql+asyncpg://postgres:password@postgres/aip"
@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     service_auth_keys: List[str] = list()
 
     encryption_key: Fernet = Fernet(Fernet.generate_key())
+
+    worker_id: str
+
+    refresh_queue_oauth: str = "refresh_queue:oauth"
+
+    refresh_queue_app_password: str = "refresh_queue:app_password"
 
     @field_validator("json_web_keys", mode="before")
     @classmethod
