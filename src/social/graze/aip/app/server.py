@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.dialects.postgresql import insert
 
 from social.graze.aip.app.config import Settings, SettingsAppKey
+from social.graze.aip.model.health import HealthGauge
 from social.graze.aip.resolve.handle import resolve_subject
 from social.graze.aip.model.handles import upsert_handle_stmt, Handle
 from social.graze.aip.model.oauth import (
@@ -49,6 +50,7 @@ DatabaseSessionMakerAppKey: Final = web.AppKey(
 )
 SessionAppKey: Final = web.AppKey("http_session", aiohttp.ClientSession)
 RedisPoolAppKey: Final = web.AppKey("redis_pool", redis.ConnectionPool)
+HealthGaugeAppKey: Final = web.AppKey("health_gauge", HealthGauge)
 
 
 class ATProtocolOAuthClientMetadata(BaseModel):
@@ -575,7 +577,10 @@ async def handle_internal_me(request: web.Request):
 
 
 async def handle_internal_ready(request: web.Request):
-    return web.Response(status=200)
+    health_gauge = request.app[HealthGaugeAppKey]
+    if await health_gauge.is_healthy():
+        return web.Response(status=200)
+    return web.Response(status=503)
 
 
 async def handle_internal_alive(request: web.Request):
@@ -1078,6 +1083,17 @@ async def startup(app):
 
 
 tick_task_app_key = web.AppKey("tick_task_app_key", asyncio.Task[None])
+tick_health_task_app_key = web.AppKey("tick_health_task_app_key", asyncio.Task[None])
+
+
+async def tick_health_task(app: web.Application) -> NoReturn:
+    """
+    Tick the health gauge every 30 seconds, reducing the health score by 1 each time.
+    """
+    health_gauge = app[HealthGaugeAppKey]
+    while True:
+        await health_gauge.tick()
+        await asyncio.sleep(30)
 
 
 async def tick_task(app: web.Application) -> NoReturn:
@@ -1138,12 +1154,16 @@ async def tick_task(app: web.Application) -> NoReturn:
 
 async def background_tasks(app):
     app[tick_task_app_key] = asyncio.create_task(tick_task(app))
+    app[tick_health_task_app_key] = asyncio.create_task(tick_health_task(app))
 
     yield
 
+    app[tick_health_task_app_key].cancel()
     app[tick_task_app_key].cancel()
     with contextlib.suppress(asyncio.exceptions.CancelledError):
         await app[tick_task_app_key]
+    with contextlib.suppress(asyncio.exceptions.CancelledError):
+        await app[tick_health_task_app_key]
 
 
 async def shutdown(app):
@@ -1160,6 +1180,7 @@ async def start_web_server(settings: Optional[Settings] = None):
     app = web.Application()
 
     app[SettingsAppKey] = settings
+    app[HealthGaugeAppKey] = HealthGauge()
 
     app.add_routes(
         [
