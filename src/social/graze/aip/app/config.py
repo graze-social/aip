@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     plc_hostname: str = "plc.directory"
 
-    redis_dsn: RedisDsn = RedisDsn("redis://valkey:6379/1")
+    redis_dsn: RedisDsn = RedisDsn("redis://valkey:6379/1?decode_responses=True")
 
     pg_dsn: PostgresDsn = PostgresDsn(
         "postgresql+asyncpg://postgres:password@postgres/aip"
