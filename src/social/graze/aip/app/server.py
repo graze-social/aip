@@ -27,6 +27,11 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.dialects.postgresql import insert
 
 from social.graze.aip.app.config import Settings, SettingsAppKey
+from social.graze.aip.atproto.chain import (
+    ChainMiddlewareClient,
+    GenerateClaimAssertionMiddleware,
+    GenerateDpopMiddleware,
+)
 from social.graze.aip.model.health import HealthGauge
 from social.graze.aip.resolve.handle import resolve_subject
 from social.graze.aip.model.handles import upsert_handle_stmt, Handle
@@ -41,7 +46,6 @@ from social.graze.aip.atproto.pds import (
     oauth_protected_resource,
     oauth_authorization_server,
 )
-from social.graze.aip.atproto.oauth import dpop_oauth_request
 
 logger = logging.getLogger(__name__)
 DatabaseAppKey: Final = web.AppKey("database", AsyncEngine)
@@ -93,7 +97,7 @@ def generate_pkce_verifier() -> Tuple[str, str]:
 
 async def handle_atproto_login_submit(request: web.Request):
     settings = request.app[SettingsAppKey]
-    database_session = request.app[SessionAppKey]
+    http_session = request.app[SessionAppKey]
     data = await request.post()
     subject: Optional[str] = data.get("subject", None)  # type: ignore
 
@@ -113,7 +117,7 @@ async def handle_atproto_login_submit(request: web.Request):
         raise Exception("No active signing key available")
 
     resolved_handle = await resolve_subject(
-        database_session, settings.plc_hostname, subject
+        http_session, settings.plc_hostname, subject
     )
     if resolved_handle is None:
         return await aiohttp_jinja2.render_template_async(
@@ -126,7 +130,7 @@ async def handle_atproto_login_submit(request: web.Request):
     (pkce_verifier, code_challenge) = generate_pkce_verifier()
 
     protected_resource = await oauth_protected_resource(
-        database_session, resolved_handle.pds
+        http_session, resolved_handle.pds
     )
     if protected_resource is None:
         raise Exception("No protected resource found")
@@ -138,7 +142,7 @@ async def handle_atproto_login_submit(request: web.Request):
         raise Exception("No authorization server found")
 
     authorization_server = await oauth_authorization_server(
-        database_session, first_authorization_servers
+        http_session, first_authorization_servers
     )
     if authorization_server is None:
         raise Exception("No authorization server found")
@@ -200,17 +204,33 @@ async def handle_atproto_login_submit(request: web.Request):
         }
     )
 
-    par_resp = await dpop_oauth_request(
-        database_session,
-        par_url,
-        dpop_key,
-        dpop_assertation_header,
-        dpop_assertation_claims,
-        signing_key,
-        client_assertion_header,
-        client_assertion_claims,
-        data=data,
+    chain_middleware = [
+        GenerateDpopMiddleware(
+            dpop_key,
+            dpop_assertation_header,
+            dpop_assertation_claims,
+        ),
+        GenerateClaimAssertionMiddleware(
+            signing_key,
+            client_assertion_header,
+            client_assertion_claims,
+        ),
+    ]
+    chain_client = ChainMiddlewareClient(
+        raise_for_status=False, middleware=chain_middleware
     )
+    async with chain_client.post(par_url, data=data) as (
+        client_response,
+        chain_response,
+    ):
+        if client_response.status != 201:
+            raise Exception("Invalid PAR response")
+
+        if isinstance(chain_response.body, dict):
+            par_resp = chain_response.body
+        else:
+            raise ValueError("Invalid PAR response")
+
     par_expires = par_resp.get("expires_in", 60)
     par_request_uri = par_resp.get("request_uri", None)
     if par_request_uri is None:
@@ -222,16 +242,16 @@ async def handle_atproto_login_submit(request: web.Request):
 
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
 
-    async with database_session_maker() as database_session:
+    async with database_session_maker() as http_session:
 
-        async with database_session.begin():
+        async with http_session.begin():
             stmt = upsert_handle_stmt(
                 resolved_handle.did, resolved_handle.handle, resolved_handle.pds
             )
-            guid_result = await database_session.execute(stmt)
+            guid_result = await http_session.execute(stmt)
             guid = guid_result.scalars().one()
 
-            database_session.add(
+            http_session.add(
                 OAuthRequest(
                     oauth_state=state,
                     issuer=issuer,
@@ -245,7 +265,7 @@ async def handle_atproto_login_submit(request: web.Request):
                 )
             )
 
-            await database_session.commit()
+            await http_session.commit()
 
     parsed_authorization_endpoint = urlparse(authorization_endpoint)
     query = dict(parse_qsl(parsed_authorization_endpoint.query))
@@ -376,17 +396,32 @@ async def handle_atproto_callback(request: web.Request):
             }
         )
 
-        token_response = await dpop_oauth_request(
-            http_session,
-            token_endpoint,
-            dpop_key,
-            dpop_assertation_header,
-            dpop_assertation_claims,
-            signing_key,
-            client_assertion_header,
-            client_assertion_claims,
-            data=data,
+        chain_middleware = [
+            GenerateDpopMiddleware(
+                dpop_key,
+                dpop_assertation_header,
+                dpop_assertation_claims,
+            ),
+            GenerateClaimAssertionMiddleware(
+                signing_key,
+                client_assertion_header,
+                client_assertion_claims,
+            ),
+        ]
+        chain_client = ChainMiddlewareClient(
+            raise_for_status=False, middleware=chain_middleware
         )
+        async with chain_client.post(token_endpoint, data=data) as (
+            client_response,
+            chain_response,
+        ):
+            if client_response.status != 200:
+                raise Exception("Invalid token response")
+
+            if isinstance(chain_response.body, dict):
+                token_response = chain_response.body
+            else:
+                raise ValueError("Invalid token response")
 
         access_token = token_response.get("access_token", None)
         if access_token is None:
