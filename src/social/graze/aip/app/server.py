@@ -166,6 +166,9 @@ async def handle_atproto_login_submit(request: web.Request):
     issuer = authorization_server.get("issuer", None)
     if issuer is None:
         raise Exception("No authorization issuer found")
+    print("======================================")
+    print(f"issuer {issuer}")
+    print("======================================")
 
     par_url = authorization_server.get("pushed_authorization_request_endpoint", None)
     if par_url is None:
@@ -474,8 +477,7 @@ async def handle_atproto_callback(request: web.Request):
 
         # Set a queue entry to refresh the token. We don't want to wait until the token is expired to refresh it, so
         # the deadline is 80% of the expires in time from now.
-        # expires_in_mod = expires_in * 0.8
-        expires_in_mod = 60
+        expires_in_mod = expires_in * 0.8
         refresh_at = now + datetime.timedelta(0, expires_in_mod)
         logger.info(
             f"Queueing session {session_group} refresh at {refresh_at} (now={now})"
@@ -681,8 +683,8 @@ async def handle_atproto_refresh(request: web.Request):
 
         # Set a queue entry to refresh the token. We don't want to wait until the token is expired to refresh it, so
         # the deadline is 80% of the expires in time from now.
-        # expires_in_mod = expires_in * 0.8
-        expires_in_mod = 60
+        expires_in_mod = expires_in * 0.8
+        # expires_in_mod = 60
         refresh_at = now + datetime.timedelta(0, expires_in_mod)
         logger.info(
             f"Queueing session {oauth_session.session_group} refresh at {refresh_at} (now={now})"
@@ -895,7 +897,9 @@ async def handle_xrpc_proxy(request: web.Request):
 
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     redis_pool = request.app[RedisPoolAppKey]
+    settings = request.app[SettingsAppKey]
 
+    auth_session = None
     try:
         async with (
             database_session_maker() as database_session,
@@ -912,6 +916,11 @@ async def handle_xrpc_proxy(request: web.Request):
             auth_session = await auth_session_helper(
                 database_session, redis_session, auth_token
             )
+            if auth_session is None:
+                raise web.HTTPUnauthorized(
+                    body=json.dumps({"error": "Not Authorized"}),
+                    content_type="application/json",
+                )
     except web.HTTPException as e:
         raise e
     except Exception as e:
@@ -920,37 +929,72 @@ async def handle_xrpc_proxy(request: web.Request):
             content_type="application/json",
         )
 
-    http_session = request.app[SessionAppKey]
+    now = datetime.datetime.now(datetime.timezone.utc)
 
     # TODO: Look for endpoint header and fallback to context PDS value.
-    xrpc_url = f"{auth_token.pds}/xrpc/{xrpc_method}"
-
     # TODO: Support more complex URLs that include prefixes and or suffixes.
+    parsed_destination = urlparse(f"{auth_token.pds}/xrpc/{xrpc_method}")
+    parsed_destination_query = dict(parse_qsl(request.query_string))
+    parsed_destination = parsed_destination._replace(
+        query=urlencode(parsed_destination_query)
+    )
+    xrpc_url = urlunparse(parsed_destination)
 
-    # TODO: Selectively add auth header.
-    headers = {
-        "Authorization": f"Bearer {auth_session}",
+    http_session = request.app[SessionAppKey]
+
+    hashed_access_token = hashlib.sha256(str(auth_session.access_token).encode("ascii")).digest()
+    encoded_hashed_access_token = base64.urlsafe_b64encode(hashed_access_token)
+    pkcs_access_token = encoded_hashed_access_token.decode("ascii").rstrip("=")
+
+    dpop_key = jwk.JWK(**auth_session.dpop_jwk)
+    dpop_key_public_key = dpop_key.export_public(as_dict=True)
+    dpop_assertation_header = {
+        "alg": "ES256",
+        "jwk": dpop_key_public_key,
+        "typ": "dpop+jwt",
+    }
+    dpop_assertation_claims = {
+        "htm": request.method,
+        "htu": f"{auth_token.pds}/xrpc/{xrpc_method}",
+        "iat": int(now.timestamp()),
+        "exp": int(now.timestamp()) + 30,
+        "nonce": "tmp",
+        "ath": pkcs_access_token,
+        "iss": auth_session.issuer,
     }
 
-    # TODO: This will need to support DPoP.
+    headers = {
+        # TODO: Selectively add auth header.
+        "Authorization": f"DPoP {auth_session.access_token}",
+        "Content-Type": request.content_type,
+    }
+    chain_middleware = [
+        # TODO: Selectively add this middleware.
+        GenerateDpopMiddleware(
+            dpop_key,
+            dpop_assertation_header,
+            dpop_assertation_claims,
+        ),
+    ]
 
-    # TODO: Support query string parameters.
+    rargs: Dict[str, Any] = {}
 
-    # TODO: Use `session.request(method, url, headers=headers, **kwargs)` instead.
-    async with http_session.get(
-        xrpc_url,
-        headers=headers,
-    ) as resp:
+    if request.method == "POST":
+        rargs["data"] = await request.read()
+
+    chain_client = ChainMiddlewareClient(
+        client_session=http_session, raise_for_status=False, middleware=chain_middleware
+    )
+    async with chain_client.request(
+        request.method, xrpc_url, raise_for_status=None, headers = headers, **rargs
+    ) as (
+        client_response,
+        chain_response,
+    ):
         # TODO: Figure out if websockets or SSE support is needed. Gut says no.
-
-        if resp.status == 200:
-            return await resp.json()
-
         # TODO: Think about using a header like `X-AIP-Error` for additional error context.
-
-        # TODO: This should return the status code and body as-is.
-        return await resp.json()
-
+        return chain_response.to_web_response()
+        # return web.Response(status=chain_response.status, body=chain_response.body, headers=chain_response.headers)
 
 class PermissionOperation(BaseModel):
     op: Literal["test", "add", "remove", "replace"]
@@ -1168,30 +1212,33 @@ async def auth_session_helper(
     redis_session: redis.Redis,
     auth_token: AuthToken,
     attempt_refresh: bool = False,
-) -> Optional[str]:
+) -> Optional[OAuthSession]:
     try:
         async with database_session.begin():
             is_self = auth_token.subject == auth_token.context_subject
 
-            # 1. Get an app-password session from redis if it exists. This is a cheap operation, so get it out of the way up front.
-            app_password_key = f"auth_session:app-password:{auth_token.context_guid}"
-            cached_app_password_value: bytes = await redis_session.get(app_password_key)
-            if cached_app_password_value is not None:
-                # TODO: Deccrypt the value
-                return cached_app_password_value.decode("utf-8")
+            # TODO: Make these redis calls whole-object caches of the auth session. The issuer, DPoP key, etc. is
+            # needed, so just caching the access token isn't enough to practically use it as-is.
 
-            # 2. If is_self, then get an oauth session from redis if it exists.
-            if is_self:
-                oauth_session_key = f"auth_session:oauth:{auth_token.context_guid}"
-                cached_oauth_session_value: bytes = await redis_session.get(
-                    oauth_session_key
-                )
-                if cached_oauth_session_value is not None:
-                    # TODO: Deccrypt the value
-                    return cached_oauth_session_value.decode("utf-8")
+            # # 1. Get an app-password session from redis if it exists. This is a cheap operation, so get it out of the way up front.
+            # app_password_key = f"auth_session:app-password:{auth_token.context_guid}"
+            # cached_app_password_value: bytes = await redis_session.get(app_password_key)
+            # if cached_app_password_value is not None:
+            #     # TODO: Deccrypt the value
+            #     return cached_app_password_value.decode("utf-8")
 
-            if attempt_refresh is False:
-                return None
+            # # 2. If is_self, then get an oauth session from redis if it exists.
+            # if is_self:
+            #     oauth_session_key = f"auth_session:oauth:{auth_token.context_guid}"
+            #     cached_oauth_session_value: bytes = await redis_session.get(
+            #         oauth_session_key
+            #     )
+            #     if cached_oauth_session_value is not None:
+            #         # TODO: Deccrypt the value
+            #         return cached_oauth_session_value.decode("utf-8")
+
+            # if attempt_refresh is False:
+            #     return None
 
             # TODO: Make the above redis calls a single mget operation.
 
@@ -1199,8 +1246,8 @@ async def auth_session_helper(
             # TODO: Implement this.
 
             # 4. If not is_self, return an error because a valid app-password session is required.
-            if not is_self:
-                return None
+            # if not is_self:
+            #     return None
 
             # 5. If is_self, then get an oauth session from the database if it exists.
             # TODO: Implement this.
@@ -1213,11 +1260,7 @@ async def auth_session_helper(
             ).first()
             await database_session.commit()
 
-            if oauth_session is not None:
-                return str(oauth_session.access_token)
-
-            # Lastly, all options have been exhausted.
-            return None
+            return oauth_session
     except AuthHelperException:
         logging.exception("auth_session_helper: AuthHelperException")
         return None
@@ -1631,8 +1674,6 @@ async def tick_task(app: web.Application) -> NoReturn:
             # 4. If a worker dies, we have the temporary worker queue to recover the work that was in progress. If
             #    needed, we can create a watchdog worker that looks at orphaned worker queues and adds the work back to
             #    the main queue.
-
-        # print(f"Tick")
 
 
 async def background_tasks(app):

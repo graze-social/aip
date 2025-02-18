@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import json
 import secrets
 from types import TracebackType
 from typing import (
@@ -15,7 +16,7 @@ from typing import (
     Dict,
 )
 import logging
-from aiohttp import ClientResponse, ClientSession, FormData, hdrs
+from aiohttp import web, ClientResponse, ClientSession, FormData, hdrs
 from aiohttp.typedefs import StrOrURL
 from multidict import CIMultiDictProxy
 from jwcrypto import jwt, jwk
@@ -115,6 +116,19 @@ class ChainResponse:
             isinstance(self.body, dict) and key in self.body and self.body[key] == value
         )
 
+    def to_web_response(self) -> web.Response:
+        rargs = {
+            "status": self.status,
+            "headers": {"Content-Type": self.headers.get(hdrs.CONTENT_TYPE, "")},
+        }
+        if isinstance(self.body, str):
+            rargs["text"] = self.body
+        elif isinstance(self.body, bytes):
+            rargs["body"] = self.body
+        elif isinstance(self.body, dict):
+            rargs["body"] = json.dumps(self.body)
+        return web.Response(**rargs)
+
 
 NextChainResponseCallbackType = (
     Tuple[ClientResponse, ChainResponse]
@@ -190,20 +204,23 @@ class GenerateDpopMiddleware(RequestMiddlewareBase):
     ) -> None:
         super().__init__()
         self._dpop_key = dpop_key
-        self._dop_assertion_header = dop_assertion_header
-        self._dop_assertion_claims = dop_assertion_claims
+        self._dpop_assertion_header = dop_assertion_header
+        self._dpop_assertion_claims = dop_assertion_claims
 
     async def handle(
         self, next: NextChainCallbackType, request: ChainRequest
     ) -> NextChainResponseCallbackType:
-        self._dop_assertion_claims["jti"] = secrets.token_urlsafe(32)
+        self._dpop_assertion_claims["jti"] = secrets.token_urlsafe(32)
 
         dpop_assertation = jwt.JWT(
-            header=self._dop_assertion_header,
-            claims=self._dop_assertion_claims,
+            header=self._dpop_assertion_header,
+            claims=self._dpop_assertion_claims,
         )
         dpop_assertation.make_signed_token(self._dpop_key)
         dpop_assertation_token = dpop_assertation.serialize()
+
+        logger.info(f"dpop_assertion_header: {self._dpop_assertion_header}")
+        logger.info(f"dpop_assertion_claims: {self._dpop_assertion_claims}")
 
         if request.headers is None:
             request.headers = {}
@@ -220,10 +237,13 @@ class GenerateDpopMiddleware(RequestMiddlewareBase):
             if chain_response.headers is None:
                 raise ValueError("Response headers are None")
 
+            logger.info(f"chain_response.headers: {chain_response.headers}")
+            logger.info(f"chain_response.body: {chain_response.body}")
+
             if chain_response.body_matches_kv(
                 "error", "invalid_dpop_proof"
             ) or chain_response.body_matches_kv("error", "use_dpop_nonce"):
-                self._dop_assertion_claims["nonce"] = chain_response.headers.get(
+                self._dpop_assertion_claims["nonce"] = chain_response.headers.get(
                     "DPoP-Nonce", ""
                 )
 
@@ -248,8 +268,13 @@ class EndOfLineChainMiddleware:
         self._logger = logger
 
     async def handle(self, request: ChainRequest) -> NextChainResponseCallbackType:
+
+        self._logger.debug(
+            f"Making request: {request.method} {request.url} {request.headers} {request.kwargs}"
+        )
+
         response: ClientResponse = await self._request_func(
-            request.method,
+            request.method.lower(),
             request.url,
             headers=request.headers,
             trace_request_ctx={
@@ -290,7 +315,7 @@ class ChainMiddlewareContext:
 
         while True:
             self._logger.debug(
-                f"Attempt {current_attempt+1} out of {self._attempt_max}"
+                f"============================== Attempt {current_attempt+1} out of {self._attempt_max} =============================="
             )
 
             current_attempt += 1
