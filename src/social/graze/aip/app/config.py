@@ -1,7 +1,7 @@
-from typing import List
+import asyncio
+from typing import Annotated, Final, List
 import logging
 from jwcrypto import jwk
-from typing_extensions import Annotated
 from pydantic import (
     field_validator,
     PostgresDsn,
@@ -11,6 +11,15 @@ import base64
 from pydantic_settings import BaseSettings, NoDecode
 from aiohttp import web
 from cryptography.fernet import Fernet
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    async_sessionmaker,
+    AsyncSession,
+)
+from aiohttp import ClientSession
+from redis import asyncio as redis
+
+from social.graze.aip.model.health import HealthGauge
 
 
 logger = logging.getLogger(__name__)
@@ -60,4 +69,21 @@ class Settings(BaseSettings):
         return Fernet(key_data)
 
 
-SettingsAppKey = web.AppKey("settings", Settings)
+SettingsAppKey: Final = web.AppKey("settings", Settings)
+DatabaseAppKey: Final = web.AppKey("database", AsyncEngine)
+DatabaseSessionMakerAppKey: Final = web.AppKey(
+    "database_session_maker", async_sessionmaker[AsyncSession]
+)
+SessionAppKey: Final = web.AppKey("http_session", ClientSession)
+RedisPoolAppKey: Final = web.AppKey("redis_pool", redis.ConnectionPool)
+HealthGaugeAppKey: Final = web.AppKey("health_gauge", HealthGauge)
+
+OAUTH_REFRESH_QUEUE = "auth_session:oauth:refresh"
+
+APP_PASSWORD_REFRESH_QUEUE = "auth_session:app-password:refresh"
+
+OAUTH_REFRESH_TASK_APP_KEY: Final = web.AppKey("oauth_refresh_task", asyncio.Task[None])
+APP_PASSWORD_REFRESH_TASK_APP_KEY: Final = web.AppKey(
+    "app_password_refresh_task", asyncio.Task[None]
+)
+TICK_HEALTH_TASK_APP_KEY: Final = web.AppKey("tick_health_task", asyncio.Task[None])

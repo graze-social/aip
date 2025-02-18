@@ -6,8 +6,6 @@ from sqlalchemy.dialects.postgresql import JSON, insert
 
 from social.graze.aip.model.base import Base, str512, guidpk
 
-from sqlalchemy.orm import Mapped, mapped_column
-
 
 class OAuthRequest(Base):
     __tablename__ = "oauth_requests"
@@ -44,16 +42,6 @@ class OAuthSession(Base):
         DateTime(timezone=True), nullable=False
     )
     hard_expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-
-
-class ATProtoAppPassword(Base):
-    __tablename__ = "atproto_app_passwords"
-
-    guid: Mapped[guidpk]
-    app_password: Mapped[str] = mapped_column(String(20), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
 

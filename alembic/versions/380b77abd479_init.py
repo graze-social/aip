@@ -72,6 +72,20 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
 
+    op.create_table(
+        "atproto_app_password_sessions",
+        sa.Column("guid", sa.String(512), primary_key=True),
+        sa.Column("access_token", sa.String(512), nullable=False),
+        sa.Column(
+            "access_token_expires_at", sa.DateTime(timezone=True), nullable=False
+        ),
+        sa.Column("refresh_token", sa.String(512), nullable=False),
+        sa.Column(
+            "refresh_token_expires_at", sa.DateTime(timezone=True), nullable=False
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    )
+
     # `guid` has permission `permission` on `target_guid`
     op.create_table(
         "guid_permissions",
@@ -94,3 +108,4 @@ def downgrade() -> None:
     op.drop_table("oauth_sessions")
     op.drop_table("atproto_app_passwords")
     op.drop_table("guid_permissions")
+    op.drop_table("atproto_app_password_sessions")

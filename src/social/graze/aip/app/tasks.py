@@ -1,0 +1,242 @@
+import asyncio
+from datetime import datetime, timezone
+import logging
+from typing import List, NoReturn, Tuple
+import redis.asyncio as redis
+from aiohttp import web
+from sqlalchemy import select
+
+from social.graze.aip.app.config import (
+    APP_PASSWORD_REFRESH_QUEUE,
+    OAUTH_REFRESH_QUEUE,
+    DatabaseSessionMakerAppKey,
+    HealthGaugeAppKey,
+    RedisPoolAppKey,
+    SessionAppKey,
+    SettingsAppKey,
+)
+from social.graze.aip.atproto.app_password import populate_session
+from social.graze.aip.atproto.oauth import oauth_refresh
+from social.graze.aip.model.oauth import OAuthSession
+
+logger = logging.getLogger(__name__)
+
+
+async def tick_health_task(app: web.Application) -> NoReturn:
+    """
+    Tick the health gauge every 30 seconds, reducing the health score by 1 each time.
+    """
+    health_gauge = app[HealthGaugeAppKey]
+    while True:
+        await health_gauge.tick()
+        await asyncio.sleep(30)
+
+
+async def oauth_refresh_task(app: web.Application) -> NoReturn:
+    """
+    oauth_refresh_task is a background process that refreshes OAuth sessions immediately before they expire.
+
+    The process is as follows:
+
+    Given the queue name is "auth_refresh"
+    Given the worker id is "worker1"
+    Given `now = datetime.datetime.now(datetime.timezone.utc)`
+
+    1. In a redis pipeline, get some work.
+       * Populate the worker queue with work. This stores a range of things from the begining of time to "now" into a new queue
+         ZRANGESTORE "auth_refresh_worker1" "auth_refresh" 1 {now} LIMIT 5
+
+       * Get the work that we just populated.
+         ZRANGE "auth_refresh_worker1" 0 -1
+
+       * Store the difference between the worker queue and the main queue to remove the pulled work from the main queue
+         ZDIFFSTORE "auth_refresh" 2 "auth_refresh" "auth_refresh_worker1"
+
+    2. For the work that we just got, process it all and remove each from the worker queue.
+       ZREM "auth_refresh_worker1" {work_id}
+
+    3. Sleep 15-30 seconds and repeat.
+
+    This does a few things that are important to note.
+
+    1. Work is queued up and indexed (redis zindex) against the time that it needs to be processed, not when
+       it was queued. This lets the queue be lazily evaluated and also pull work that needs to be processed
+       soonest.
+
+    2. Work is batched into a worker queue outside of app instances, so it can be processed in parallel. If
+       we need to scale up workers, we can do so by adjusting the deployment replica count.
+
+    3. Work is grabbed in batches that don't need to be uniform, so there is no arbitrary delay. Workers
+       don't have to wait for 5 jobs to be ready before taking them.
+
+    4. If a worker dies, we have the temporary worker queue to recover the work that was in progress. If
+       needed, we can create a watchdog worker that looks at orphaned worker queues and adds the work back to
+       the main queue.
+    """
+
+    settings = app[SettingsAppKey]
+    database_session_maker = app[DatabaseSessionMakerAppKey]
+    redis_pool = app[RedisPoolAppKey]
+    http_session = app[SessionAppKey]
+
+    while True:
+
+        await asyncio.sleep(10)
+
+        now = datetime.now(timezone.utc)
+
+        async with (
+            database_session_maker() as database_session,
+            redis.Redis.from_pool(redis_pool) as redis_session,
+        ):
+            worker_queue = f"{OAUTH_REFRESH_QUEUE}:{settings.worker_id}"
+            workers_heartbeat = f"{OAUTH_REFRESH_QUEUE}:workers"
+
+            await redis_session.hset(
+                workers_heartbeat, settings.worker_id, str(int(now.timestamp()))
+            )  # type: ignore
+
+            worker_queue_count: int = await redis_session.zcount(
+                worker_queue, 0, int(now.timestamp())
+            )
+            global_queue_count: int = await redis_session.zcount(
+                OAUTH_REFRESH_QUEUE, 0, int(now.timestamp())
+            )
+
+            if worker_queue_count == 0 and global_queue_count > 0:
+                async with redis_session.pipeline() as redis_pipe:
+                    try:
+                        logger.debug(
+                            f"tick_task: processing {OAUTH_REFRESH_QUEUE} up to {int(now.timestamp())}"
+                        )
+                        redis_pipe.zrangestore(
+                            worker_queue,
+                            OAUTH_REFRESH_QUEUE,
+                            0,
+                            int(now.timestamp()),
+                            num=5,
+                            offset=0,
+                            byscore=True,
+                        )
+
+                        redis_pipe.zdiffstore(
+                            OAUTH_REFRESH_QUEUE, [OAUTH_REFRESH_QUEUE, worker_queue]
+                        )
+                        await redis_pipe.execute()
+                    except Exception:
+                        logging.exception("error populating worker queue")
+
+            tasks: List[Tuple[str, float]] = await redis_session.zrange(
+                worker_queue, 0, int(now.timestamp()), byscore=True, withscores=True
+            )
+            for session_group, deadline in tasks:
+
+                logger.debug(
+                    "tick_task: processing session_group %s deadline %s",
+                    session_group,
+                    deadline,
+                )
+
+                try:
+                    async with database_session.begin():
+                        oauth_session_stmt = select(OAuthSession).where(
+                            OAuthSession.session_group == session_group
+                        )
+                        oauth_session: OAuthSession = (
+                            await database_session.scalars(oauth_session_stmt)
+                        ).one()
+
+                        await database_session.commit()
+
+                    await oauth_refresh(
+                        settings,
+                        http_session,
+                        database_session,
+                        redis_session,
+                        oauth_session,
+                    )
+
+                except Exception:
+                    logging.exception(
+                        "error processing session group %s", session_group
+                    )
+
+                finally:
+                    await redis_session.zrem(worker_queue, session_group)
+
+
+async def app_password_refresh_task(app: web.Application) -> NoReturn:
+    settings = app[SettingsAppKey]
+    database_session_maker = app[DatabaseSessionMakerAppKey]
+    redis_pool = app[RedisPoolAppKey]
+    http_session = app[SessionAppKey]
+
+    while True:
+
+        await asyncio.sleep(10)
+
+        now = datetime.now(timezone.utc)
+
+        async with (redis.Redis.from_pool(redis_pool) as redis_session,):
+            worker_queue = f"{APP_PASSWORD_REFRESH_QUEUE}:{settings.worker_id}"
+            workers_heartbeat = f"{APP_PASSWORD_REFRESH_QUEUE}:workers"
+
+            await redis_session.hset(
+                workers_heartbeat, settings.worker_id, str(int(now.timestamp()))
+            )  # type: ignore
+
+            worker_queue_count: int = await redis_session.zcount(
+                worker_queue, 0, int(now.timestamp())
+            )
+            global_queue_count: int = await redis_session.zcount(
+                APP_PASSWORD_REFRESH_QUEUE, 0, int(now.timestamp())
+            )
+
+            if worker_queue_count == 0 and global_queue_count > 0:
+                async with redis_session.pipeline() as redis_pipe:
+                    try:
+                        logger.debug(
+                            f"tick_task: processing {APP_PASSWORD_REFRESH_QUEUE} up to {int(now.timestamp())}"
+                        )
+                        redis_pipe.zrangestore(
+                            worker_queue,
+                            APP_PASSWORD_REFRESH_QUEUE,
+                            0,
+                            int(now.timestamp()),
+                            num=5,
+                            offset=0,
+                            byscore=True,
+                        )
+
+                        redis_pipe.zdiffstore(
+                            APP_PASSWORD_REFRESH_QUEUE,
+                            [APP_PASSWORD_REFRESH_QUEUE, worker_queue],
+                        )
+                        await redis_pipe.execute()
+                    except Exception:
+                        logging.exception("error populating worker queue")
+
+            tasks: List[Tuple[str, float]] = await redis_session.zrange(
+                worker_queue, 0, int(now.timestamp()), byscore=True, withscores=True
+            )
+            for handle_guid, deadline in tasks:
+
+                logger.debug(
+                    "tick_task: processing guid %s deadline %s",
+                    handle_guid,
+                    deadline,
+                )
+
+                try:
+                    await populate_session(
+                        http_session,
+                        database_session_maker,
+                        redis_session,
+                        handle_guid,
+                    )
+
+                except Exception:
+                    logging.exception("error processing guid %s", handle_guid)
+
+                finally:
+                    await redis_session.zrem(worker_queue, handle_guid)
