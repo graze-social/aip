@@ -166,9 +166,6 @@ async def handle_atproto_login_submit(request: web.Request):
     issuer = authorization_server.get("issuer", None)
     if issuer is None:
         raise Exception("No authorization issuer found")
-    print("======================================")
-    print(f"issuer {issuer}")
-    print("======================================")
 
     par_url = authorization_server.get("pushed_authorization_request_endpoint", None)
     if par_url is None:
@@ -479,7 +476,7 @@ async def handle_atproto_callback(request: web.Request):
         # the deadline is 80% of the expires in time from now.
         expires_in_mod = expires_in * 0.8
         refresh_at = now + datetime.timedelta(0, expires_in_mod)
-        logger.info(
+        logger.debug(
             f"Queueing session {session_group} refresh at {refresh_at} (now={now})"
         )
 
@@ -686,7 +683,7 @@ async def handle_atproto_refresh(request: web.Request):
         expires_in_mod = expires_in * 0.8
         # expires_in_mod = 60
         refresh_at = now + datetime.timedelta(0, expires_in_mod)
-        logger.info(
+        logger.debug(
             f"Queueing session {oauth_session.session_group} refresh at {refresh_at} (now={now})"
         )
 
@@ -942,7 +939,9 @@ async def handle_xrpc_proxy(request: web.Request):
 
     http_session = request.app[SessionAppKey]
 
-    hashed_access_token = hashlib.sha256(str(auth_session.access_token).encode("ascii")).digest()
+    hashed_access_token = hashlib.sha256(
+        str(auth_session.access_token).encode("ascii")
+    ).digest()
     encoded_hashed_access_token = base64.urlsafe_b64encode(hashed_access_token)
     pkcs_access_token = encoded_hashed_access_token.decode("ascii").rstrip("=")
 
@@ -956,11 +955,11 @@ async def handle_xrpc_proxy(request: web.Request):
     dpop_assertation_claims = {
         "htm": request.method,
         "htu": f"{auth_token.pds}/xrpc/{xrpc_method}",
-        "iat": int(now.timestamp()),
+        "iat": int(now.timestamp()) - 1,
         "exp": int(now.timestamp()) + 30,
         "nonce": "tmp",
         "ath": pkcs_access_token,
-        "iss": auth_session.issuer,
+        "iss": f"{auth_session.issuer}",
     }
 
     headers = {
@@ -986,7 +985,7 @@ async def handle_xrpc_proxy(request: web.Request):
         client_session=http_session, raise_for_status=False, middleware=chain_middleware
     )
     async with chain_client.request(
-        request.method, xrpc_url, raise_for_status=None, headers = headers, **rargs
+        request.method, xrpc_url, raise_for_status=None, headers=headers, **rargs
     ) as (
         client_response,
         chain_response,
@@ -995,6 +994,7 @@ async def handle_xrpc_proxy(request: web.Request):
         # TODO: Think about using a header like `X-AIP-Error` for additional error context.
         return chain_response.to_web_response()
         # return web.Response(status=chain_response.status, body=chain_response.body, headers=chain_response.headers)
+
 
 class PermissionOperation(BaseModel):
     op: Literal["test", "add", "remove", "replace"]
@@ -1386,7 +1386,28 @@ async def startup(app):
     )
     app[DatabaseSessionMakerAppKey] = database_session
 
-    app[SessionAppKey] = aiohttp.ClientSession()
+    trace_config = aiohttp.TraceConfig()
+
+    if settings.debug:
+
+        async def on_request_start(
+            session, trace_config_ctx, params: aiohttp.TraceRequestStartParams
+        ):
+            logging.info("Starting request: %s", params)
+
+        async def on_request_chunk_sent(
+            session, trace_config_ctx, params: aiohttp.TraceRequestChunkSentParams
+        ):
+            logging.info("Chunk sent: %s", str(params.chunk))
+
+        async def on_request_end(session, trace_config_ctx, params):
+            logging.info("Ending request: %s", params)
+
+        trace_config.on_request_start.append(on_request_start)
+        trace_config.on_request_end.append(on_request_end)
+        trace_config.on_request_chunk_sent.append(on_request_chunk_sent)
+
+    app[SessionAppKey] = aiohttp.ClientSession(trace_configs=[trace_config])
 
     app[RedisPoolAppKey] = redis.ConnectionPool.from_url(str(settings.redis_dsn))
 

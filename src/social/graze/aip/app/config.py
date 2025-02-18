@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
+
+    debug: bool = False
+
     http_port: int = 5100
 
     external_hostname: str = "localhost:5100"

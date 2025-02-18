@@ -219,9 +219,6 @@ class GenerateDpopMiddleware(RequestMiddlewareBase):
         dpop_assertation.make_signed_token(self._dpop_key)
         dpop_assertation_token = dpop_assertation.serialize()
 
-        logger.info(f"dpop_assertion_header: {self._dpop_assertion_header}")
-        logger.info(f"dpop_assertion_claims: {self._dpop_assertion_claims}")
-
         if request.headers is None:
             request.headers = {}
         request.headers["DPoP"] = dpop_assertation_token
@@ -236,9 +233,6 @@ class GenerateDpopMiddleware(RequestMiddlewareBase):
         if chain_response.status == 401 or chain_response.status == 400:
             if chain_response.headers is None:
                 raise ValueError("Response headers are None")
-
-            logger.info(f"chain_response.headers: {chain_response.headers}")
-            logger.info(f"chain_response.body: {chain_response.body}")
 
             if chain_response.body_matches_kv(
                 "error", "invalid_dpop_proof"
