@@ -6,7 +6,6 @@ import os
 import logging
 import secrets
 from typing import (
-    Awaitable,
     Final,
     Literal,
     NoReturn,
@@ -230,7 +229,7 @@ async def handle_atproto_login_submit(request: web.Request):
         ),
     ]
     chain_client = ChainMiddlewareClient(
-        raise_for_status=False, middleware=chain_middleware
+        client_session=http_session, raise_for_status=False, middleware=chain_middleware
     )
     async with chain_client.post(par_url, data=data) as (
         client_response,
@@ -422,7 +421,9 @@ async def handle_atproto_callback(request: web.Request):
             ),
         ]
         chain_client = ChainMiddlewareClient(
-            raise_for_status=False, middleware=chain_middleware
+            client_session=http_session,
+            raise_for_status=False,
+            middleware=chain_middleware,
         )
         async with chain_client.post(token_endpoint, data=data) as (
             client_response,
@@ -473,8 +474,12 @@ async def handle_atproto_callback(request: web.Request):
 
         # Set a queue entry to refresh the token. We don't want to wait until the token is expired to refresh it, so
         # the deadline is 80% of the expires in time from now.
-        expires_in_mod = expires_in * 0.8
+        # expires_in_mod = expires_in * 0.8
+        expires_in_mod = 60
         refresh_at = now + datetime.timedelta(0, expires_in_mod)
+        logger.info(
+            f"Queueing session {session_group} refresh at {refresh_at} (now={now})"
+        )
 
         await redis_session.zadd(
             OAUTH_REFRESH_QUEUE,
@@ -493,6 +498,7 @@ async def handle_atproto_callback(request: web.Request):
     serialized_auth_token = auth_token.serialize()
 
     raise web.HTTPFound(f"/auth/atproto/debug?auth_token={serialized_auth_token}")
+
 
 async def handle_atproto_refresh(request: web.Request):
     settings = request.app[SettingsAppKey]
@@ -656,12 +662,12 @@ async def handle_atproto_refresh(request: web.Request):
                 update(OAuthSession)
                 .where(
                     OAuthSession.guid == oauth_session.guid,
-                    OAuthSession.session_group == oauth_session.session_group
+                    OAuthSession.session_group == oauth_session.session_group,
                 )
                 .values(
                     access_token=access_token,
                     refresh_token=refresh_token,
-                    access_token_expires_at=now + datetime.timedelta(0, expires_in)
+                    access_token_expires_at=now + datetime.timedelta(0, expires_in),
                 )
             )
             await database_session.execute(update_oauth_session_stmt)
@@ -675,8 +681,12 @@ async def handle_atproto_refresh(request: web.Request):
 
         # Set a queue entry to refresh the token. We don't want to wait until the token is expired to refresh it, so
         # the deadline is 80% of the expires in time from now.
-        expires_in_mod = expires_in * 0.8
+        # expires_in_mod = expires_in * 0.8
+        expires_in_mod = 60
         refresh_at = now + datetime.timedelta(0, expires_in_mod)
+        logger.info(
+            f"Queueing session {oauth_session.session_group} refresh at {refresh_at} (now={now})"
+        )
 
         await redis_session.zadd(
             OAUTH_REFRESH_QUEUE,
@@ -695,6 +705,7 @@ async def handle_atproto_refresh(request: web.Request):
     serialized_auth_token = auth_token.serialize()
 
     raise web.HTTPFound(f"/auth/atproto/debug?auth_token={serialized_auth_token}")
+
 
 async def handle_atproto_debug(request: web.Request):
     settings = request.app[SettingsAppKey]
@@ -1352,8 +1363,10 @@ async def tick_health_task(app: web.Application) -> NoReturn:
 
 
 async def tick_task(app: web.Application) -> NoReturn:
+    settings = app[SettingsAppKey]
     database_session_maker = app[DatabaseSessionMakerAppKey]
     redis_pool = app[RedisPoolAppKey]
+    http_session = app[SessionAppKey]
 
     while True:
 
@@ -1365,49 +1378,222 @@ async def tick_task(app: web.Application) -> NoReturn:
             database_session_maker() as database_session,
             redis.Redis.from_pool(redis_pool) as redis_session,
         ):
-            worker_queue = f"{OAUTH_REFRESH_QUEUE}:worker1"
+            worker_queue = f"{OAUTH_REFRESH_QUEUE}:{settings.worker_id}"
             workers_heartbeat = f"{OAUTH_REFRESH_QUEUE}:workers"
 
-            hset_res = await redis_session.hset(
-                workers_heartbeat, "worker1", str(int(now.timestamp()))
+            await redis_session.hset(
+                workers_heartbeat, settings.worker_id, str(int(now.timestamp()))
             )  # type: ignore
-            print(f"hset_res {hset_res}")
-
-            hgetall_res = await redis_session.hgetall(workers_heartbeat)  # type: ignore
-            print(f"hgetall_res {hgetall_res}")
 
             worker_queue_count: int = await redis_session.zcount(
-                worker_queue, 1, int(now.timestamp())
+                worker_queue, 0, int(now.timestamp())
             )
-            print(f"worker_queue_count {worker_queue_count} of {worker_queue}")
-            if worker_queue_count == 0:
-                continue
+            global_queue_count: int = await redis_session.zcount(
+                OAUTH_REFRESH_QUEUE, 0, int(now.timestamp())
+            )
 
-            async with redis_session.pipeline(transaction=True) as redis_pipe:
-                
-                await redis_pipe.zrange(
-                    worker_queue, 1, int(now.timestamp()), num=5, byscore=True
-                )
+            if worker_queue_count == 0 and global_queue_count > 0:
+                async with redis_session.pipeline() as redis_pipe:
+                    try:
+                        logger.debug(
+                            f"tick_task: processing {OAUTH_REFRESH_QUEUE} up to {int(now.timestamp())}"
+                        )
+                        redis_pipe.zrangestore(
+                            worker_queue,
+                            OAUTH_REFRESH_QUEUE,
+                            0,
+                            int(now.timestamp()),
+                            num=5,
+                            offset=0,
+                            byscore=True,
+                        )
 
-                await redis_pipe.zrangestore(
-                    worker_queue,
-                    OAUTH_REFRESH_QUEUE,
-                    1,
-                    int(now.timestamp()),
-                    num=5,
-                    byscore=True,
-                )
+                        redis_pipe.zdiffstore(
+                            OAUTH_REFRESH_QUEUE, [OAUTH_REFRESH_QUEUE, worker_queue]
+                        )
+                        await redis_pipe.execute()
+                    except Exception:
+                        logging.exception("error populating worker queue")
 
-                await redis_pipe.zdiffstore(
-                    OAUTH_REFRESH_QUEUE, [OAUTH_REFRESH_QUEUE, worker_queue]
+            tasks: List[Tuple[str, float]] = await redis_session.zrange(
+                worker_queue, 0, int(now.timestamp()), byscore=True, withscores=True
+            )
+            for session_group, deadline in tasks:
+                logger.debug(
+                    "tick_task: processing session_group %s deadline %s",
+                    session_group,
+                    deadline,
                 )
+                try:
+                    async with database_session.begin():
+                        oauth_session_stmt = select(OAuthSession).where(
+                            OAuthSession.session_group == session_group
+                        )
+                        oauth_session: OAuthSession = (
+                            await database_session.scalars(oauth_session_stmt)
+                        ).one()
 
-                [zrange_res, zrangestore_res, zdiffstore_res] = (
-                    await redis_pipe.execute()
-                )
-                print(f"zrange_res {zrange_res}")
-                print(f"zrangestore_res {zrangestore_res}")
-                print(f"zdiffstore_res {zdiffstore_res}")
+                        handle_stmt = select(Handle).where(
+                            Handle.guid == oauth_session.guid
+                        )
+                        handle: Handle = (
+                            await database_session.scalars(handle_stmt)
+                        ).one()
+
+                        await database_session.commit()
+
+                    signing_key = settings.json_web_keys.get_key(
+                        oauth_session.secret_jwk_id
+                    )
+                    if signing_key is None:
+                        raise Exception("No active signing key available")
+
+                    dpop_key = jwk.JWK(**oauth_session.dpop_jwk)
+                    dpop_key_public_key = dpop_key.export_public(as_dict=True)
+
+                    client_id = f"https://{settings.external_hostname}/auth/atproto/client-metadata.json"
+                    redirect_url = (
+                        f"https://{settings.external_hostname}/auth/atproto/callback"
+                    )
+                    client_assertion_jti = str(ULID())
+
+                    protected_resource = await oauth_protected_resource(
+                        http_session, handle.pds
+                    )
+                    if protected_resource is None:
+                        raise Exception("No protected resource found")
+
+                    first_authorization_servers = next(
+                        iter(protected_resource.get("authorization_servers", [])), None
+                    )
+                    if first_authorization_servers is None:
+                        raise Exception("No authorization server found")
+
+                    authorization_server = await oauth_authorization_server(
+                        http_session, first_authorization_servers
+                    )
+                    if authorization_server is None:
+                        raise Exception("No authorization server found")
+
+                    token_endpoint = authorization_server.get("token_endpoint", None)
+                    if token_endpoint is None:
+                        raise Exception("No authorization endpoint found")
+
+                    now = datetime.datetime.now(datetime.timezone.utc)
+
+                    client_assertion_header = {
+                        "alg": "ES256",
+                        "kid": oauth_session.secret_jwk_id,
+                    }
+                    client_assertion_claims = {
+                        "iss": client_id,
+                        "sub": client_id,
+                        "aud": oauth_session.issuer,
+                        "jti": client_assertion_jti,
+                        "iat": int(now.timestamp()),
+                    }
+
+                    dpop_assertation_header = {
+                        "alg": "ES256",
+                        "jwk": dpop_key_public_key,
+                        "typ": "dpop+jwt",
+                    }
+                    dpop_assertation_claims = {
+                        "htm": "POST",
+                        "htu": token_endpoint,
+                        "iat": int(now.timestamp()),
+                        "exp": int(now.timestamp()) + 30,
+                        "nonce": "tmp",
+                    }
+
+                    data = aiohttp.FormData(
+                        {
+                            "client_id": client_id,
+                            "redirect_uri": redirect_url,
+                            "grant_type": "refresh_token",
+                            "refresh_token": oauth_session.refresh_token,
+                            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                        }
+                    )
+
+                    chain_middleware = [
+                        GenerateDpopMiddleware(
+                            dpop_key,
+                            dpop_assertation_header,
+                            dpop_assertation_claims,
+                        ),
+                        GenerateClaimAssertionMiddleware(
+                            signing_key,
+                            client_assertion_header,
+                            client_assertion_claims,
+                        ),
+                    ]
+                    chain_client = ChainMiddlewareClient(
+                        client_session=http_session,
+                        raise_for_status=False,
+                        middleware=chain_middleware,
+                    )
+                    async with chain_client.post(token_endpoint, data=data) as (
+                        client_response,
+                        chain_response,
+                    ):
+                        if client_response.status != 200:
+                            raise Exception("Invalid token response")
+
+                        if isinstance(chain_response.body, dict):
+                            token_response = chain_response.body
+                        else:
+                            raise ValueError("Invalid token response")
+
+                    access_token = token_response.get("access_token", None)
+                    if access_token is None:
+                        raise Exception("No access token")
+
+                    refresh_token = token_response.get("refresh_token", None)
+                    if refresh_token is None:
+                        raise Exception("No refresh token")
+
+                    expires_in = token_response.get("expires_in", 1800)
+
+                    async with database_session.begin():
+
+                        update_oauth_session_stmt = (
+                            update(OAuthSession)
+                            .where(
+                                OAuthSession.guid == oauth_session.guid,
+                                OAuthSession.session_group
+                                == oauth_session.session_group,
+                            )
+                            .values(
+                                access_token=access_token,
+                                refresh_token=refresh_token,
+                                access_token_expires_at=now
+                                + datetime.timedelta(0, expires_in),
+                            )
+                        )
+                        await database_session.execute(update_oauth_session_stmt)
+
+                        await database_session.commit()
+
+                    # Cache the access token in redis. For users with multiple devices, this just shoves the latest one into the
+                    # cache keyed on the guid, which is probably fine.
+                    oauth_session_key = f"auth_session:oauth:{str(oauth_session.guid)}"
+                    await redis_session.set(
+                        oauth_session_key, access_token, ex=(expires_in - 1)
+                    )
+
+                    # Set a queue entry to refresh the token. We don't want to wait until the token is expired to refresh it, so
+                    # the deadline is 80% of the expires in time from now.
+                    expires_in_mod = expires_in * 0.8
+                    refresh_at = now + datetime.timedelta(0, expires_in_mod)
+                    await redis_session.zadd(
+                        OAUTH_REFRESH_QUEUE,
+                        {oauth_session.session_group: int(refresh_at.timestamp())},
+                    )
+                except Exception:
+                    logging.exception("error processing work")
+                finally:
+                    await redis_session.zrem(worker_queue, session_group)
 
             # Nick: Buckle up, this is stupid.
             #
@@ -1445,8 +1631,6 @@ async def tick_task(app: web.Application) -> NoReturn:
             # 4. If a worker dies, we have the temporary worker queue to recover the work that was in progress. If
             #    needed, we can create a watchdog worker that looks at orphaned worker queues and adds the work back to
             #    the main queue.
-
-            pass
 
         # print(f"Tick")
 
