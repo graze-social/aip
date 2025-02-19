@@ -211,7 +211,7 @@ async def oauth_complete(
     settings: Settings,
     http_session: ClientSession,
     database_session_maker: async_sessionmaker[AsyncSession],
-    redis_pool: redis.ConnectionPool,
+    redis_session: redis.Redis,
     state: Optional[str],
     issuer: Optional[str],
     code: Optional[str],
@@ -227,10 +227,7 @@ async def oauth_complete(
     if service_auth_key is None:
         raise Exception("No service auth key available")
 
-    async with (
-        database_session_maker() as database_session,
-        redis.Redis.from_pool(redis_pool) as redis_session,
-    ):
+    async with (database_session_maker() as database_session,):
 
         async with database_session.begin():
 

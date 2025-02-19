@@ -7,7 +7,7 @@ import redis.asyncio as redis
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
     HealthGaugeAppKey,
-    RedisPoolAppKey,
+    RedisClientAppKey,
     SessionAppKey,
     SettingsAppKey,
 )
@@ -20,13 +20,10 @@ logger = logging.getLogger(__name__)
 
 async def handle_internal_me(request: web.Request):
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
-    redis_pool = request.app[RedisPoolAppKey]
+    redis_session = request.app[RedisClientAppKey]
 
     try:
-        async with (
-            database_session_maker() as database_session,
-            redis.Redis.from_pool(redis_pool) as redis_session,
-        ):
+        async with (database_session_maker() as database_session,):
             auth_token = await auth_token_helper(
                 request, database_session, allow_permissions=False
             )

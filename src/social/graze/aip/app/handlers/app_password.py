@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from social.graze.aip.app.config import (
     APP_PASSWORD_REFRESH_QUEUE,
     DatabaseSessionMakerAppKey,
-    RedisPoolAppKey,
+    RedisClientAppKey,
 )
 from social.graze.aip.app.handlers.helpers import auth_token_helper
 from social.graze.aip.model.app_password import AppPassword
@@ -39,7 +39,7 @@ class AppPasswordOperation(BaseModel):
 
 async def handle_internal_app_password(request: web.Request) -> web.Response:
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
-    redis_pool = request.app[RedisPoolAppKey]
+    redis_session = request.app[RedisClientAppKey]
 
     try:
         data = await request.read()
@@ -49,10 +49,7 @@ async def handle_internal_app_password(request: web.Request) -> web.Response:
         return web.Response(text="Invalid JSON", status=400)
 
     try:
-        async with (
-            database_session_maker() as database_session,
-            redis.Redis.from_pool(redis_pool) as redis_session,
-        ):
+        async with (database_session_maker() as database_session,):
             auth_token = await auth_token_helper(
                 request, database_session, allow_permissions=False
             )

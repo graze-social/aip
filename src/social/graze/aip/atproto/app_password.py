@@ -47,7 +47,7 @@ async def populate_session(
 
             # 3. Get optional AppPasswordSession by guid
             app_password_session_stmt = select(AppPasswordSession).where(
-                AppPassword.guid == subject_guid
+                AppPasswordSession.guid == subject_guid
             )
             app_password_session: Optional[AppPasswordSession] = (
                 await database_session.scalars(app_password_session_stmt)
@@ -81,7 +81,7 @@ async def populate_session(
 
                         body: Dict[str, Any] = await response.json()
                         access_token = body.get("accessJwt", None)
-                        access_token = body.get("refreshJwt", None)
+                        refresh_token = body.get("refreshJwt", None)
                         is_active = body.get("active", False)
                         found_did = body.get("did", "")
 
@@ -140,7 +140,7 @@ async def populate_session(
 
                         body: Dict[str, Any] = await response.json()
                         access_token = body.get("accessJwt", None)
-                        access_token = body.get("refreshJwt", None)
+                        refresh_token = body.get("refreshJwt", None)
                         is_active = body.get("active", False)
                         found_did = body.get("did", "")
 
@@ -154,8 +154,8 @@ async def populate_session(
                         if not is_active:
                             raise ValueError("Handle is not active.")
 
-                except Exception as e:
-                    logger.exception(f"Error creating session: {e}")
+                except Exception:
+                    logger.exception("Error creating session")
 
                 # 5. Create new AppPasswordSession
                 if access_token is not None and refresh_token is not None:

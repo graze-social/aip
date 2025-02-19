@@ -20,13 +20,14 @@ from social.graze.aip.app.config import (
     DatabaseAppKey,
     DatabaseSessionMakerAppKey,
     HealthGaugeAppKey,
+    RedisClientAppKey,
     RedisPoolAppKey,
     SessionAppKey,
     Settings,
     SettingsAppKey,
-    APP_PASSWORD_REFRESH_TASK_APP_KEY,
-    OAUTH_REFRESH_TASK_APP_KEY,
-    TICK_HEALTH_TASK_APP_KEY,
+    AppPasswordRefreshTaskAppKey,
+    OAuthRefreshTaskAppKey,
+    TickHealthTaskAppKey,
 )
 from social.graze.aip.app.handlers.app_password import handle_internal_app_password
 from social.graze.aip.app.handlers.internal import (
@@ -95,28 +96,34 @@ async def startup(app):
 
     app[RedisPoolAppKey] = redis.ConnectionPool.from_url(str(settings.redis_dsn))
 
+    app[RedisClientAppKey] = redis.Redis(
+        connection_pool=redis.ConnectionPool.from_url(str(settings.redis_dsn))
+    )
+
 
 async def background_tasks(app):
-    app[TICK_HEALTH_TASK_APP_KEY] = asyncio.create_task(tick_health_task(app))
-    app[OAUTH_REFRESH_TASK_APP_KEY] = asyncio.create_task(oauth_refresh_task(app))
-    app[APP_PASSWORD_REFRESH_TASK_APP_KEY] = asyncio.create_task(
+    app[TickHealthTaskAppKey] = asyncio.create_task(tick_health_task(app))
+    app[OAuthRefreshTaskAppKey] = asyncio.create_task(oauth_refresh_task(app))
+    app[AppPasswordRefreshTaskAppKey] = asyncio.create_task(
         app_password_refresh_task(app)
     )
 
     yield
 
-    app[TICK_HEALTH_TASK_APP_KEY].cancel()
-    app[OAUTH_REFRESH_TASK_APP_KEY].cancel()
-    app[APP_PASSWORD_REFRESH_TASK_APP_KEY].cancel()
+    print("Shutting down background tasks")
+
+    app[TickHealthTaskAppKey].cancel()
+    app[OAuthRefreshTaskAppKey].cancel()
+    app[AppPasswordRefreshTaskAppKey].cancel()
 
     with contextlib.suppress(asyncio.exceptions.CancelledError):
-        await app[TICK_HEALTH_TASK_APP_KEY]
+        await app[TickHealthTaskAppKey]
 
     with contextlib.suppress(asyncio.exceptions.CancelledError):
-        await app[OAUTH_REFRESH_TASK_APP_KEY]
+        await app[OAuthRefreshTaskAppKey]
 
     with contextlib.suppress(asyncio.exceptions.CancelledError):
-        await app[APP_PASSWORD_REFRESH_TASK_APP_KEY]
+        await app[AppPasswordRefreshTaskAppKey]
 
 
 async def shutdown(app):

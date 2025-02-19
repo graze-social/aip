@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
-    RedisPoolAppKey,
+    RedisClientAppKey,
     SessionAppKey,
     SettingsAppKey,
 )
@@ -90,14 +90,14 @@ async def handle_atproto_callback(request: web.Request):
     settings = request.app[SettingsAppKey]
     http_session = request.app[SessionAppKey]
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
-    redis_pool = request.app[RedisPoolAppKey]
+    redis_session = request.app[RedisClientAppKey]
 
     try:
         serialized_auth_token = await oauth_complete(
             settings,
             http_session,
             database_session_maker,
-            redis_pool,
+            redis_session,
             state,
             issuer,
             code,
@@ -116,7 +116,7 @@ async def handle_atproto_refresh(request: web.Request):
     settings = request.app[SettingsAppKey]
     http_session = request.app[SessionAppKey]
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
-    redis_pool = request.app[RedisPoolAppKey]
+    redis_session = request.app[RedisClientAppKey]
 
     serialized_auth_token: Optional[str] = request.query.get("auth_token", None)
     if serialized_auth_token is None:
@@ -130,10 +130,7 @@ async def handle_atproto_refresh(request: web.Request):
     auth_token_subject: Optional[str] = auth_token_claims.get("sub", None)
     auth_token_session_group: Optional[str] = auth_token_claims.get("grp", None)
 
-    async with (
-        database_session_maker() as database_session,
-        redis.Redis.from_pool(redis_pool) as redis_session,
-    ):
+    async with (database_session_maker() as database_session,):
         async with database_session.begin():
             oauth_session_stmt = select(OAuthSession).where(
                 OAuthSession.guid == auth_token_subject,

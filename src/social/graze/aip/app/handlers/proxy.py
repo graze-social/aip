@@ -11,11 +11,10 @@ import hashlib
 import base64
 from jwcrypto import jwk
 from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
-import redis.asyncio as redis
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
-    RedisPoolAppKey,
+    RedisClientAppKey,
     SessionAppKey,
 )
 from social.graze.aip.app.handlers.helpers import auth_session_helper, auth_token_helper
@@ -37,14 +36,11 @@ async def handle_xrpc_proxy(request: web.Request) -> web.Response:
         )
 
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
-    redis_pool = request.app[RedisPoolAppKey]
+    redis_session = request.app[RedisClientAppKey]
 
     auth_session = None
     try:
-        async with (
-            database_session_maker() as database_session,
-            redis.Redis.from_pool(redis_pool) as redis_session,
-        ):
+        async with (database_session_maker() as database_session,):
             # TODO: Allow optional auth here.
             auth_token = await auth_token_helper(request, database_session)
             if auth_token is None:

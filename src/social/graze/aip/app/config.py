@@ -69,6 +69,10 @@ class Settings(BaseSettings):
         return Fernet(key_data)
 
 
+OAUTH_REFRESH_QUEUE = "auth_session:oauth:refresh"
+
+APP_PASSWORD_REFRESH_QUEUE = "auth_session:app-password:refresh"
+
 SettingsAppKey: Final = web.AppKey("settings", Settings)
 DatabaseAppKey: Final = web.AppKey("database", AsyncEngine)
 DatabaseSessionMakerAppKey: Final = web.AppKey(
@@ -76,14 +80,10 @@ DatabaseSessionMakerAppKey: Final = web.AppKey(
 )
 SessionAppKey: Final = web.AppKey("http_session", ClientSession)
 RedisPoolAppKey: Final = web.AppKey("redis_pool", redis.ConnectionPool)
+RedisClientAppKey: Final = web.AppKey("redis_client", redis.Redis)
 HealthGaugeAppKey: Final = web.AppKey("health_gauge", HealthGauge)
-
-OAUTH_REFRESH_QUEUE = "auth_session:oauth:refresh"
-
-APP_PASSWORD_REFRESH_QUEUE = "auth_session:app-password:refresh"
-
-OAUTH_REFRESH_TASK_APP_KEY: Final = web.AppKey("oauth_refresh_task", asyncio.Task[None])
-APP_PASSWORD_REFRESH_TASK_APP_KEY: Final = web.AppKey(
+OAuthRefreshTaskAppKey: Final = web.AppKey("oauth_refresh_task", asyncio.Task[None])
+AppPasswordRefreshTaskAppKey: Final = web.AppKey(
     "app_password_refresh_task", asyncio.Task[None]
 )
-TICK_HEALTH_TASK_APP_KEY: Final = web.AppKey("tick_health_task", asyncio.Task[None])
+TickHealthTaskAppKey: Final = web.AppKey("tick_health_task", asyncio.Task[None])
