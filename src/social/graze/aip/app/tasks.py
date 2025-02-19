@@ -42,13 +42,15 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
     Given `now = datetime.datetime.now(datetime.timezone.utc)`
 
     1. In a redis pipeline, get some work.
-       * Populate the worker queue with work. This stores a range of things from the begining of time to "now" into a new queue
+       * Populate the worker queue with work. This stores a range of things from the begining of time to "now" into a
+         new queue.
          ZRANGESTORE "auth_refresh_worker1" "auth_refresh" 1 {now} LIMIT 5
 
        * Get the work that we just populated.
          ZRANGE "auth_refresh_worker1" 0 -1
 
-       * Store the difference between the worker queue and the main queue to remove the pulled work from the main queue
+       * Store the difference between the worker queue and the main queue to remove the pulled work from the main
+         queue.
          ZDIFFSTORE "auth_refresh" 2 "auth_refresh" "auth_refresh_worker1"
 
     2. For the work that we just got, process it all and remove each from the worker queue.

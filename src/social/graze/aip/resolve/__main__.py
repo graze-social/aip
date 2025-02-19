@@ -4,9 +4,9 @@ import aiohttp
 import asyncio
 import logging
 
-logger = logging.getLogger(__name__)
-
 from social.graze.aip.resolve.handle import resolve_subject
+
+logger = logging.getLogger(__name__)
 
 
 async def realMain() -> None:
@@ -26,7 +26,7 @@ async def realMain() -> None:
         for subject in subjects:
             try:
                 resolved_handle = await resolve_subject(
-                    session, args.get("plc_hostname"), subject
+                    session, args.get("plc_hostname", str), subject
                 )
                 print(f"resolved_handle {resolved_handle}")
             except Exception:

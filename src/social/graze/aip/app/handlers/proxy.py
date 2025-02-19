@@ -59,7 +59,7 @@ async def handle_xrpc_proxy(request: web.Request) -> web.Response:
                 )
     except web.HTTPException as e:
         raise e
-    except Exception as e:
+    except Exception:
         raise web.HTTPInternalServerError(
             body=json.dumps({"error": "Internal Server Error"}),
             content_type="application/json",

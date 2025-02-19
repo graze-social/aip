@@ -1,12 +1,8 @@
-from typing import Any
 from datetime import datetime
-from sqlalchemy import Integer, String, DateTime
+from sqlalchemy import String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import JSON, insert
 
-from social.graze.aip.model.base import Base, str512, guidpk
-
-from sqlalchemy.orm import Mapped, mapped_column
+from social.graze.aip.model.base import Base
 
 
 class AppPassword(Base):

@@ -2,7 +2,6 @@ import json
 import logging
 
 from aiohttp import web
-import redis.asyncio as redis
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
@@ -49,7 +48,7 @@ async def handle_internal_me(request: web.Request):
             )
     except web.HTTPException as e:
         raise e
-    except Exception as e:
+    except Exception:
         raise web.HTTPInternalServerError(
             body=json.dumps({"error": "Internal Server Error"}),
             content_type="application/json",

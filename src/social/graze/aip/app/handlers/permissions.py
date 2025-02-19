@@ -14,7 +14,6 @@ from sqlalchemy import delete, select
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
-    RedisClientAppKey,
 )
 from social.graze.aip.app.handlers.helpers import auth_token_helper
 from social.graze.aip.model.oauth import (
@@ -38,7 +37,6 @@ PermissionOperations = RootModel[list[PermissionOperation]]
 
 async def handle_internal_permissions(request: web.Request) -> web.Response:
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
-    redis_session = request.app[RedisClientAppKey]
 
     # TODO: Support GET requests that returns paginated permission objects.
 
@@ -71,7 +69,8 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
                         operation.op == "add" or operation.op == "replace"
                     ) and operation.value is not None:
 
-                        # TODO: Fail if the guid is unknown. Clients should use /internal/api/resolve on all subjects prior to setting permissions.
+                        # TODO: Fail if the guid is unknown. Clients should use /internal/api/resolve on all subjects
+                        #       prior to setting permissions.
 
                         guid = operation.path.removeprefix("/")
                         stmt = upsert_permission_stmt(
@@ -114,7 +113,7 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
     except web.HTTPException as e:
         logging.exception("handle_internal_permissions: web.HTTPException")
         raise e
-    except Exception as e:
+    except Exception:
         logging.exception("handle_internal_permissions: Exception")
         raise web.HTTPInternalServerError(
             body=json.dumps({"error": "Internal Server Error"}),

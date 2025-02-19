@@ -1,0 +1,12 @@
+[flake8]
+extend-ignore = E203
+exclude =
+    .git,
+    .venv,
+    .pdm-build,
+    .pytest_cache,
+    __pycache__,
+    alembic,
+    dist
+max-complexity = 20
+max-line-length = 120

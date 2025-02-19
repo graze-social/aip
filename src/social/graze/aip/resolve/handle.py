@@ -38,7 +38,7 @@ async def resolve_handle_dns(handle: str) -> Optional[str]:
     resolver = DNSResolver()
     try:
         results = await resolver.query(f"_atproto.{handle}", "TXT")
-    except:
+    except Exception:
         return None
     first_result = next(iter(results or []), None)
     if first_result is not None:

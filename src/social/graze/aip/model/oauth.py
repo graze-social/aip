@@ -4,7 +4,7 @@ from sqlalchemy import Integer, String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSON, insert
 
-from social.graze.aip.model.base import Base, str512, guidpk
+from social.graze.aip.model.base import Base, str512
 
 
 class OAuthRequest(Base):

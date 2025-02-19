@@ -262,11 +262,6 @@ class EndOfLineChainMiddleware:
         self._logger = logger
 
     async def handle(self, request: ChainRequest) -> NextChainResponseCallbackType:
-
-        self._logger.debug(
-            f"Making request: {request.method} {request.url} {request.headers} {request.kwargs}"
-        )
-
         response: ClientResponse = await self._request_func(
             request.method.lower(),
             request.url,
@@ -308,10 +303,6 @@ class ChainMiddlewareContext:
         chain_request = self._chain_request
 
         while True:
-            self._logger.debug(
-                f"============================== Attempt {current_attempt+1} out of {self._attempt_max} =============================="
-            )
-
             current_attempt += 1
 
             if current_attempt > self._attempt_max:

@@ -10,7 +10,6 @@ from jwcrypto import jwt
 from pydantic import BaseModel, ConfigDict
 import redis.asyncio as redis
 from sqlalchemy import select
-import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
 )
@@ -57,12 +56,13 @@ async def auth_session_helper(
 ) -> Optional[OAuthSession]:
     try:
         async with database_session.begin():
-            is_self = auth_token.subject == auth_token.context_subject
+            # is_self = auth_token.subject == auth_token.context_subject
 
             # TODO: Make these redis calls whole-object caches of the auth session. The issuer, DPoP key, etc. is
             # needed, so just caching the access token isn't enough to practically use it as-is.
 
-            # # 1. Get an app-password session from redis if it exists. This is a cheap operation, so get it out of the way up front.
+            # # 1. Get an app-password session from redis if it exists. This is a cheap operation, so get it out of
+            # #    the way up front.
             # app_password_key = f"auth_session:app-password:{auth_token.context_guid}"
             # cached_app_password_value: bytes = await redis_session.get(app_password_key)
             # if cached_app_password_value is not None:
@@ -145,7 +145,7 @@ async def auth_token_helper(
         if auth_token_session_group is None:
             raise ValueError("auth_token invalid: grp missing")
 
-    except Exception as e:
+    except Exception:
         logging.exception("auth_token_helper: exception")
         raise AuthHelperException()
 
@@ -179,7 +179,8 @@ async def auth_token_helper(
                 "X-Repository", oauth_session_handle.guid
             )
 
-            # If the subject of the request is the same as the subject of the auth token, then we have everything we need and can return a full formed AuthToken.
+            # If the subject of the request is the same as the subject of the auth token, then we have everything we
+            # need and can return a full formed AuthToken.
             if x_repository == oauth_session_handle.guid:
                 x_pds: str = request.headers.getone("X-Pds", oauth_session_handle.pds)
                 return AuthToken(
@@ -206,7 +207,8 @@ async def auth_token_helper(
                 await database_session.scalars(permission_stmt)
             ).first()
 
-            # If no permission is found, then the oauth session handle does not have permission to make calls on behalf of that guid.
+            # If no permission is found, then the oauth session handle does not have permission to make calls on behalf
+            # of that guid.
             if permission is None:
                 raise Exception("policy violation: access denied")
 
@@ -231,6 +233,6 @@ async def auth_token_helper(
                 context_subject=subject_handle.did,
                 context_pds=x_pds,
             )
-    except Exception as e:
+    except Exception:
         logging.exception("auth_token_helper: exception")
         raise AuthHelperException()

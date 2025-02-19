@@ -10,9 +10,7 @@ from aiohttp import web
 import aiohttp_jinja2
 from jwcrypto import jwt
 from pydantic import BaseModel
-import redis.asyncio as redis
-from sqlalchemy import delete, select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import select
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,

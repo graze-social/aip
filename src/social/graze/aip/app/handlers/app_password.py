@@ -4,7 +4,6 @@ import logging
 from typing import Optional
 from aiohttp import web
 from pydantic import BaseModel, ValidationError, field_validator
-import redis.asyncio as redis
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 
@@ -105,7 +104,7 @@ async def handle_internal_app_password(request: web.Request) -> web.Response:
     except web.HTTPException as e:
         logging.exception("handle_internal_permissions: web.HTTPException")
         raise e
-    except Exception as e:
+    except Exception:
         logging.exception("handle_internal_permissions: Exception")
         raise web.HTTPInternalServerError(
             body=json.dumps({"error": "Internal Server Error"}),

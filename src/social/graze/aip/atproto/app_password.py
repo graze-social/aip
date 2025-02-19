@@ -55,10 +55,15 @@ async def populate_session(
 
             start_over = False
             access_token: str | None = None
-            # TODO: Pull this from the access token JWT claims payload. Last time I looked, access tokens expire in 720 seconds (12 minutes).
+
+            # TODO: Pull this from the access token JWT claims payload. Last time I looked, access tokens expire in
+            #       720 seconds (12 minutes).
             access_token_expires_at = now + timedelta(0, 720)
+
             refresh_token: str | None = None
-            # TODO: Pull this from the refresh token JWT claims payload. Last time I looked, refresh tokens expire in 7776000 seconds (90 days).
+
+            # TODO: Pull this from the refresh token JWT claims payload. Last time I looked, refresh tokens expire in
+            #       7776000 seconds (90 days).
             refresh_token_expires_at = now + timedelta(0, 7776000)
 
             # 4. If AppPasswordSession exists: refresh it, update row, and return
