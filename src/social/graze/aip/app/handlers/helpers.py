@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import json
 import logging
 from typing import (
@@ -7,8 +8,6 @@ from typing import (
 )
 from aiohttp import web
 from jwcrypto import jwt
-from pydantic import BaseModel, ConfigDict
-import redis.asyncio as redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -17,26 +16,26 @@ from sqlalchemy.ext.asyncio import (
 from social.graze.aip.app.config import (
     SettingsAppKey,
 )
+from social.graze.aip.model.app_password import AppPasswordSession
 from social.graze.aip.model.handles import Handle
 from social.graze.aip.model.oauth import OAuthSession, Permission
 
 logger = logging.getLogger(__name__)
 
 
-class AuthToken(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    oauth_session: Optional[OAuthSession] = None
-    app_password_session: Optional[str] = None
-
+@dataclass(repr=False, eq=False)
+class AuthToken:
     guid: str
     subject: str
     handle: str
-    pds: str
 
+    context_service: str
     context_guid: str
     context_subject: str
     context_pds: str
+
+    oauth_session: Optional[OAuthSession] = None
+    app_password_session: Optional[AppPasswordSession] = None
 
 
 class EncodedException(Exception):
@@ -47,73 +46,16 @@ class AuthHelperException(EncodedException):
     CODE: Final[str] = "error-auth-5000"
 
 
-async def auth_session_helper(
-    # request: web.Request,
-    database_session: AsyncSession,
-    redis_session: redis.Redis,
-    auth_token: AuthToken,
-    attempt_refresh: bool = False,
-) -> Optional[OAuthSession]:
-    try:
-        async with database_session.begin():
-            # is_self = auth_token.subject == auth_token.context_subject
-
-            # TODO: Make these redis calls whole-object caches of the auth session. The issuer, DPoP key, etc. is
-            # needed, so just caching the access token isn't enough to practically use it as-is.
-
-            # # 1. Get an app-password session from redis if it exists. This is a cheap operation, so get it out of
-            # #    the way up front.
-            # app_password_key = f"auth_session:app-password:{auth_token.context_guid}"
-            # cached_app_password_value: bytes = await redis_session.get(app_password_key)
-            # if cached_app_password_value is not None:
-            #     # TODO: Deccrypt the value
-            #     return cached_app_password_value.decode("utf-8")
-
-            # # 2. If is_self, then get an oauth session from redis if it exists.
-            # if is_self:
-            #     oauth_session_key = f"auth_session:oauth:{auth_token.context_guid}"
-            #     cached_oauth_session_value: bytes = await redis_session.get(
-            #         oauth_session_key
-            #     )
-            #     if cached_oauth_session_value is not None:
-            #         # TODO: Deccrypt the value
-            #         return cached_oauth_session_value.decode("utf-8")
-
-            # if attempt_refresh is False:
-            #     return None
-
-            # TODO: Make the above redis calls a single mget operation.
-
-            # 3. If not is_self, then get the app-password from the DB, create a session, cache it, and return it.
-            # TODO: Implement this.
-
-            # 4. If not is_self, return an error because a valid app-password session is required.
-            # if not is_self:
-            #     return None
-
-            # 5. If is_self, then get an oauth session from the database if it exists.
-            # TODO: Implement this.
-
-            oauth_session_stmt = select(OAuthSession).where(
-                OAuthSession.guid == auth_token.context_guid
-            )
-            oauth_session: Optional[OAuthSession] = (
-                await database_session.scalars(oauth_session_stmt)
-            ).first()
-            await database_session.commit()
-
-            return oauth_session
-    except AuthHelperException:
-        logging.exception("auth_session_helper: AuthHelperException")
-        return None
-    except Exception:
-        logging.exception("auth_session_helper: Exception")
-        return None
-
-
 async def auth_token_helper(
     request: web.Request, database_session: AsyncSession, allow_permissions: bool = True
 ) -> Optional[AuthToken]:
+    """
+    This helper enforces the following policies:
+    * All API calls must be authenticated and require an `Authorization` header with a bearer token.
+    * The `X-Subject` header can optionally specify the subject of the request. The value must be a known guid.
+    * The `X-Service` header can optionally specify the hostname of the service providing the invoked XRPC method.
+    """
+
     authorizations: Optional[str] = request.headers.getone("Authorization", None)
     if (
         authorizations is None
@@ -175,23 +117,34 @@ async def auth_token_helper(
             ).one()
 
             # 3. Get the X-Repository header, defaulting to the current oauth session handle's guid.
-            x_repository: str = request.headers.getone(
-                "X-Repository", oauth_session_handle.guid
+            x_subject: str = request.headers.getone(
+                "X-Subject", oauth_session_handle.guid
             )
 
             # If the subject of the request is the same as the subject of the auth token, then we have everything we
             # need and can return a full formed AuthToken.
-            if x_repository == oauth_session_handle.guid:
-                x_pds: str = request.headers.getone("X-Pds", oauth_session_handle.pds)
+            if x_subject == oauth_session_handle.guid:
+                x_service: str = request.headers.getone(
+                    "X-Service", oauth_session_handle.pds
+                )
+
+                app_password_session_stmt = select(AppPasswordSession).where(
+                    AppPasswordSession.guid == oauth_session.guid,
+                )
+                app_password_session: Optional[AppPasswordSession] = (
+                    await database_session.scalars(app_password_session_stmt)
+                ).first()
+
                 return AuthToken(
                     oauth_session=oauth_session,
+                    app_password_session=app_password_session,
                     guid=oauth_session_handle.guid,
                     subject=oauth_session_handle.did,
                     handle=oauth_session_handle.handle,
-                    pds=oauth_session_handle.pds,
+                    context_service=x_service,
                     context_guid=oauth_session_handle.guid,
                     context_subject=oauth_session_handle.did,
-                    context_pds=x_pds,
+                    context_pds=oauth_session_handle.pds,
                 )
 
             if allow_permissions is False:
@@ -200,7 +153,7 @@ async def auth_token_helper(
             # 4. Get the permission record for the oauth session handle to the x_repository guid.
             permission_stmt = select(Permission).where(
                 Permission.guid == oauth_session_handle.guid,
-                Permission.target_guid == x_repository,
+                Permission.target_guid == x_subject,
                 Permission.permission > 0,
             )
             permission: Optional[Permission] = (
@@ -219,19 +172,35 @@ async def auth_token_helper(
                 await database_session.scalars(subject_handle_stmt)
             ).one()
 
-            x_pds: str = request.headers.getone("X-Pds", subject_handle.pds)
+            app_password_session_stmt = select(AppPasswordSession).where(
+                AppPasswordSession.guid == subject_handle.guid,
+            )
+            app_password_session: Optional[AppPasswordSession] = (
+                await database_session.scalars(app_password_session_stmt)
+            ).first()
+
+            # TODO: Select a "valid" oauth session.
+            target_oauth_session_stmt = select(OAuthSession).where(
+                OAuthSession.guid == subject_handle.guid,
+            )
+            target_oauth_session: Optional[OAuthSession] = (
+                await database_session.scalars(target_oauth_session_stmt)
+            ).first()
+
+            x_service: str = request.headers.getone("X-Service", subject_handle.pds)
 
             await database_session.commit()
 
             return AuthToken(
-                oauth_session=oauth_session,
+                oauth_session=target_oauth_session,
+                app_password_session=app_password_session,
                 guid=oauth_session_handle.guid,
                 subject=oauth_session_handle.did,
                 handle=oauth_session_handle.handle,
-                pds=oauth_session_handle.pds,
+                context_service=x_service,
                 context_guid=subject_handle.guid,
                 context_subject=subject_handle.did,
-                context_pds=x_pds,
+                context_pds=subject_handle.pds,
             )
     except Exception:
         logging.exception("auth_token_helper: exception")

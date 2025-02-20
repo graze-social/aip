@@ -1,6 +1,7 @@
 import asyncio
 from typing import Annotated, Final, List
 import logging
+from aio_statsd import TelegrafStatsdClient
 from jwcrypto import jwk
 from pydantic import (
     field_validator,
@@ -55,6 +56,10 @@ class Settings(BaseSettings):
 
     refresh_queue_app_password: str = "refresh_queue:app_password"
 
+    statsd_host: str = "100.110.91.36"
+    statsd_port: int = 8125
+    statsd_prefix: str = "aip"
+
     @field_validator("json_web_keys", mode="before")
     @classmethod
     def decode_json_web_keys(cls, v: str) -> jwk.JWKSet:
@@ -87,3 +92,6 @@ AppPasswordRefreshTaskAppKey: Final = web.AppKey(
     "app_password_refresh_task", asyncio.Task[None]
 )
 TickHealthTaskAppKey: Final = web.AppKey("tick_health_task", asyncio.Task[None])
+TelegrafStatsdClientAppKey: Final = web.AppKey(
+    "telegraf_statsd_client", TelegrafStatsdClient
+)

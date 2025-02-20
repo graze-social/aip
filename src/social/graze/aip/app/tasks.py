@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timezone
 import logging
+from time import time
 from typing import List, NoReturn, Tuple
 from aiohttp import web
 from sqlalchemy import select
@@ -13,6 +14,7 @@ from social.graze.aip.app.config import (
     RedisClientAppKey,
     SessionAppKey,
     SettingsAppKey,
+    TelegrafStatsdClientAppKey,
 )
 from social.graze.aip.atproto.app_password import populate_session
 from social.graze.aip.atproto.oauth import oauth_refresh
@@ -25,6 +27,9 @@ async def tick_health_task(app: web.Application) -> NoReturn:
     """
     Tick the health gauge every 30 seconds, reducing the health score by 1 each time.
     """
+
+    logger.info("Starting health gauge task")
+
     health_gauge = app[HealthGaugeAppKey]
     while True:
         await health_gauge.tick()
@@ -75,11 +80,14 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
        the main queue.
     """
 
+    logger.info("Starting oauth refresh task")
+
     settings = app[SettingsAppKey]
     database_session_maker = app[DatabaseSessionMakerAppKey]
     http_session = app[SessionAppKey]
 
     redis_session = app[RedisClientAppKey]
+    statsd_client = app[TelegrafStatsdClientAppKey]
 
     while True:
 
@@ -97,8 +105,17 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
         worker_queue_count: int = await redis_session.zcount(
             worker_queue, 0, int(now.timestamp())
         )
+        statsd_client.gauge(
+            "aip.task.oauth_refresh.worker_queue_count",
+            worker_queue_count,
+            tag_dict={"worker_id": settings.worker_id},
+        )
+
         global_queue_count: int = await redis_session.zcount(
             OAUTH_REFRESH_QUEUE, 0, int(now.timestamp())
+        )
+        statsd_client.gauge(
+            "aip.task.oauth_refresh.global_queue_count", global_queue_count
         )
 
         if worker_queue_count == 0 and global_queue_count > 0:
@@ -120,7 +137,12 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
                     redis_pipe.zdiffstore(
                         OAUTH_REFRESH_QUEUE, [OAUTH_REFRESH_QUEUE, worker_queue]
                     )
-                    await redis_pipe.execute()
+                    (zrangestore_res, zdiffstore_res) = await redis_pipe.execute()
+                    statsd_client.increment(
+                        "aip.task.oauth_refresh.work_queued",
+                        zrangestore_res,
+                        tag_dict={"worker_id": settings.worker_id},
+                    )
                 except Exception:
                     logging.exception("error populating worker queue")
 
@@ -137,6 +159,8 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
                         deadline,
                     )
 
+                    start_time = time()
+
                     try:
                         async with database_session.begin():
                             oauth_session_stmt = select(OAuthSession).where(
@@ -151,26 +175,44 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
                         await oauth_refresh(
                             settings,
                             http_session,
+                            statsd_client,
                             database_session,
                             redis_session,
                             oauth_session,
                         )
 
-                    except Exception:
+                    except Exception as e:
                         logging.exception(
                             "error processing session group %s", session_group
                         )
+                        # TODO: Don't actually tag session_group because cardinality will be very high.
+                        statsd_client.increment(
+                            "aip.task.oauth_refresh.exception",
+                            1,
+                            tag_dict={
+                                "exception": type(e).__name__,
+                                "session_group": session_group,
+                            },
+                        )
 
                     finally:
+                        statsd_client.timer(
+                            "aip.task.oauth_refresh.time", time() - start_time
+                        )
+                        # TODO: Probably don't need this because it is the same as `COUNT(aip.task.oauth_refresh.time)`
+                        statsd_client.increment("aip.task.oauth_refresh.count", 1)
                         await redis_session.zrem(worker_queue, session_group)
 
 
 async def app_password_refresh_task(app: web.Application) -> NoReturn:
+
+    logger.info("Starting app password refresh task")
+
     settings = app[SettingsAppKey]
     database_session_maker = app[DatabaseSessionMakerAppKey]
     http_session = app[SessionAppKey]
-
     redis_session = app[RedisClientAppKey]
+    statsd_client = app[TelegrafStatsdClientAppKey]
 
     while True:
         try:
@@ -188,8 +230,17 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
             worker_queue_count: int = await redis_session.zcount(
                 worker_queue, 0, int(now.timestamp())
             )
+            statsd_client.gauge(
+                "aip.task.app_password_refresh.worker_queue_count",
+                worker_queue_count,
+                tag_dict={"worker_id": settings.worker_id},
+            )
+
             global_queue_count: int = await redis_session.zcount(
                 APP_PASSWORD_REFRESH_QUEUE, 0, int(now.timestamp())
+            )
+            statsd_client.gauge(
+                "aip.task.app_password_refresh.global_queue_count", global_queue_count
             )
 
             if worker_queue_count == 0 and global_queue_count > 0:
@@ -213,7 +264,12 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
                         [APP_PASSWORD_REFRESH_QUEUE, worker_queue],
                     )
 
-                    await redis_pipe.execute()
+                    (zrangestore_res, zdiffstore_res) = await redis_pipe.execute()
+                    statsd_client.increment(
+                        "aip.task.app_password_refresh.work_queued",
+                        zrangestore_res,
+                        tag_dict={"worker_id": settings.worker_id},
+                    )
 
             tasks: List[Tuple[str, float]] = await redis_session.zrange(
                 worker_queue, 0, int(now.timestamp()), byscore=True, withscores=True
@@ -227,6 +283,7 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
                     deadline,
                 )
 
+                start_time = time()
                 try:
                     await populate_session(
                         http_session,
@@ -235,10 +292,25 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
                         handle_guid,
                     )
 
-                except Exception:
+                except Exception as e:
                     logging.exception("error processing guid %s", handle_guid)
+                    # TODO: Don't actually tag session_group because cardinality will be very high.
+                    statsd_client.increment(
+                        "aip.task.app_password_refresh.exception",
+                        1,
+                        tag_dict={
+                            "exception": type(e).__name__,
+                            "guid": handle_guid,
+                        },
+                    )
 
                 finally:
+                    statsd_client.timer(
+                        "aip.task.app_password_refresh.time", time() - start_time
+                    )
+                    # TODO: Probably don't need this because it is the same as
+                    #       `COUNT(aip.task.app_password_refresh.time)`
+                    statsd_client.increment("aip.task.app_password_refresh.count", 1)
                     await redis_session.zrem(worker_queue, handle_guid)
 
         except Exception:

@@ -6,11 +6,10 @@ from aiohttp import web
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
     HealthGaugeAppKey,
-    RedisClientAppKey,
     SessionAppKey,
     SettingsAppKey,
 )
-from social.graze.aip.app.handlers.helpers import auth_session_helper, auth_token_helper
+from social.graze.aip.app.handlers.helpers import auth_token_helper
 from social.graze.aip.model.handles import upsert_handle_stmt
 from social.graze.aip.resolve.handle import resolve_subject
 
@@ -19,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 async def handle_internal_me(request: web.Request):
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
-    redis_session = request.app[RedisClientAppKey]
 
     try:
         async with (database_session_maker() as database_session,):
@@ -31,19 +29,18 @@ async def handle_internal_me(request: web.Request):
                     body=json.dumps({"error": "Not Authorized"}),
                     content_type="application/json",
                 )
-            auth_session = await auth_session_helper(
-                database_session, redis_session, auth_token, attempt_refresh=False
-            )
 
             # TODO: Include has_app_password boolean in the response.
 
             return web.json_response(
                 {
                     "handle": auth_token.handle,
-                    "pds": auth_token.pds,
+                    "pds": auth_token.context_service,
                     "did": auth_token.subject,
                     "guid": auth_token.guid,
-                    "session_valid": auth_session is not None,
+                    "oauth_session_valid": auth_token.oauth_session is not None,
+                    "app_password_session_valid": auth_token.app_password_session
+                    is not None,
                 }
             )
     except web.HTTPException as e:

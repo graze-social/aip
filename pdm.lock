@@ -5,10 +5,21 @@
 groups = ["default", "dev"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:be24967e163a242315dcf4cd63d06cfc034d199a8318c337724cc11a6c8cab7c"
+content_hash = "sha256:a9635cfe095c460d5866727574a5587207e49acb7fbeb364550053bcee7e42a5"
 
 [[metadata.targets]]
 requires_python = ">=3.13"
+
+[[package]]
+name = "aio-statsd"
+version = "0.2.9"
+requires_python = "<4.0,>=3.6"
+summary = "an asyncio-based client for send metric to StatsD, Graphite.carbon, TelegrafStatsD and DogStatsD."
+groups = ["default"]
+files = [
+    {file = "aio_statsd-0.2.9-py3-none-any.whl", hash = "sha256:d3358fe957ea1b219b55aecd90317b84672c22d2a54590ae4b94d2a41400fb02"},
+    {file = "aio_statsd-0.2.9.tar.gz", hash = "sha256:349ea88dcda30a445e4174528b98074a3061ba057543a5ac0212a3aca6d63cc4"},
+]
 
 [[package]]
 name = "aiodns"

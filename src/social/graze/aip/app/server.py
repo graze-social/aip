@@ -2,9 +2,11 @@ import asyncio
 import contextlib
 import os
 import logging
+from time import time
 from typing import (
     Optional,
 )
+from aio_statsd import TelegrafStatsdClient
 import jinja2
 from aiohttp import web
 import aiohttp_jinja2
@@ -27,6 +29,7 @@ from social.graze.aip.app.config import (
     SettingsAppKey,
     AppPasswordRefreshTaskAppKey,
     OAuthRefreshTaskAppKey,
+    TelegrafStatsdClientAppKey,
     TickHealthTaskAppKey,
 )
 from social.graze.aip.app.handlers.app_password import handle_internal_app_password
@@ -61,7 +64,8 @@ async def handle_index(request: web.Request):
     return await aiohttp_jinja2.render_template_async("index.html", request, context={})
 
 
-async def startup(app):
+async def background_tasks(app):
+    logger.info("Starting up")
     settings: Settings = app[SettingsAppKey]
 
     engine = create_async_engine(str(settings.pg_dsn))
@@ -100,8 +104,14 @@ async def startup(app):
         connection_pool=redis.ConnectionPool.from_url(str(settings.redis_dsn))
     )
 
+    statsd_client = TelegrafStatsdClient(
+        host=settings.statsd_host, port=settings.statsd_port
+    )
+    await statsd_client.connect()
+    app[TelegrafStatsdClientAppKey] = statsd_client
 
-async def background_tasks(app):
+    logger.info("Startup complete")
+
     app[TickHealthTaskAppKey] = asyncio.create_task(tick_health_task(app))
     app[OAuthRefreshTaskAppKey] = asyncio.create_task(oauth_refresh_task(app))
     app[AppPasswordRefreshTaskAppKey] = asyncio.create_task(
@@ -125,11 +135,58 @@ async def background_tasks(app):
     with contextlib.suppress(asyncio.exceptions.CancelledError):
         await app[AppPasswordRefreshTaskAppKey]
 
+    await app[DatabaseAppKey].dispose()
+    await app[SessionAppKey].close()
+    await app[RedisPoolAppKey].aclose()
+    await app[TelegrafStatsdClientAppKey].close()
+
+
+@web.middleware
+async def statsd_middleware(request: web.Request, handler):
+    statsd_client = request.app[TelegrafStatsdClientAppKey]
+    request_method: str = request.method
+    request_path = request.path
+
+    start_time: float = time()
+    response_status_code = 0
+
+    try:
+        response = await handler(request)
+        response_status_code = response.status
+        return response
+    except Exception as e:
+        statsd_client.increment(
+            "aip.server.request.exception",
+            1,
+            tag_dict={
+                "exception": type(e).__name__,
+                "path": request_path,
+                "method": request_method,
+            },
+        )
+        raise e
+    finally:
+        statsd_client.timer(
+            "aip.server.request.time",
+            time() - start_time,
+            tag_dict={"path": request_path, "method": request_method},
+        )
+        statsd_client.increment(
+            "aip.server.request.count",
+            1,
+            tag_dict={
+                "path": request_path,
+                "method": request_method,
+                "status": response_status_code,
+            },
+        )
+
 
 async def shutdown(app):
     await app[DatabaseAppKey].dispose()
     await app[SessionAppKey].close()
     await app[RedisPoolAppKey].aclose()
+    await app[TelegrafStatsdClientAppKey].close()
 
 
 async def start_web_server(settings: Optional[Settings] = None):
@@ -137,7 +194,7 @@ async def start_web_server(settings: Optional[Settings] = None):
     if settings is None:
         settings = Settings()  # type: ignore
 
-    app = web.Application()
+    app = web.Application(middlewares=[statsd_middleware])
 
     app[SettingsAppKey] = settings
     app[HealthGaugeAppKey] = HealthGauge()
@@ -189,8 +246,8 @@ async def start_web_server(settings: Optional[Settings] = None):
 
     app["static_root_url"] = "/static"
 
-    app.on_startup.append(startup)
-    app.on_cleanup.append(shutdown)
+    # app.on_startup.append(startup)
+    # app.on_cleanup.append(shutdown)
     app.cleanup_ctx.append(background_tasks)
 
     return app

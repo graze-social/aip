@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 import hashlib
 import secrets
 from typing import Optional, Tuple
+from aio_statsd import TelegrafStatsdClient
 from aiohttp import ClientSession, FormData
 from jwcrypto import jwt, jwk
 from ulid import ULID
@@ -18,6 +19,7 @@ from social.graze.aip.atproto.chain import (
     ChainMiddlewareClient,
     GenerateClaimAssertionMiddleware,
     GenerateDpopMiddleware,
+    StatsdMiddleware,
 )
 from social.graze.aip.atproto.pds import (
     oauth_authorization_server,
@@ -39,6 +41,7 @@ def generate_pkce_verifier() -> Tuple[str, str]:
 
 async def oauth_init(
     settings: Settings,
+    statsd_client: TelegrafStatsdClient,
     http_session: ClientSession,
     database_session_maker: async_sessionmaker[AsyncSession],
     subject: str,
@@ -136,6 +139,7 @@ async def oauth_init(
     )
 
     chain_middleware = [
+        StatsdMiddleware(statsd_client),
         GenerateDpopMiddleware(
             dpop_key,
             dpop_assertation_header,
@@ -210,6 +214,7 @@ async def oauth_init(
 async def oauth_complete(
     settings: Settings,
     http_session: ClientSession,
+    statsd_client: TelegrafStatsdClient,
     database_session_maker: async_sessionmaker[AsyncSession],
     redis_session: redis.Redis,
     state: Optional[str],
@@ -321,6 +326,7 @@ async def oauth_complete(
         )
 
         chain_middleware = [
+            StatsdMiddleware(statsd_client),
             GenerateDpopMiddleware(
                 dpop_key,
                 dpop_assertation_header,
@@ -411,6 +417,7 @@ async def oauth_complete(
 async def oauth_refresh(
     settings: Settings,
     http_session: ClientSession,
+    statsd_client: TelegrafStatsdClient,
     database_session: AsyncSession,
     redis_session: redis.Redis,
     current_oauth_session: OAuthSession,
@@ -502,6 +509,7 @@ async def oauth_refresh(
     )
 
     chain_middleware = [
+        StatsdMiddleware(statsd_client),
         GenerateDpopMiddleware(
             dpop_key,
             dpop_assertation_header,

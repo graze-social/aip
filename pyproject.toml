@@ -37,6 +37,7 @@ dependencies = [
     "python-ulid>=3.0.0",
     "cryptography>=44.0.1",
     "redis>=5.2.1",
+    "aio-statsd>=0.2.9",
 ]
 readme = "README.md"
 

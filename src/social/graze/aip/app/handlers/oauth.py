@@ -17,6 +17,7 @@ from social.graze.aip.app.config import (
     RedisClientAppKey,
     SessionAppKey,
     SettingsAppKey,
+    TelegrafStatsdClientAppKey,
 )
 from social.graze.aip.atproto.oauth import oauth_complete, oauth_init, oauth_refresh
 from social.graze.aip.model.handles import Handle
@@ -64,10 +65,11 @@ async def handle_atproto_login_submit(request: web.Request):
     settings = request.app[SettingsAppKey]
     http_session = request.app[SessionAppKey]
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
+    statsd_client = request.app[TelegrafStatsdClientAppKey]
 
     try:
         redirect_destination = await oauth_init(
-            settings, http_session, database_session_maker, subject
+            settings, statsd_client, http_session, database_session_maker, subject
         )
     except Exception as e:
         # TODO: Return a localized error message.
@@ -89,11 +91,13 @@ async def handle_atproto_callback(request: web.Request):
     http_session = request.app[SessionAppKey]
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     redis_session = request.app[RedisClientAppKey]
+    statsd_client = request.app[TelegrafStatsdClientAppKey]
 
     try:
         serialized_auth_token = await oauth_complete(
             settings,
             http_session,
+            statsd_client,
             database_session_maker,
             redis_session,
             state,
@@ -113,6 +117,7 @@ async def handle_atproto_callback(request: web.Request):
 async def handle_atproto_refresh(request: web.Request):
     settings = request.app[SettingsAppKey]
     http_session = request.app[SessionAppKey]
+    statsd_client = request.app[TelegrafStatsdClientAppKey]
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     redis_session = request.app[RedisClientAppKey]
 
@@ -143,6 +148,7 @@ async def handle_atproto_refresh(request: web.Request):
         await oauth_refresh(
             settings,
             http_session,
+            statsd_client,
             database_session,
             redis_session,
             oauth_session,

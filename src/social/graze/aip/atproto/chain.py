@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import json
+import re
 import secrets
+from time import time
 from types import TracebackType
 from typing import (
     Any,
@@ -16,6 +18,7 @@ from typing import (
     Dict,
 )
 import logging
+from aio_statsd import TelegrafStatsdClient
 from aiohttp import web, ClientResponse, ClientSession, FormData, hdrs
 from aiohttp.typedefs import StrOrURL
 from multidict import CIMultiDictProxy
@@ -152,6 +155,57 @@ class RequestMiddlewareBase(ABC):
             return await self.handle(next, request)
 
         return next_invoke
+
+
+class StatsdMiddleware(RequestMiddlewareBase):
+    def __init__(
+        self,
+        statsd_client: TelegrafStatsdClient,
+    ) -> None:
+        super().__init__()
+        self._statsd_client = statsd_client
+        self._regex = re.compile(r"\W+")
+
+    async def handle(
+        self, next: NextChainCallbackType, request: ChainRequest
+    ) -> NextChainResponseCallbackType:
+        start_time = time()
+        try:
+            return await next(request)
+        except Exception as e:
+            raise e
+        finally:
+            # TODO: Don't record URL. Cardinality is too high here and will cause issues.
+            self._statsd_client.timer(
+                "aip.client.request.time",
+                time() - start_time,
+                tag_dict={
+                    "url": self._regex.sub("", str(request.url)),
+                    "method": request.method.lower(),
+                },
+            )
+            self._statsd_client.increment(
+                "aip.client.request.count",
+                1,
+                tag_dict={
+                    "url": self._regex.sub("", str(request.url)),
+                    "method": request.method.lower(),
+                },
+            )
+
+
+class DebugMiddleware(RequestMiddlewareBase):
+    async def handle(
+        self, next: NextChainCallbackType, request: ChainRequest
+    ) -> NextChainResponseCallbackType:
+        logger.debug(
+            f"Request: {request.method} {request.url} {request.headers} {request.kwargs}"
+        )
+        response = await next(request)
+        logger.debug(
+            f"Response: {response[1].status} {response[1].headers} {response[1].body}"
+        )
+        return response
 
 
 class GenerateClaimAssertionMiddleware(RequestMiddlewareBase):
@@ -523,4 +577,4 @@ class ChainMiddlewareClient:
             return
 
         if not self._closed:
-            self._logger.warning("Aiohttp retry client was not closed")
+            self._logger.warning("Aiohttp chain client was not closed")
