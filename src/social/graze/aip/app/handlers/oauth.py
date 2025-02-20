@@ -205,6 +205,7 @@ async def handle_atproto_debug(request: web.Request):
             "auth_token": {"claims": auth_token_claims, "header": auth_token_header},
             "oauth_session": oauth_session,
             "handle": handle,
+            "serialized_auth_token": serialized_auth_token,
         },
     )
 

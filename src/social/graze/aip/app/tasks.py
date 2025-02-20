@@ -115,7 +115,9 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
             OAUTH_REFRESH_QUEUE, 0, int(now.timestamp())
         )
         statsd_client.gauge(
-            "aip.task.oauth_refresh.global_queue_count", global_queue_count
+            "aip.task.oauth_refresh.global_queue_count",
+            global_queue_count,
+            tag_dict={"worker_id": settings.worker_id},
         )
 
         if worker_queue_count == 0 and global_queue_count > 0:
@@ -192,15 +194,22 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
                             tag_dict={
                                 "exception": type(e).__name__,
                                 "session_group": session_group,
+                                "worker_id": settings.worker_id,
                             },
                         )
 
                     finally:
                         statsd_client.timer(
-                            "aip.task.oauth_refresh.time", time() - start_time
+                            "aip.task.oauth_refresh.time",
+                            time() - start_time,
+                            tag_dict={"worker_id": settings.worker_id},
                         )
                         # TODO: Probably don't need this because it is the same as `COUNT(aip.task.oauth_refresh.time)`
-                        statsd_client.increment("aip.task.oauth_refresh.count", 1)
+                        statsd_client.increment(
+                            "aip.task.oauth_refresh.count",
+                            1,
+                            tag_dict={"worker_id": settings.worker_id},
+                        )
                         await redis_session.zrem(worker_queue, session_group)
 
 
@@ -240,7 +249,9 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
                 APP_PASSWORD_REFRESH_QUEUE, 0, int(now.timestamp())
             )
             statsd_client.gauge(
-                "aip.task.app_password_refresh.global_queue_count", global_queue_count
+                "aip.task.app_password_refresh.global_queue_count",
+                global_queue_count,
+                tag_dict={"worker_id": settings.worker_id},
             )
 
             if worker_queue_count == 0 and global_queue_count > 0:
@@ -301,16 +312,23 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
                         tag_dict={
                             "exception": type(e).__name__,
                             "guid": handle_guid,
+                            "worker": settings.worker_id,
                         },
                     )
 
                 finally:
                     statsd_client.timer(
-                        "aip.task.app_password_refresh.time", time() - start_time
+                        "aip.task.app_password_refresh.time",
+                        time() - start_time,
+                        tag_dict={"worker": settings.worker_id},
                     )
                     # TODO: Probably don't need this because it is the same as
                     #       `COUNT(aip.task.app_password_refresh.time)`
-                    statsd_client.increment("aip.task.app_password_refresh.count", 1)
+                    statsd_client.increment(
+                        "aip.task.app_password_refresh.count",
+                        1,
+                        tag_dict={"worker": settings.worker_id},
+                    )
                     await redis_session.zrem(worker_queue, handle_guid)
 
         except Exception:

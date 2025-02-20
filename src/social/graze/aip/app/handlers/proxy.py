@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
-import json
 import logging
+from time import time
 from typing import (
     List,
     Optional,
@@ -32,32 +32,36 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_xrpc_proxy(request: web.Request) -> web.Response:
+    statsd_client = request.app[TelegrafStatsdClientAppKey]
+
     # TODO: Validate this against an allowlist.
     xrpc_method: Optional[str] = request.match_info.get("method", None)
     if xrpc_method is None:
-        raise web.HTTPBadRequest(
-            body=json.dumps({"error": "Invalid XRPC method"}),
-            content_type="application/json",
-        )
+        statsd_client.increment("aip.proxy.invalid_method", 1)
+        return web.json_response(status=400, data={"error": "Invalid XRPC method"})
 
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
 
     try:
         async with (database_session_maker() as database_session,):
             # TODO: Allow optional auth here.
-            auth_token = await auth_token_helper(request, database_session)
+            auth_token = await auth_token_helper(
+                database_session, statsd_client, request
+            )
             if auth_token is None:
-                raise web.HTTPUnauthorized(
-                    body=json.dumps({"error": "Not Authorized"}),
-                    content_type="application/json",
+                statsd_client.increment(
+                    "aip.proxy.unauthorized", 1, tag_dict={"method": xrpc_method}
                 )
+                return web.json_response(status=401, data={"error": "Not Authorized"})
     except web.HTTPException as e:
         raise e
-    except Exception:
-        raise web.HTTPInternalServerError(
-            body=json.dumps({"error": "Internal Server Error"}),
-            content_type="application/json",
+    except Exception as e:
+        statsd_client.increment(
+            "aip.proxy.exception",
+            1,
+            tag_dict={"exception": type(e).__name__, "method": xrpc_method},
         )
+        return web.json_response(status=500, data={"error": "Internal Server Error"})
 
     now = datetime.now(timezone.utc)
 
@@ -75,8 +79,6 @@ async def handle_xrpc_proxy(request: web.Request) -> web.Response:
     headers = {
         "Content-Type": request.headers.get("Content-Type", "application/json"),
     }
-
-    statsd_client = request.app[TelegrafStatsdClientAppKey]
 
     chain_middleware: List[RequestMiddlewareBase] = [StatsdMiddleware(statsd_client)]
 
@@ -135,13 +137,34 @@ async def handle_xrpc_proxy(request: web.Request) -> web.Response:
     chain_client = ChainMiddlewareClient(
         client_session=http_session, raise_for_status=False, middleware=chain_middleware
     )
-    async with chain_client.request(
-        request.method, xrpc_url, raise_for_status=None, headers=headers, **rargs
-    ) as (
-        client_response,
-        chain_response,
+
+    start_time = time()
+    auth_method = "anonymous"
+    if auth_token.app_password_session is not None:
+        auth_method = "app-password"
+    elif (
+        auth_token.oauth_session is not None and auth_token.app_password_session is None
     ):
-        # TODO: Figure out if websockets or SSE support is needed. Gut says no.
-        # TODO: Think about using a header like `X-AIP-Error` for additional error context.
-        return chain_response.to_web_response()
-        # return web.Response(status=chain_response.status, body=chain_response.body, headers=chain_response.headers)
+        auth_method = "oauth"
+
+    try:
+        async with chain_client.request(
+            request.method, xrpc_url, raise_for_status=None, headers=headers, **rargs
+        ) as (
+            client_response,
+            chain_response,
+        ):
+            # TODO: Figure out if websockets or SSE support is needed. Gut says no.
+            # TODO: Think about using a header like `X-AIP-Error` for additional error context.
+            return chain_response.to_web_response()
+    finally:
+        statsd_client.timer(
+            "aip.proxy.request.time",
+            time() - start_time,
+            tag_dict={
+                "xrpc_service": auth_token.context_service.removeprefix("https://"),
+                "xrpc_method": xrpc_method,
+                "method": request.method.lower(),
+                "authentication": auth_method,
+            },
+        )

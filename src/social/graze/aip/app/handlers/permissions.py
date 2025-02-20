@@ -1,5 +1,4 @@
 import datetime
-import json
 import logging
 from typing import (
     Literal,
@@ -14,6 +13,7 @@ from sqlalchemy import delete, select
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
+    TelegrafStatsdClientAppKey,
 )
 from social.graze.aip.app.handlers.helpers import auth_token_helper
 from social.graze.aip.model.oauth import (
@@ -37,6 +37,7 @@ PermissionOperations = RootModel[list[PermissionOperation]]
 
 async def handle_internal_permissions(request: web.Request) -> web.Response:
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
+    statsd_client = request.app[TelegrafStatsdClientAppKey]
 
     # TODO: Support GET requests that returns paginated permission objects.
 
@@ -49,13 +50,10 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
     try:
         async with (database_session_maker() as database_session,):
             auth_token = await auth_token_helper(
-                request, database_session, allow_permissions=False
+                database_session, statsd_client, request, allow_permissions=False
             )
             if auth_token is None:
-                raise web.HTTPUnauthorized(
-                    body=json.dumps({"error": "Not Authorized"}),
-                    content_type="application/json",
-                )
+                return web.json_response(status=401, data={"error": "Not Authorized"})
 
             # TODO: Fail with error if the user does not have an app-password set.
 
@@ -65,6 +63,12 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
                 results: List[Dict[str, Any]] = []
 
                 for operation in operations.root:
+                    guid = operation.path.removeprefix("/")
+                    if guid == auth_token.guid:
+                        return web.json_response(
+                            status=400, data={"error": "Invalid permission"}
+                        )
+
                     if (
                         operation.op == "add" or operation.op == "replace"
                     ) and operation.value is not None:
@@ -72,7 +76,6 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
                         # TODO: Fail if the guid is unknown. Clients should use /internal/api/resolve on all subjects
                         #       prior to setting permissions.
 
-                        guid = operation.path.removeprefix("/")
                         stmt = upsert_permission_stmt(
                             guid=guid,
                             target_guid=auth_token.guid,
@@ -82,7 +85,6 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
                         await database_session.execute(stmt)
 
                     if operation.op == "remove":
-                        guid = operation.path.removeprefix("/")
                         stmt = delete(Permission).where(
                             Permission.guid == guid,
                             Permission.target_guid == auth_token.guid,
@@ -90,7 +92,6 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
                         await database_session.execute(stmt)
 
                     if operation.op == "test":
-                        guid = operation.path.removeprefix("/")
                         permission_stmt = select(Permission).where(
                             Permission.guid == guid,
                             Permission.target_guid == auth_token.guid,
@@ -115,7 +116,4 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
         raise e
     except Exception:
         logging.exception("handle_internal_permissions: Exception")
-        raise web.HTTPInternalServerError(
-            body=json.dumps({"error": "Internal Server Error"}),
-            content_type="application/json",
-        )
+        return web.json_response(status=500, data={"error": "Internal Server Error"})

@@ -8,6 +8,7 @@ from social.graze.aip.app.config import (
     HealthGaugeAppKey,
     SessionAppKey,
     SettingsAppKey,
+    TelegrafStatsdClientAppKey,
 )
 from social.graze.aip.app.handlers.helpers import auth_token_helper
 from social.graze.aip.model.handles import upsert_handle_stmt
@@ -18,11 +19,12 @@ logger = logging.getLogger(__name__)
 
 async def handle_internal_me(request: web.Request):
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
+    statsd_client = request.app[TelegrafStatsdClientAppKey]
 
     try:
         async with (database_session_maker() as database_session,):
             auth_token = await auth_token_helper(
-                request, database_session, allow_permissions=False
+                database_session, statsd_client, request, allow_permissions=False
             )
             if auth_token is None:
                 raise web.HTTPUnauthorized(

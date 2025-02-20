@@ -1,5 +1,4 @@
 from datetime import datetime, timezone, timedelta
-import json
 import logging
 from typing import Optional
 from aiohttp import web
@@ -11,6 +10,7 @@ from social.graze.aip.app.config import (
     APP_PASSWORD_REFRESH_QUEUE,
     DatabaseSessionMakerAppKey,
     RedisClientAppKey,
+    TelegrafStatsdClientAppKey,
 )
 from social.graze.aip.app.handlers.helpers import auth_token_helper
 from social.graze.aip.model.app_password import AppPassword
@@ -39,24 +39,22 @@ class AppPasswordOperation(BaseModel):
 async def handle_internal_app_password(request: web.Request) -> web.Response:
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     redis_session = request.app[RedisClientAppKey]
+    statsd_client = request.app[TelegrafStatsdClientAppKey]
 
     try:
         data = await request.read()
         app_password_operation = AppPasswordOperation.model_validate_json(data)
     except (OSError, ValidationError):
         # TODO: Fix the returned error message when JSON fails because of pydantic validation functions.
-        return web.Response(text="Invalid JSON", status=400)
+        return web.json_response(status=400, data={"error": "Invalid JSON"})
 
     try:
         async with (database_session_maker() as database_session,):
             auth_token = await auth_token_helper(
-                request, database_session, allow_permissions=False
+                database_session, statsd_client, request, allow_permissions=False
             )
             if auth_token is None:
-                raise web.HTTPUnauthorized(
-                    body=json.dumps({"error": "Not Authorized"}),
-                    content_type="application/json",
-                )
+                return web.json_response(status=401, data={"error": "Not Authorized"})
 
             now = datetime.now(timezone.utc)
 
@@ -106,7 +104,4 @@ async def handle_internal_app_password(request: web.Request) -> web.Response:
         raise e
     except Exception:
         logging.exception("handle_internal_permissions: Exception")
-        raise web.HTTPInternalServerError(
-            body=json.dumps({"error": "Internal Server Error"}),
-            content_type="application/json",
-        )
+        return web.json_response(status=500, data={"error": "Internal Server Error"})

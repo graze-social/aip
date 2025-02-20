@@ -105,7 +105,7 @@ async def background_tasks(app):
     )
 
     statsd_client = TelegrafStatsdClient(
-        host=settings.statsd_host, port=settings.statsd_port
+        host=settings.statsd_host, port=settings.statsd_port, debug=settings.debug
     )
     await statsd_client.connect()
     app[TelegrafStatsdClientAppKey] = statsd_client

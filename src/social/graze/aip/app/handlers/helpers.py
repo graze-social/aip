@@ -2,10 +2,10 @@ from dataclasses import dataclass
 import json
 import logging
 from typing import (
-    Final,
     Optional,
     Dict,
 )
+from aio_statsd import TelegrafStatsdClient
 from aiohttp import web
 from jwcrypto import jwt
 from sqlalchemy import select
@@ -38,16 +38,30 @@ class AuthToken:
     app_password_session: Optional[AppPasswordSession] = None
 
 
-class EncodedException(Exception):
-    pass
+class AuthenticationException(Exception):
 
+    @staticmethod
+    def jwt_subject_missing() -> "AuthenticationException":
+        return AuthenticationException("error-auth-helper-1000 JWT missing subject")
 
-class AuthHelperException(EncodedException):
-    CODE: Final[str] = "error-auth-5000"
+    @staticmethod
+    def jwt_session_group_missing() -> "AuthenticationException":
+        return AuthenticationException(
+            "error-auth-helper-1000 JWT missing session group"
+        )
+
+    @staticmethod
+    def unexpected() -> "AuthenticationException":
+        return AuthenticationException(
+            "error-auth-helper-1000 JWT missing session group"
+        )
 
 
 async def auth_token_helper(
-    request: web.Request, database_session: AsyncSession, allow_permissions: bool = True
+    database_session: AsyncSession,
+    statsd_client: TelegrafStatsdClient,
+    request: web.Request,
+    allow_permissions: bool = True,
 ) -> Optional[AuthToken]:
     """
     This helper enforces the following policies:
@@ -81,17 +95,12 @@ async def auth_token_helper(
 
         auth_token_subject: Optional[str] = auth_token_claims.get("sub", None)
         if auth_token_subject is None:
-            raise ValueError("auth_token invalid: sub missing")
+            raise AuthenticationException.jwt_subject_missing()
 
         auth_token_session_group: Optional[str] = auth_token_claims.get("grp", None)
         if auth_token_session_group is None:
-            raise ValueError("auth_token invalid: grp missing")
+            raise AuthenticationException.jwt_session_group_missing()
 
-    except Exception:
-        logging.exception("auth_token_helper: exception")
-        raise AuthHelperException()
-
-    try:
         async with database_session.begin():
 
             # 1. Get the OAuthSession from the database and validate it.
@@ -202,6 +211,13 @@ async def auth_token_helper(
                 context_subject=subject_handle.did,
                 context_pds=subject_handle.pds,
             )
-    except Exception:
-        logging.exception("auth_token_helper: exception")
-        raise AuthHelperException()
+    except AuthenticationException:
+        raise
+    except Exception as e:
+        statsd_client.increment(
+            "aip.auth.exception",
+            1,
+            tag_dict={"exception": type(e).__name__},
+        )
+        logger.exception("auth_token_helper: Exception")
+        return None

@@ -13,7 +13,8 @@
                 "DATABASE_URL": "postgres://postgres:password@postgres/aip",
                 "ENCRYPTION_KEY": "TFZTT0lOSWlTSk8xbWhJMzJYY0lBS2dQcXFQMTVjX0o4ZUlJTFNyWVpzQT0=",
                 "JSON_WEB_KEYS": "/workspace/signing_keys.json",
-                "PLC_HOSTNAME": "plc.bowfin-woodpecker.ts.net"
+                "PLC_HOSTNAME": "plc.bowfin-woodpecker.ts.net",
+                "DEBUG": "true"
             },
         }
     ]
