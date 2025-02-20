@@ -6,7 +6,7 @@ from time import time
 from typing import (
     Optional,
 )
-from aio_statsd import ProtocolFlag, TelegrafStatsdClient
+from aio_statsd import TelegrafStatsdClient
 import jinja2
 from aiohttp import web
 import aiohttp_jinja2
