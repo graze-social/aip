@@ -6,7 +6,7 @@ from time import time
 from typing import (
     Optional,
 )
-from aio_statsd import TelegrafStatsdClient
+from aio_statsd import ProtocolFlag, TelegrafStatsdClient
 import jinja2
 from aiohttp import web
 import aiohttp_jinja2
@@ -105,7 +105,7 @@ async def background_tasks(app):
     )
 
     statsd_client = TelegrafStatsdClient(
-        host=settings.statsd_host, port=settings.statsd_port, debug=settings.debug
+        host=settings.statsd_host, port=settings.statsd_port, debug=settings.debug, protocol=ProtocolFlag.tcp
     )
     await statsd_client.connect()
     app[TelegrafStatsdClientAppKey] = statsd_client

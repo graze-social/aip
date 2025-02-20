@@ -29,6 +29,12 @@ services:
       timeout: 10s
       retries: 20
 
+  telegraf:
+    image: docker.io/telegraf:latest
+    container_name: telegraf
+    volumes:
+        - ./telegraf.conf:/etc/telegraf/telegraf.conf
+
   valkey:
     image: valkey/valkey:8-alpine
 

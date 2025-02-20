@@ -56,7 +56,7 @@ class Settings(BaseSettings):
 
     refresh_queue_app_password: str = "refresh_queue:app_password"
 
-    statsd_host: str = "192.168.1.118"
+    statsd_host: str = "telegraf"
     statsd_port: int = 8125
     statsd_prefix: str = "aip"
 

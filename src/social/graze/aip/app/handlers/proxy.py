@@ -139,6 +139,7 @@ async def handle_xrpc_proxy(request: web.Request) -> web.Response:
     )
 
     start_time = time()
+    cross_subject = auth_token.guid != auth_token.context_guid
     auth_method = "anonymous"
     if auth_token.app_password_session is not None:
         auth_method = "app-password"
@@ -166,5 +167,6 @@ async def handle_xrpc_proxy(request: web.Request) -> web.Response:
                 "xrpc_method": xrpc_method,
                 "method": request.method.lower(),
                 "authentication": auth_method,
+                "cross_subject": str(cross_subject),
             },
         )
