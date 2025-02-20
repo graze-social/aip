@@ -33,6 +33,7 @@ from social.graze.aip.app.config import (
     TickHealthTaskAppKey,
 )
 from social.graze.aip.app.handlers.app_password import handle_internal_app_password
+from social.graze.aip.app.handlers.credentials import handle_internal_credentials
 from social.graze.aip.app.handlers.internal import (
     handle_internal_alive,
     handle_internal_me,
@@ -105,7 +106,7 @@ async def background_tasks(app):
     )
 
     statsd_client = TelegrafStatsdClient(
-        host=settings.statsd_host, port=settings.statsd_port, debug=settings.debug, protocol=ProtocolFlag.tcp
+        host=settings.statsd_host, port=settings.statsd_port, debug=settings.debug
     )
     await statsd_client.connect()
     app[TelegrafStatsdClientAppKey] = statsd_client
@@ -228,6 +229,7 @@ async def start_web_server(settings: Optional[Settings] = None):
             web.get("/internal/api/resolve", handle_internal_resolve),
             web.post("/internal/api/permissions", handle_internal_permissions),
             web.post("/internal/api/app_password", handle_internal_app_password),
+            web.get("/internal/api/credentials", handle_internal_credentials),
         ]
     )
 
