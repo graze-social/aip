@@ -62,16 +62,24 @@ class Settings(BaseSettings):
 
     @field_validator("json_web_keys", mode="before")
     @classmethod
-    def decode_json_web_keys(cls, v: str) -> jwk.JWKSet:
-        with open(v) as fd:
-            data = fd.read()
-            return jwk.JWKSet.from_json(data)
+    def decode_json_web_keys(cls, v) -> jwk.JWKSet:
+        if isinstance(v, jwk.JWKSet):  # If it's already a JWKSet, return it directly
+            return v
+        elif isinstance(v, str):  # If it's a file path, load from file
+            with open(v) as fd:
+                data = fd.read()
+                return jwk.JWKSet.from_json(data)
+        raise ValueError("json_web_keys must be a JWKSet object or a valid JSON file path")
 
     @field_validator("encryption_key", mode="before")
     @classmethod
-    def decode_encryption_key(cls, v: str) -> Fernet:
-        key_data = base64.b64decode(v)
-        return Fernet(key_data)
+    def decode_encryption_key(cls, v) -> Fernet:
+        if isinstance(v, Fernet):  # Already a Fernet instance, return it
+            return v
+        elif isinstance(v, str):  # Decode from a base64-encoded string
+            key_data = base64.b64decode(v)
+            return Fernet(key_data)
+        raise ValueError("encryption_key must be a Fernet object or a base64-encoded key string")
 
 
 OAUTH_REFRESH_QUEUE = "auth_session:oauth:refresh"
