@@ -1,5 +1,5 @@
 # Use a lightweight Python image
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 # Set working directory
 WORKDIR /app
@@ -14,30 +14,28 @@ RUN apt-get update && apt-get install -y \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PDM
+# Install PDM globally
 RUN pip install pdm
 
-# Copy dependency files first for better caching
-COPY . .
-# COPY pyproject.toml pdm.lock LICENSE ./
+# Ensure PDM always uses the in-project virtual environment
+ENV PDM_VENV_IN_PROJECT=1
+ENV PATH="/app/.venv/bin:$PATH"
 
-# Create the virtual environment explicitly
-RUN pdm venv create --force
+# Copy only dependency files first (better caching)
+COPY README.md LICENSE pyproject.toml pdm.lock ./
 
-# Install dependencies
+# Install dependencies properly inside the virtual environment
 RUN pdm install
 
-# Verify packages are installed correctly
-RUN pdm list
-
-# Copy the rest of the application files
+# Copy the rest of the project files (excluding `.venv`)
+COPY . .
 
 # Expose the application port
 EXPOSE 8080
 
-# Copy the new entrypoint script
+# Copy the entrypoint script and make it executable
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Use the entrypoint script to handle startup tasks
+# Use the entrypoint script to start the application
 ENTRYPOINT ["/entrypoint.sh"]

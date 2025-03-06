@@ -44,5 +44,4 @@ pdm run alembic upgrade head || { echo "Alembic migrations failed!"; exit 1; }
 
 # Start the AIP server
 echo "Starting AIP server..."
-sleep infinity
 exec pdm run aipserver

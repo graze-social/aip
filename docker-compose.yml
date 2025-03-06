@@ -23,15 +23,17 @@ services:
     restart: always
     depends_on:
       db:
-        condition: service_healthy  # Ensure the database is ready before starting `aip`
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://aip:aip_password@db:5432/aip_db
+      EXTERNAL_HOSTNAME: 1439-71-105-49-186.ngrok-free.app
       DEBUG: "true"
       WORKER_ID: "dev1"
     ports:
       - "8080:8080"
     volumes:
-      - .:/app
+      - .:/app  # Mount everything
+      - /app/.venv  # But create an empty volume for `.venv` so it's not overwritten
 
 volumes:
   aip_db_data:
