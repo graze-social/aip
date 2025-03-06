@@ -12,7 +12,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aip"]
+      test: ["CMD-SHELL", "pg_isready -U aip -d aip_db"]
       interval: 5s
       retries: 5
       timeout: 3s
@@ -25,15 +25,14 @@ services:
       db:
         condition: service_healthy  # Ensure the database is ready before starting `aip`
     environment:
-      EXTERNAL_HOSTNAME: grazeaip.tunn.dev
       PLC_HOSTNAME: plc.bowfin-woodpecker.ts.net
-      DATABASE_URL: postgresql://aip:aip_password@db:5432/aip_db  # Corrected hostname
+      DATABASE_URL: postgresql://aip:aip_password@db:5432/aip_db
+      DEBUG: "true"
+      WORKER_ID: "dev1"
     ports:
       - "8080:8080"
     volumes:
-      - .:/app  # Mount the local directory so changes persist
-      - signing_keys:/app/signing_keys.json
+      - .:/app
 
 volumes:
   aip_db_data:
-  signing_keys:

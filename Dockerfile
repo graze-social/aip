@@ -1,10 +1,6 @@
 # Use a lightweight Python image
 FROM python:3.12-slim
 
-# Set environment variables
-ENV EXTERNAL_HOSTNAME=grazeaip.tunn.dev \
-    PLC_HOSTNAME=plc.bowfin-woodpecker.ts.net
-
 # Set working directory
 WORKDIR /app
 

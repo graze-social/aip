@@ -29,7 +29,14 @@ if [ ! -f signing_keys.json ]; then
 else
   echo "Signing keys already exist."
 fi
-export ACTIVE_SIGNING_KEYS="$(cat signing_keys.json)"
+
+# Extract 'kid' values from signing_keys.json
+if command -v jq >/dev/null 2>&1; then
+  export ACTIVE_SIGNING_KEYS=$(jq -c '[.keys[].kid]' signing_keys.json)
+else
+  echo "Error: jq is required but not installed. Install jq to continue."
+  exit 1
+fi
 
 # Run Alembic migrations
 echo "Running Alembic migrations..."
@@ -37,4 +44,5 @@ pdm run alembic upgrade head || { echo "Alembic migrations failed!"; exit 1; }
 
 # Start the AIP server
 echo "Starting AIP server..."
+sleep infinity
 exec pdm run aipserver
