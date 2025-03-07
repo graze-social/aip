@@ -17,9 +17,9 @@ services:
       retries: 5
       timeout: 3s
 
-  redis:
-    image: redis:7
-    container_name: aip_redis
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: aip_valkey
     restart: always
     ports:
       - "6379:6379"
@@ -30,7 +30,7 @@ services:
     restart: always
     depends_on:
       - db
-      - redis
+      - valkey
     ports:
       - "8125:8125/udp"
     volumes:
@@ -43,13 +43,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
+      valkey:
         condition: service_started
       telegraf:
         condition: service_started
     environment:
       DATABASE_URL: postgresql+asyncpg://aip:aip_password@db:5432/aip_db
-      REDIS_URL: redis://redis:6379/0
+      VALKEY_URL: redis://valkey:6379/0
       DEBUG: "true"
       WORKER_ID: "dev1"
     ports:

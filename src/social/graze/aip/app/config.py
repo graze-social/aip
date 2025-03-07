@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     plc_hostname: str = "plc.directory"
 
     redis_dsn: RedisDsn = RedisDsn(
-        os.getenv("REDIS_DSN", "redis://redis:6379/1?decode_responses=True")
+        os.getenv("REDIS_DSN", "redis://valkey:6379/1?decode_responses=True")
     )
 
     pg_dsn: PostgresDsn = PostgresDsn(
