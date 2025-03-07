@@ -32,6 +32,7 @@ COPY . .
 
 # Expose the application port
 EXPOSE 8080
+EXPOSE 5100
 
 # Copy the entrypoint script and make it executable
 COPY entrypoint.sh /entrypoint.sh

@@ -13,6 +13,7 @@ if config.config_file_name is not None:
 
 # Use DATABASE_URL from environment variables, with a fallback
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://aip:aip_password@db:5432/aip_db")
+DATABASE_URL = DATABASE_URL.replace("postgresql+asyncpg", "postgresql+psycopg2")
 
 # Override sqlalchemy.url in Alembic config dynamically
 config.set_main_option("sqlalchemy.url", DATABASE_URL)

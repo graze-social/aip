@@ -17,6 +17,25 @@ services:
       retries: 5
       timeout: 3s
 
+  redis:
+    image: redis:7
+    container_name: aip_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  telegraf:
+    image: telegraf:latest
+    container_name: aip_telegraf
+    restart: always
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8125:8125/udp"
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf
+
   aip:
     build: .
     container_name: aip_service
@@ -24,16 +43,22 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
+      telegraf:
+        condition: service_started
     environment:
-      DATABASE_URL: postgresql://aip:aip_password@db:5432/aip_db
-      EXTERNAL_HOSTNAME: 1439-71-105-49-186.ngrok-free.app
+      DATABASE_URL: postgresql+asyncpg://aip:aip_password@db:5432/aip_db
+      REDIS_URL: redis://redis:6379/0
       DEBUG: "true"
       WORKER_ID: "dev1"
     ports:
       - "8080:8080"
+      - "5100:5100"
     volumes:
-      - .:/app  # Mount everything
-      - /app/.venv  # But create an empty volume for `.venv` so it's not overwritten
+      - .:/app
+      - /app/.venv
 
 volumes:
   aip_db_data:
+  influxdb_data:

@@ -1,3 +1,4 @@
+import os
 import asyncio
 from typing import Annotated, Final, List
 import logging
@@ -32,14 +33,16 @@ class Settings(BaseSettings):
 
     http_port: int = 5100
 
-    external_hostname: str = "localhost:5100"
+    external_hostname: str = "aip_service"
 
     plc_hostname: str = "plc.directory"
 
-    redis_dsn: RedisDsn = RedisDsn("redis://valkey:6379/1?decode_responses=True")
+    redis_dsn: RedisDsn = RedisDsn(
+        os.getenv("REDIS_DSN", "redis://redis:6379/1?decode_responses=True")
+    )
 
     pg_dsn: PostgresDsn = PostgresDsn(
-        "postgresql+asyncpg://postgres:password@postgres/aip"
+        os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:password@db/aip")
     )
 
     json_web_keys: Annotated[jwk.JWKSet, NoDecode] = jwk.JWKSet()
