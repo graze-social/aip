@@ -10,15 +10,13 @@ requires-python = ">=3.13"
 
 license = { file = "LICENSE" }
 
-authors = [
-    { name = "Nick Gerakines", email = "nick.gerakines@gmail.com" },
-]
+authors = [{ name = "Nick Gerakines", email = "nick.gerakines@gmail.com" }]
 maintainers = [{ name = "Nick Gerakines", email = "nick.gerakines@gmail.com" }]
 
 classifiers = [
-  "Development Status :: 3 - Alpha",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.13"
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [
@@ -42,11 +40,7 @@ dependencies = [
 readme = "README.md"
 
 [project.optional-dependencies]
-dev = [
-    "flake8>=7.1.1",
-    "pytest>=8.3.4",
-    "black>=25.1.0",
-]
+dev = ["flake8>=7.1.1", "pytest>=8.3.4", "black>=25.1.0"]
 test = ["coverage"]
 
 [project.urls]
@@ -66,6 +60,8 @@ distribution = true
 includes = ["src/social", "LICENSE"]
 
 [tool.pytest.ini_options]
-pythonpath = [
-  "src/"
-]
+pythonpath = ["src/"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
