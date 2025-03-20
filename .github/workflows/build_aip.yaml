@@ -20,7 +20,7 @@ jobs:
       - name: setup_svu
         run: curl -kL https://github.com/caarlos0/svu/releases/download/v3.2.2/svu_3.2.2_linux_amd64.tar.gz | tar zx && mv svu /usr/local/bin/svu && chmod +x /usr/local/bin/svu
 
-      - name: Create Tag
+      - name: create_tag
         run: echo "VERSION_TAG=$(svu next)" >> $GITHUB_ENV
 
       - name: setup_qemu
@@ -40,14 +40,17 @@ jobs:
           role-external-id: grazebuilder
           role-duration-seconds: 1200
           role-session-name: aipbuilder
+          role-skip-session-tagging: true
           aws-region: us-east-1
-      - name: Login to Amazon ECR
+
+      - name: login_to_ecr
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         with:
           mask-password: "false"
 
-      - uses: docker/build-push-action@v4
+      - name: build_and_push
+        uses: docker/build-push-action@v4
         with:
           file: Dockerfile
           context: .
