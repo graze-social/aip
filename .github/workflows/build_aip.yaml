@@ -40,6 +40,7 @@ jobs:
           role-external-id: grazebuilder
           role-duration-seconds: 1200
           role-session-name: aipbuilder
+          # This is required for
           role-skip-session-tagging: true
           aws-region: us-east-1
 
