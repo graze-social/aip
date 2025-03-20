@@ -1,0 +1,59 @@
+name: Build AIP Service Image
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+    # paths: []
+
+jobs:
+  build_aip_image:
+    env:
+      AWS_REGION: us-east-1
+      ECR_REPO: 715841359524.dkr.ecr.us-east-1.amazonaws.com/graze.social/aip
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+
+      - name: setup_svu
+        run: curl -kL https://github.com/caarlos0/svu/releases/download/v3.2.2/svu_3.2.2_linux_amd64.tar.gz | tar zx && mv svu /usr/local/bin/svu && chmod +x /usr/local/bin/svu
+
+      - name: Create Tag
+        run: echo "VERSION_TAG=$(svu next)" >> $GITHUB_ENV
+
+      - name: setup_qemu
+        uses: docker/setup-qemu-action@v2
+
+      - name: setup_buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: configure_aws_credentials
+        uses: aws-actions/configure-aws-credentials@v4 # More information on this action can be found below in the 'AWS Credentials' section
+        with:
+          aws-access-key-id: ${{ secrets.ECR_ACCESS_KEY_TMP }}
+          aws-secret-access-key: ${{ secrets.ECR_SECRET_KEY_TMP }}
+          role-to-assume: arn:aws:iam::715841359524:role/gh-action-ecr
+          role-external-id: grazebuilder
+          role-duration-seconds: 1200
+          role-session-name: aipbuilder
+          aws-region: us-east-1
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: "false"
+
+      - uses: docker/build-push-action@v4
+        with:
+          file: Dockerfile
+          context: .
+          push: true
+          tags: |
+            ${{env.ECR_REPO}}:${{ env.VERSION_TAG }}
+            ${{env.ECR_REPO}}:latest
+          builder: ${{ steps.setup_buildx.name }}
+          platforms: linux/amd64,linux/arm64
