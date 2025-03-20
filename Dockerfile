@@ -17,26 +17,24 @@ RUN apt-get update && apt-get install -y \
 # Install PDM globally
 RUN pip install pdm
 
+# TODO: we can split into a multi-stage build and just ship the .venv
+# just keeping everything for now
+COPY . .
+
 # Ensure PDM always uses the in-project virtual environment
 ENV PDM_VENV_IN_PROJECT=1
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copy only dependency files first (better caching)
-COPY README.md LICENSE pyproject.toml pdm.lock ./
-
 # Install dependencies properly inside the virtual environment
 RUN pdm install
 
-# Copy the rest of the project files (excluding `.venv`)
-COPY . .
-
 # Expose the application port
+# TODO: These should be configurable, not hard-coded and thus publishing them here is moot.
 EXPOSE 8080
 EXPOSE 5100
 
-# Copy the entrypoint script and make it executable
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# Use the entrypoint script to start the application
-ENTRYPOINT ["/entrypoint.sh"]
+# Available CMDs
+# See pyproject.toml for more details
+# CMD ["pdm", "run", "aipserver"]
+# CMD ["pdm", "run", "resolve"]
+# CMD ["pdm", "run", "aiputil"]

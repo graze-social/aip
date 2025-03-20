@@ -39,6 +39,7 @@ services:
   aip:
     build: .
     container_name: aip_service
+    command: ["pdm", "run", "aipserver"]
     restart: always
     depends_on:
       db:
@@ -55,9 +56,10 @@ services:
     ports:
       - "8080:8080"
       - "5100:5100"
-    volumes:
-      - .:/app
-      - /app/.venv
+    # TODO: move to Tilt-based debugging
+    # volumes:
+    #   - .:/app
+    #   - /app/.venv
 
 volumes:
   aip_db_data:
