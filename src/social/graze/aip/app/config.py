@@ -59,8 +59,8 @@ class Settings(BaseSettings):
 
     refresh_queue_app_password: str = "refresh_queue:app_password"
 
-    statsd_host: str = "telegraf"
-    statsd_port: int = 8125
+    statsd_host: str = os.getenv("TELEGRAF_HOST", "telegraf")
+    statsd_port: int = int(os.getenv("TELEGRAF_PORT", 8125))
     statsd_prefix: str = "aip"
 
     @field_validator("json_web_keys", mode="before")

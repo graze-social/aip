@@ -5,7 +5,7 @@ on:
       - closed
     branches:
       - main
-    # paths: []
+    paths: ["!deploy/**"] #exclude deployment changes
 
 jobs:
   build_aip_image:
