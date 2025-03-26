@@ -31,11 +31,11 @@ class Settings(BaseSettings):
 
     debug: bool = False
 
-    http_port: int = 5100
+    http_port: int = int(os.getenv("PORT", 5100))
 
-    external_hostname: str = "aip_service"
+    external_hostname: str = os.getenv("EXTERNAL_HOSTNAME", "aip_service")
 
-    plc_hostname: str = "plc.directory"
+    plc_hostname: str = os.getenv("PLC_HOSTNAME", "plc.directory")
 
     redis_dsn: RedisDsn = RedisDsn(
         os.getenv("REDIS_DSN", "redis://valkey:6379/1?decode_responses=True")
