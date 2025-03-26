@@ -57,6 +57,5 @@ jobs:
           push: true
           tags: |
             ${{env.ECR_REPO}}:${{ env.VERSION_TAG }}
-            ${{env.ECR_REPO}}:latest
           builder: ${{ steps.setup_buildx.name }}
           platforms: linux/amd64,linux/arm64
