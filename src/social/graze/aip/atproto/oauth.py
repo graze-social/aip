@@ -387,6 +387,7 @@ async def oauth_complete(
                 secret_jwk_id=oauth_request.secret_jwk_id,
                 dpop_jwk=oauth_request.dpop_jwk,
             )
+
             database_session.add(
                 OAuthSession(
                     session_group=session_group,
