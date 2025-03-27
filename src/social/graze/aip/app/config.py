@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     debug: bool = False
 
-    http_port: int = Field(alias='port', default=5100)
+    http_port: int = Field(alias="port", default=5100)
 
     sentry_dsn: Optional[str] = None
 
@@ -43,13 +43,13 @@ class Settings(BaseSettings):
 
     redis_dsn: RedisDsn = Field(
         "redis://valkey:6379/1?decode_responses=True",
-        validation_alias=AliasChoices('redis_dsn', 'redis_url'),
-    ) # type: ignore
+        validation_alias=AliasChoices("redis_dsn", "redis_url"),
+    )  # type: ignore
 
     pg_dsn: PostgresDsn = Field(
         "postgresql+asyncpg://postgres:password@db/aip",
-        validation_alias=AliasChoices('pg_dsn', 'database_url'),
-    ) # type: ignore
+        validation_alias=AliasChoices("pg_dsn", "database_url"),
+    )  # type: ignore
 
     json_web_keys: Annotated[jwk.JWKSet, NoDecode] = jwk.JWKSet()
 
@@ -67,8 +67,8 @@ class Settings(BaseSettings):
 
     default_destination: str = "https://localhost:5100/auth/atproto/debug"
 
-    statsd_host: str = Field(alias='TELEGRAF_HOST', default="telegraf")
-    statsd_port: int = Field(alias='TELEGRAF_PORT', default=8125)
+    statsd_host: str = Field(alias="TELEGRAF_HOST", default="telegraf")
+    statsd_port: int = Field(alias="TELEGRAF_PORT", default=8125)
     statsd_prefix: str = "aip"
 
     @field_validator("json_web_keys", mode="before")
@@ -80,7 +80,9 @@ class Settings(BaseSettings):
             with open(v) as fd:
                 data = fd.read()
                 return jwk.JWKSet.from_json(data)
-        raise ValueError("json_web_keys must be a JWKSet object or a valid JSON file path")
+        raise ValueError(
+            "json_web_keys must be a JWKSet object or a valid JSON file path"
+        )
 
     @field_validator("encryption_key", mode="before")
     @classmethod
@@ -90,7 +92,9 @@ class Settings(BaseSettings):
         elif isinstance(v, str):  # Decode from a base64-encoded string
             key_data = base64.b64decode(v)
             return Fernet(key_data)
-        raise ValueError("encryption_key must be a Fernet object or a base64-encoded key string")
+        raise ValueError(
+            "encryption_key must be a Fernet object or a base64-encoded key string"
+        )
 
 
 OAUTH_REFRESH_QUEUE = "auth_session:oauth:refresh"

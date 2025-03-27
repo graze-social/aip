@@ -76,7 +76,12 @@ async def handle_atproto_login_submit(request: web.Request):
 
     try:
         redirect_destination = await oauth_init(
-            settings, statsd_client, http_session, database_session_maker, subject, destination
+            settings,
+            statsd_client,
+            http_session,
+            database_session_maker,
+            subject,
+            destination,
         )
     except Exception as e:
         sentry_sdk.capture_exception(e)
@@ -122,9 +127,7 @@ async def handle_atproto_callback(request: web.Request):
     parsed_destination = urlparse(destination)
     query = dict(parse_qsl(parsed_destination.query))
     query.update({"auth_token": serialized_auth_token})
-    parsed_destination = parsed_destination._replace(
-        query=urlencode(query)
-    )
+    parsed_destination = parsed_destination._replace(query=urlencode(query))
     redirect_destination = urlunparse(parsed_destination)
 
     raise web.HTTPFound(redirect_destination)
