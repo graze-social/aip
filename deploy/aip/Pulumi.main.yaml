@@ -22,5 +22,3 @@ config:
         secure: v1:2BN1jOksH3OHLFS/:504jZPCHlL1mDhiRGhRYJJojIcWm6N54yMlZFqpddMn4Wss/c4pB0g331HoNmp+dTLpXetpE4yj7cHR7ZOdp8vidzjGhu8We/ZBUVuYLJRZESKqPeBeGMjTLMNBt2uA=
     signing_keys_json_string:
       secure: v1:4B9yslxAGhRJi5+4:tFXHx/ca5V5Etv89zlWyfS3HrqBwfEScJxhJzK0dr7ObiOFhgCNaQyA7poxHL5yAAhsmP8Srnglq//g13aZTP4dvkqa+OEp7s8w7O9j983D+hJg67Q+wfVqhyq1edU5O24h9ERzW49IPsikh9CsgN4IzOXj1J7JxGGdYEfjva8GPgufratS6NvceWzuGr1WxGSGb+sznFbMr6pFzOO0wR2yRg+S8KM5VYIgB1tyE++iYqHmsfKD7JveHfWQ2qnbsrfDkM4Xxez+keFWV56vwz+KRaLlP0YwH2XJOfQ/KPT6d+YdCsrgHZfetW51WUvoym/XzsKxISGB0+HRK
-  aip:environment: dev
-  aip:owner: dgaff
