@@ -129,7 +129,6 @@ async def handle_atproto_callback(request: web.Request):
     query.update({"auth_token": serialized_auth_token})
     parsed_destination = parsed_destination._replace(query=urlencode(query))
     redirect_destination = urlunparse(parsed_destination)
-
     raise web.HTTPFound(redirect_destination)
 
 
