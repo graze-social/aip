@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     AsyncSession,
 )
+import sentry_sdk
 from social.graze.aip.app.config import Settings, OAUTH_REFRESH_QUEUE
 from social.graze.aip.atproto.chain import (
     ChainMiddlewareClient,
@@ -38,6 +39,15 @@ def generate_pkce_verifier() -> Tuple[str, str]:
     pkce_challenge = encoded.decode("ascii").rstrip("=")
     return (pkce_token, pkce_challenge)
 
+
+def validate_oauth_fields(**kwargs):
+    """Checks for string fields longer than 512 characters and reports to Sentry."""
+    for field, value in kwargs.items():
+        if isinstance(value, str) and len(value) > 512:
+            sentry_sdk.capture_message(
+                f"Field `{field}` exceeds 512 characters", level="error"
+            )
+            raise ValueError(f"Field `{field}` is too long ({len(value)} characters)")
 
 async def oauth_init(
     settings: Settings,
@@ -368,6 +378,15 @@ async def oauth_complete(
         session_group = str(ULID())
 
         async with database_session.begin():
+            validate_oauth_fields(
+                session_group=session_group,
+                issuer=issuer,
+                guid=oauth_request.guid,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                secret_jwk_id=oauth_request.secret_jwk_id,
+                dpop_jwk=oauth_request.dpop_jwk,
+            )
             database_session.add(
                 OAuthSession(
                     session_group=session_group,
