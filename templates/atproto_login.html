@@ -3,7 +3,7 @@
 <header>
     <hgroup>
         <h1>AIP</h1>
-        <p>$$The Graze Social Authentication, Identity, and Permissions Server</p>
+        <p>The Graze Social Authentication, Identity, and Permissions Server</p>
     </hgroup>
 </header>
 <main>
@@ -12,6 +12,7 @@
         <form method="post" action="/auth/atproto">
           <fieldset>
             <input type="text" name="subject" {% if subject %}value="{{ subject }}"{% else %}placeholder="@you.bsky.social" {% endif %} aria-label="Handle" {% if error_message %} aria-invalid="true" aria-describedby="subject-error"{% endif %}  required=required>
+            <input type="text" name="destination" {% if destination %}value="{{ destination }}"{% else %}placeholder="https://graze.social/auth/callback" {% endif %} aria-label="Handle" {% if error_message %} aria-invalid="true" aria-describedby="destination-error"{% endif %}  required=required>
             {% if error_message %}
             <small id="subject-error" class="pico-text-red-450">{{ error_message }}</small>
             {% endif %}
