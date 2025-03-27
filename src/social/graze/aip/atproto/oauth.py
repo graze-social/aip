@@ -376,7 +376,8 @@ async def oauth_complete(
         expires_in = token_response.get("expires_in", 1800)
 
         session_group = str(ULID())
-
+        import json
+        await redis_session.set("blah", json.dumps({"session_group": session_group,"issuer": issuer,"guid": oauth_request.guid,"access_token": access_token,"refresh_token": refresh_token,"secret_jwk_id": oauth_request.secret_jwk_id,"dpop_jwk": oauth_request.dpop_jwk}))
         async with database_session.begin():
             validate_oauth_fields(
                 session_group=session_group,
