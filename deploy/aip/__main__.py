@@ -1,6 +1,6 @@
 import pulumi
 from pulumi_kubernetes import Provider
-from lib.service.aip import AIPConfig, AIPService
+from src.service.aip import AIPConfig, AIPService
 
 stack = pulumi.get_stack()
 config = pulumi.Config()
