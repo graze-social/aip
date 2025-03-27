@@ -11,7 +11,11 @@ import aiohttp_jinja2
 from jwcrypto import jwt
 from pydantic import BaseModel
 from sqlalchemy import select
+<<<<<<< HEAD
 import sentry_sdk
+=======
+from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
+>>>>>>> 75efa60 (feature: Wired in destination query string parameter)
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
@@ -55,6 +59,7 @@ async def handle_atproto_login(request: web.Request):
 async def handle_atproto_login_submit(request: web.Request):
     data = await request.post()
     subject: Optional[str] = data.get("subject", None)  # type: ignore
+    destination: Optional[str] = data.get("destination", None)  # type: ignore
 
     if subject is None:
         return await aiohttp_jinja2.render_template_async(
@@ -68,9 +73,12 @@ async def handle_atproto_login_submit(request: web.Request):
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     statsd_client = request.app[TelegrafStatsdClientAppKey]
 
+    if destination is None:
+        destination = settings.default_destination
+
     try:
         redirect_destination = await oauth_init(
-            settings, statsd_client, http_session, database_session_maker, subject
+            settings, statsd_client, http_session, database_session_maker, subject, destination
         )
     except Exception as e:
         sentry_sdk.capture_exception(e)
@@ -95,17 +103,33 @@ async def handle_atproto_callback(request: web.Request):
     redis_session = request.app[RedisClientAppKey]
     statsd_client = request.app[TelegrafStatsdClientAppKey]
 
-    serialized_auth_token = await oauth_complete(
-        settings,
-        http_session,
-        statsd_client,
-        database_session_maker,
-        redis_session,
-        state,
-        issuer,
-        code,
+    try:
+        (serialized_auth_token, destination) = await oauth_complete(
+            settings,
+            http_session,
+            statsd_client,
+            database_session_maker,
+            redis_session,
+            state,
+            issuer,
+            code,
+        )
+    except Exception as e:
+        return await aiohttp_jinja2.render_template_async(
+            "alert.html",
+            request,
+            context={"error_message": str(e)},
+        )
+
+    parsed_destination = urlparse(destination)
+    query = dict(parse_qsl(parsed_destination.query))
+    query.update({"auth_token": serialized_auth_token})
+    parsed_destination = parsed_destination._replace(
+        query=urlencode(query)
     )
-    raise web.HTTPFound(f"/auth/atproto/debug?auth_token={serialized_auth_token}")
+    redirect_destination = urlunparse(parsed_destination)
+
+    raise web.HTTPFound(redirect_destination)
 
 
 async def handle_atproto_refresh(request: web.Request):

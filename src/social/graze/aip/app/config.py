@@ -1,10 +1,12 @@
 import os
 import asyncio
-from typing import Annotated, Final, List
+from typing import Annotated, Final, List, Optional
 import logging
 from aio_statsd import TelegrafStatsdClient
 from jwcrypto import jwk
 from pydantic import (
+    AliasChoices,
+    Field,
     field_validator,
     PostgresDsn,
     RedisDsn,
@@ -31,21 +33,23 @@ class Settings(BaseSettings):
 
     debug: bool = False
 
-    http_port: int = int(os.getenv("PORT", 5100))
+    http_port: int = Field(alias='port', default=5100)
 
-    sentry_dsn: str = os.getenv("SENTRY_DSN")
+    sentry_dsn: Optional[str] = None
 
-    external_hostname: str = os.getenv("EXTERNAL_HOSTNAME", "aip_service")
+    external_hostname: str = "aip_service"
 
-    plc_hostname: str = os.getenv("PLC_HOSTNAME", "plc.directory")
+    plc_hostname: str = "plc.directory"
 
-    redis_dsn: RedisDsn = RedisDsn(
-        os.getenv("REDIS_DSN", "redis://valkey:6379/1?decode_responses=True")
-    )
+    redis_dsn: RedisDsn = Field(
+        "redis://valkey:6379/1?decode_responses=True",
+        validation_alias=AliasChoices('redis_dsn', 'redis_url'),
+    ) # type: ignore
 
-    pg_dsn: PostgresDsn = PostgresDsn(
-        os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:password@db/aip")
-    )
+    pg_dsn: PostgresDsn = Field(
+        "postgresql+asyncpg://postgres:password@db/aip",
+        validation_alias=AliasChoices('pg_dsn', 'database_url'),
+    ) # type: ignore
 
     json_web_keys: Annotated[jwk.JWKSet, NoDecode] = jwk.JWKSet()
 
@@ -61,8 +65,10 @@ class Settings(BaseSettings):
 
     refresh_queue_app_password: str = "refresh_queue:app_password"
 
-    statsd_host: str = os.getenv("TELEGRAF_HOST", "telegraf")
-    statsd_port: int = int(os.getenv("TELEGRAF_PORT", 8125))
+    default_destination: str = "https://localhost:5100/auth/atproto/debug"
+
+    statsd_host: str = Field(alias='TELEGRAF_HOST', default="telegraf")
+    statsd_port: int = Field(alias='TELEGRAF_PORT', default=8125)
     statsd_prefix: str = "aip"
 
     @field_validator("json_web_keys", mode="before")

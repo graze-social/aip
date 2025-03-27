@@ -45,6 +45,7 @@ async def oauth_init(
     http_session: ClientSession,
     database_session_maker: async_sessionmaker[AsyncSession],
     subject: str,
+    destination: Optional[str] = None,
 ):
     signing_key_id = next(iter(settings.active_signing_keys), None)
     if signing_key_id is None:
@@ -192,7 +193,7 @@ async def oauth_init(
                     pkce_verifier=pkce_verifier,
                     secret_jwk_id=signing_key_id,
                     dpop_jwk=dpop_key.export(private_key=True, as_dict=True),
-                    destination="/settings",
+                    destination=destination,
                     created_at=now,
                     expires_at=now + timedelta(0, par_expires),
                 )
@@ -220,7 +221,7 @@ async def oauth_complete(
     state: Optional[str],
     issuer: Optional[str],
     code: Optional[str],
-):
+) -> Tuple[str, str]:
     if state is None or issuer is None or code is None:
         raise Exception("Invalid request")
 
@@ -410,7 +411,7 @@ async def oauth_complete(
     auth_token.make_signed_token(service_auth_key)
     serialized_auth_token = auth_token.serialize()
 
-    return str(serialized_auth_token)
+    return str(serialized_auth_token), str(oauth_request.destination)
 
 
 async def oauth_refresh(
