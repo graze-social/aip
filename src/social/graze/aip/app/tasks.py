@@ -5,6 +5,7 @@ from time import time
 from typing import List, NoReturn, Tuple
 from aiohttp import web
 from sqlalchemy import select
+import sentry_sdk
 
 from social.graze.aip.app.config import (
     APP_PASSWORD_REFRESH_QUEUE,
@@ -145,7 +146,8 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
                         zrangestore_res,
                         tag_dict={"worker_id": settings.worker_id},
                     )
-                except Exception:
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
                     logging.exception("error populating worker queue")
 
         tasks: List[Tuple[str, float]] = await redis_session.zrange(
@@ -184,6 +186,7 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
                         )
 
                     except Exception as e:
+                        sentry_sdk.capture_exception(e)
                         logging.exception(
                             "error processing session group %s", session_group
                         )
@@ -304,6 +307,7 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
                     )
 
                 except Exception as e:
+                    sentry_sdk.capture_exception(e)
                     logging.exception("error processing guid %s", handle_guid)
                     # TODO: Don't actually tag session_group because cardinality will be very high.
                     statsd_client.increment(
@@ -331,5 +335,6 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
                     )
                     await redis_session.zrem(worker_queue, handle_guid)
 
-        except Exception:
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
             logging.exception("app password tick failed")

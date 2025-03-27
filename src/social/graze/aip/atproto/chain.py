@@ -23,6 +23,7 @@ from aiohttp import web, ClientResponse, ClientSession, FormData, hdrs
 from aiohttp.typedefs import StrOrURL
 from multidict import CIMultiDictProxy
 from jwcrypto import jwt, jwk
+import sentry_sdk
 
 RequestFunc = Callable[..., Awaitable[ClientResponse]]
 
@@ -173,6 +174,7 @@ class StatsdMiddleware(RequestMiddlewareBase):
         try:
             return await next(request)
         except Exception as e:
+            sentry_sdk.capture_exception(e)
             raise e
         finally:
             # TODO: Don't record URL. Cardinality is too high here and will cause issues.

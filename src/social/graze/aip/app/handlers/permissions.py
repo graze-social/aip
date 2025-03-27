@@ -10,6 +10,7 @@ from typing import (
 from aiohttp import web
 from pydantic import BaseModel, PositiveInt, RootModel, ValidationError
 from sqlalchemy import delete, select
+import sentry_sdk
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
@@ -44,7 +45,8 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
     try:
         data = await request.read()
         operations = PermissionOperations.model_validate_json(data)
-    except (OSError, ValidationError):
+    except (OSError, ValidationError) as e:
+        sentry_sdk.capture_exception(e)
         return web.Response(text="Invalid JSON", status=400)
 
     try:
@@ -112,8 +114,10 @@ async def handle_internal_permissions(request: web.Request) -> web.Response:
 
                 return web.json_response(results)
     except web.HTTPException as e:
+        sentry_sdk.capture_exception(e)
         logging.exception("handle_internal_permissions: web.HTTPException")
         raise e
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         logging.exception("handle_internal_permissions: Exception")
         return web.json_response(status=500, data={"error": "Internal Server Error"})

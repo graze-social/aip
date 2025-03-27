@@ -2,6 +2,7 @@ import json
 import logging
 
 from aiohttp import web
+import sentry_sdk
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
@@ -46,8 +47,10 @@ async def handle_internal_me(request: web.Request):
                 }
             )
     except web.HTTPException as e:
+        sentry_sdk.capture_exception(e)
         raise e
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         raise web.HTTPInternalServerError(
             body=json.dumps({"error": "Internal Server Error"}),
             content_type="application/json",

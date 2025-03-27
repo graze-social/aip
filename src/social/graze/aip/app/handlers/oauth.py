@@ -11,6 +11,7 @@ import aiohttp_jinja2
 from jwcrypto import jwt
 from pydantic import BaseModel
 from sqlalchemy import select
+import sentry_sdk
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
@@ -72,6 +73,7 @@ async def handle_atproto_login_submit(request: web.Request):
             settings, statsd_client, http_session, database_session_maker, subject
         )
     except Exception as e:
+        sentry_sdk.capture_exception(e)
         # TODO: Return a localized error message.
         return await aiohttp_jinja2.render_template_async(
             "atproto_login.html",
@@ -93,24 +95,16 @@ async def handle_atproto_callback(request: web.Request):
     redis_session = request.app[RedisClientAppKey]
     statsd_client = request.app[TelegrafStatsdClientAppKey]
 
-    try:
-        serialized_auth_token = await oauth_complete(
-            settings,
-            http_session,
-            statsd_client,
-            database_session_maker,
-            redis_session,
-            state,
-            issuer,
-            code,
-        )
-    except Exception as e:
-        return await aiohttp_jinja2.render_template_async(
-            "alert.html",
-            request,
-            context={"error_message": str(e)},
-        )
-
+    serialized_auth_token = await oauth_complete(
+        settings,
+        http_session,
+        statsd_client,
+        database_session_maker,
+        redis_session,
+        state,
+        issuer,
+        code,
+    )
     raise web.HTTPFound(f"/auth/atproto/debug?auth_token={serialized_auth_token}")
 
 

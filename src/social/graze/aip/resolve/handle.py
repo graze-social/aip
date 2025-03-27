@@ -3,6 +3,7 @@ from aiohttp import ClientSession
 from pydantic import BaseModel
 from aiodns import DNSResolver
 from typing import Optional, Any, Dict
+import sentry_sdk
 
 
 class SubjectType(IntEnum):
@@ -38,7 +39,8 @@ async def resolve_handle_dns(handle: str) -> Optional[str]:
     resolver = DNSResolver()
     try:
         results = await resolver.query(f"_atproto.{handle}", "TXT")
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         return None
     first_result = next(iter(results or []), None)
     if first_result is not None:
