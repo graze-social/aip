@@ -11,11 +11,9 @@ import aiohttp_jinja2
 from jwcrypto import jwt
 from pydantic import BaseModel
 from sqlalchemy import select
-<<<<<<< HEAD
 import sentry_sdk
-=======
 from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
->>>>>>> 75efa60 (feature: Wired in destination query string parameter)
+
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
