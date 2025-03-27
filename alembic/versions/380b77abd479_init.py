@@ -48,7 +48,7 @@ def upgrade() -> None:
     op.create_table(
         "oauth_sessions",
         sa.Column("session_group", sa.String(64), primary_key=True),
-        sa.Column("access_token", sa.String(512), nullable=False),
+        sa.Column("access_token", sa.String(1024), nullable=False),
         sa.Column("guid", sa.String(512), nullable=False),
         sa.Column("refresh_token", sa.String(512), nullable=False),
         sa.Column("issuer", sa.String(512), nullable=False),
@@ -75,7 +75,7 @@ def upgrade() -> None:
     op.create_table(
         "atproto_app_password_sessions",
         sa.Column("guid", sa.String(512), primary_key=True),
-        sa.Column("access_token", sa.String(512), nullable=False),
+        sa.Column("access_token", sa.String(1024), nullable=False),
         sa.Column(
             "access_token_expires_at", sa.DateTime(timezone=True), nullable=False
         ),
