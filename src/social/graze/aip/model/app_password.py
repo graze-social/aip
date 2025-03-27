@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
-from social.graze.aip.model.base import Base
+from social.graze.aip.model.base import Base, str1024
 
 
 class AppPassword(Base):
@@ -19,7 +19,7 @@ class AppPasswordSession(Base):
     __tablename__ = "atproto_app_password_sessions"
 
     guid: Mapped[str] = mapped_column(String(64), primary_key=True)
-    access_token: Mapped[str]
+    access_token: Mapped[str1024]
     access_token_expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

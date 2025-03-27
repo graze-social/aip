@@ -4,7 +4,7 @@ from sqlalchemy import Integer, String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSON, insert
 
-from social.graze.aip.model.base import Base, str512
+from social.graze.aip.model.base import Base, str512, str1024
 
 
 class OAuthRequest(Base):
@@ -31,7 +31,7 @@ class OAuthSession(Base):
     session_group: Mapped[str] = mapped_column(String(64), primary_key=True)
     issuer: Mapped[str512]
     guid: Mapped[str512]
-    access_token: Mapped[str512]
+    access_token: Mapped[str1024]
     refresh_token: Mapped[str512]
     secret_jwk_id: Mapped[str512]
     dpop_jwk: Mapped[Any] = mapped_column(JSON, nullable=False)
