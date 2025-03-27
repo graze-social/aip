@@ -33,6 +33,8 @@ class Settings(BaseSettings):
 
     http_port: int = int(os.getenv("PORT", 5100))
 
+    sentry_dsn: str = os.getenv("SENTRY_DSN")
+
     external_hostname: str = os.getenv("EXTERNAL_HOSTNAME", "aip_service")
 
     plc_hostname: str = os.getenv("PLC_HOSTNAME", "plc.directory")

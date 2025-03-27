@@ -2,7 +2,7 @@ encryptionsalt: v1:aaZCYIY4IfY=:v1:j2OSpCOqaH9qEwYq:9v01FZYOm1wSztPnKavSTqKNH0pr
 config:
   aip:k8s_context: arn:aws:eks:us-east-1:715841359524:cluster/graze-01
   aip:aip_config:
-    image_tag: v0.1.2
+    image_tag: latest
     enable_init_containers: true
     ssl_cert_arn: arn:aws:acm:us-east-1:715841359524:certificate/7000ee41-29cf-47fa-8a25-63505da74280
     extra_env:
@@ -10,6 +10,7 @@ config:
       TELEGRAF_HOST: telegraf.graze-system.svc.cluster.local
       TELEGRAF_PORT: "8125"
       EXTERNAL_HOSTNAME: auth.m.graze.social
+      SENTRY_DSN: "https://bbacf52947f7d83d309a54067aa27537@o4508375021518849.ingest.us.sentry.io/4509050451460096"
     required_env:
       WORKER_ID: main01
       JSON_WEB_KEYS: /app/signing_keys.json
@@ -21,3 +22,5 @@ config:
         secure: v1:2BN1jOksH3OHLFS/:504jZPCHlL1mDhiRGhRYJJojIcWm6N54yMlZFqpddMn4Wss/c4pB0g331HoNmp+dTLpXetpE4yj7cHR7ZOdp8vidzjGhu8We/ZBUVuYLJRZESKqPeBeGMjTLMNBt2uA=
     signing_keys_json_string:
       secure: v1:4B9yslxAGhRJi5+4:tFXHx/ca5V5Etv89zlWyfS3HrqBwfEScJxhJzK0dr7ObiOFhgCNaQyA7poxHL5yAAhsmP8Srnglq//g13aZTP4dvkqa+OEp7s8w7O9j983D+hJg67Q+wfVqhyq1edU5O24h9ERzW49IPsikh9CsgN4IzOXj1J7JxGGdYEfjva8GPgufratS6NvceWzuGr1WxGSGb+sznFbMr6pFzOO0wR2yRg+S8KM5VYIgB1tyE++iYqHmsfKD7JveHfWQ2qnbsrfDkM4Xxez+keFWV56vwz+KRaLlP0YwH2XJOfQ/KPT6d+YdCsrgHZfetW51WUvoym/XzsKxISGB0+HRK
+  aip:environment: dev
+  aip:owner: dgaff

@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
 )
+import sentry_sdk
 
 from social.graze.aip.app.config import (
     SettingsAppKey,
@@ -211,9 +212,11 @@ async def auth_token_helper(
                 context_subject=subject_handle.did,
                 context_pds=subject_handle.pds,
             )
-    except AuthenticationException:
+    except AuthenticationException as e:
+        sentry_sdk.capture_exception(e)
         raise
     except Exception as e:
+        sentry_sdk.capture_exception(e)
         statsd_client.increment(
             "aip.auth.exception",
             1,

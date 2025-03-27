@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     AsyncSession,
 )
+import sentry_sdk
+from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 
 from social.graze.aip.app.config import (
     DatabaseAppKey,
@@ -141,6 +143,17 @@ async def background_tasks(app):
     await app[RedisPoolAppKey].aclose()
     await app[TelegrafStatsdClientAppKey].close()
 
+@web.middleware
+async def sentry_middleware(request: web.Request, handler):
+    request_method: str = request.method
+    request_path = request.path
+
+    try:
+        response = await handler(request)
+        return response
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        raise e
 
 @web.middleware
 async def statsd_middleware(request: web.Request, handler):
@@ -194,8 +207,13 @@ async def start_web_server(settings: Optional[Settings] = None):
 
     if settings is None:
         settings = Settings()  # type: ignore
-
-    app = web.Application(middlewares=[statsd_middleware])
+    if settings.sentry_dsn:
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            send_default_pii=True,
+            integrations=[AioHttpIntegration()]
+        )
+    app = web.Application(middlewares=[statsd_middleware, sentry_middleware])
 
     app[SettingsAppKey] = settings
     app[HealthGaugeAppKey] = HealthGauge()

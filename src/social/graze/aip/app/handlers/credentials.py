@@ -1,5 +1,6 @@
 import logging
 from aiohttp import web
+import sentry_sdk
 
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
@@ -23,8 +24,10 @@ async def handle_internal_credentials(request: web.Request) -> web.Response:
             if auth_token is None:
                 return web.json_response(status=401, data={"error": "Not Authorized"})
     except web.HTTPException as e:
+        sentry_sdk.capture_exception(e)
         raise e
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         return web.json_response(status=500, data={"error": "Internal Server Error"})
 
     if auth_token.app_password_session is not None:

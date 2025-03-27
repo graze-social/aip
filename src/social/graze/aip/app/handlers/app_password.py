@@ -5,6 +5,7 @@ from aiohttp import web
 from pydantic import BaseModel, ValidationError, field_validator
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
+import sentry_sdk
 
 from social.graze.aip.app.config import (
     APP_PASSWORD_REFRESH_QUEUE,
@@ -44,8 +45,9 @@ async def handle_internal_app_password(request: web.Request) -> web.Response:
     try:
         data = await request.read()
         app_password_operation = AppPasswordOperation.model_validate_json(data)
-    except (OSError, ValidationError):
+    except (OSError, ValidationError) as e:
         # TODO: Fix the returned error message when JSON fails because of pydantic validation functions.
+        sentry_sdk.capture_exception(e)
         return web.json_response(status=400, data={"error": "Invalid JSON"})
 
     try:
@@ -100,8 +102,10 @@ async def handle_internal_app_password(request: web.Request) -> web.Response:
 
             return web.Response(status=200)
     except web.HTTPException as e:
+        sentry_sdk.capture_exception(e)
         logging.exception("handle_internal_permissions: web.HTTPException")
         raise e
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         logging.exception("handle_internal_permissions: Exception")
         return web.json_response(status=500, data={"error": "Internal Server Error"})

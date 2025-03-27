@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
 )
 from sqlalchemy.dialects.postgresql import insert
+import sentry_sdk
 from social.graze.aip.model.app_password import AppPassword, AppPasswordSession
 from social.graze.aip.model.handles import Handle
 from social.graze.aip.app.config import APP_PASSWORD_REFRESH_QUEUE
@@ -96,7 +97,8 @@ async def populate_session(
                         if not is_active:
                             start_over = True
 
-                except Exception:
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
                     logger.exception("Error refreshing session")
                     start_over = True
 
@@ -159,7 +161,8 @@ async def populate_session(
                         if not is_active:
                             raise ValueError("Handle is not active.")
 
-                except Exception:
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
                     logger.exception("Error creating session")
 
                 # 5. Create new AppPasswordSession

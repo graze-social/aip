@@ -3,6 +3,7 @@ import argparse
 import aiohttp
 import asyncio
 import logging
+import sentry_sdk
 
 from social.graze.aip.resolve.handle import resolve_subject
 
@@ -29,7 +30,8 @@ async def realMain() -> None:
                     session, args.get("plc_hostname", str), subject
                 )
                 print(f"resolved_handle {resolved_handle}")
-            except Exception:
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
                 logging.exception("Exception resolving subject %s", subject)
 
 

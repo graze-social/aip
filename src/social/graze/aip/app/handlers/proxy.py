@@ -11,6 +11,7 @@ from aiohttp import web
 import hashlib
 import base64
 from jwcrypto import jwk
+import sentry_sdk
 from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
 
 from social.graze.aip.app.config import (
@@ -54,8 +55,10 @@ async def handle_xrpc_proxy(request: web.Request) -> web.Response:
                 )
                 return web.json_response(status=401, data={"error": "Not Authorized"})
     except web.HTTPException as e:
+        sentry_sdk.capture_exception(e)
         raise e
     except Exception as e:
+        sentry_sdk.capture_exception(e)
         statsd_client.increment(
             "aip.proxy.exception",
             1,
