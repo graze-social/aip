@@ -1,0 +1,12 @@
+name: aip
+backend:
+  url: s3://graze.iac.state
+description: AIP Service Deployment Distribution
+runtime:
+  name: python
+  options:
+    toolchain: poetry
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: webapp-kubernetes-python
