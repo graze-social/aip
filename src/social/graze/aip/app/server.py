@@ -162,17 +162,25 @@ async def cors_middleware(request: web.Request, handler):
     if origin and allowed_origin_pattern.match(origin):
         headers["Access-Control-Allow-Origin"] = origin
 
-        # **Handle OPTIONS requests early**
+        # Debug log to confirm middleware is being hit
+        print(f"[CORS] Handling request from {origin} for {request.method} {request.path}")
+
         if request.method == "OPTIONS":
+            print("[CORS] Returning early for OPTIONS request")
             return web.Response(status=200, headers=headers)
 
     response = await handler(request)
 
-    # **Ensure response has CORS headers**
+    # **Ensure CORS headers are applied to all responses, including redirects**
     response.headers.update(headers)
 
     if origin and allowed_origin_pattern.match(origin):
         response.headers["Access-Control-Allow-Origin"] = origin
+
+    # **If response is a redirect, ensure CORS headers are present**
+    if response.status in [301, 302]:
+        print("[CORS] Handling redirect response, adding CORS headers")
+        response.headers.update(headers)
 
     return response
 
