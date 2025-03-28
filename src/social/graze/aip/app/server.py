@@ -1,3 +1,4 @@
+import re
 import asyncio
 import contextlib
 import os
@@ -145,6 +146,24 @@ async def background_tasks(app):
 
 
 @web.middleware
+async def cors_middleware(request: web.Request, handler):
+    origin = request.headers.get("Origin")
+
+    if origin and allowed_origin_pattern.match(origin):
+        response = await handler(request)
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+
+        if request.method == "OPTIONS":
+            return web.Response(status=200, headers=response.headers)
+
+        return response
+
+    return await handler(request)
+
+@web.middleware
 async def sentry_middleware(request: web.Request, handler):
     request_method: str = request.method
     request_path = request.path
@@ -215,7 +234,7 @@ async def start_web_server(settings: Optional[Settings] = None):
             send_default_pii=True,
             integrations=[AioHttpIntegration()],
         )
-    app = web.Application(middlewares=[statsd_middleware, sentry_middleware])
+    app = web.Application(middlewares=[statsd_middleware, sentry_middleware, cors_middleware])
 
     app[SettingsAppKey] = settings
     app[HealthGaugeAppKey] = HealthGauge()
