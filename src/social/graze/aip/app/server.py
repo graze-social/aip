@@ -153,23 +153,28 @@ async def background_tasks(app):
 @web.middleware
 async def cors_middleware(request: web.Request, handler):
     origin = request.headers.get("Origin")
+    headers = {
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    }
 
     if origin and allowed_origin_pattern.match(origin):
-        headers = {
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        }
+        headers["Access-Control-Allow-Origin"] = origin
 
+        # **Handle OPTIONS requests early**
         if request.method == "OPTIONS":
             return web.Response(status=200, headers=headers)
 
-        response = await handler(request)
-        response.headers.update(headers)
-        return response
+    response = await handler(request)
 
-    return await handler(request)
+    # **Ensure response has CORS headers**
+    response.headers.update(headers)
+
+    if origin and allowed_origin_pattern.match(origin):
+        response.headers["Access-Control-Allow-Origin"] = origin
+
+    return response
 
 @web.middleware
 async def sentry_middleware(request: web.Request, handler):
@@ -230,7 +235,6 @@ async def shutdown(app):
     await app[SessionAppKey].close()
     await app[RedisPoolAppKey].aclose()
     await app[TelegrafStatsdClientAppKey].close()
-
 
 async def start_web_server(settings: Optional[Settings] = None):
 
