@@ -62,7 +62,7 @@ from social.graze.aip.app.tasks import (
 from social.graze.aip.model.health import HealthGauge
 
 logger = logging.getLogger(__name__)
-
+allowed_origin_pattern = re.compile(r"https://(www\.)?graze\.social|https://(www\.)?sky-feeder-git-astro-graze\.vercel\.app")
 
 async def handle_index(request: web.Request):
     return await aiohttp_jinja2.render_template_async("index.html", request, context={})
