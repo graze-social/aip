@@ -155,15 +155,18 @@ async def cors_middleware(request: web.Request, handler):
     origin = request.headers.get("Origin")
 
     if origin and allowed_origin_pattern.match(origin):
-        response = await handler(request)
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "*"
-        response.headers["Access-Control-Allow-Headers"] = "*"
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        }
 
         if request.method == "OPTIONS":
-            return web.Response(status=200, headers=response.headers)
+            return web.Response(status=200, headers=headers)
 
+        response = await handler(request)
+        response.headers.update(headers)
         return response
 
     return await handler(request)
