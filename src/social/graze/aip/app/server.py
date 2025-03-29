@@ -254,7 +254,7 @@ async def start_web_server(settings: Optional[Settings] = None):
             send_default_pii=True,
             integrations=[AioHttpIntegration()],
         )
-    app = web.Application(middlewares=[statsd_middleware, sentry_middleware, cors_middleware])
+    app = web.Application(middlewares=[cors_middleware, statsd_middleware, sentry_middleware])
 
     app[SettingsAppKey] = settings
     app[HealthGaugeAppKey] = HealthGauge()
