@@ -5,7 +5,6 @@ on:
       - closed
     branches:
       - main
-
 jobs:
   build_aip_image:
     env:
@@ -62,3 +61,32 @@ jobs:
             ${{env.ECR_REPO}}:latest
           builder: ${{ steps.setup_buildx.name }}
           platforms: linux/amd64,linux/arm64
+
+      - name: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        run: |-
+          gh release create ${{ env.VERSION_TAG }} -n "Release version image available: ${{ env.ECR_REPO }}:${{ env.VERSION_TAG }}"
+
+      - name: configuer_deployer_creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.DEPLOYER_ACCESS_KEY }}
+          aws-region: us-east-1
+          aws-secret-access-key: ${{ secrets.DEPLOYER_SECRET_ACCESS_KEY }}
+
+      # TRICK TO SETUP PULUMI
+      - uses: pulumi/actions@v6
+        with:
+          stack-name: main
+
+      - run: pulumi config set --path aip_config.image_tag ${{ env.VERSION_TAG }} --stack main
+        working-directory: deploy/aip
+
+      - uses: pulumi/actions@v6
+        with:
+          command: preview
+          stack-name: main
+          comment-on-pr: true
+          work-dir: deploy/aip
+          github-token: ${{ secrets.GH_RELEASE_TOKEN }}

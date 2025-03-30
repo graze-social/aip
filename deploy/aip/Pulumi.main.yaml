@@ -6,7 +6,7 @@ config:
     enable_init_containers: true
     ssl_cert_arn: arn:aws:acm:us-east-1:715841359524:certificate/7000ee41-29cf-47fa-8a25-63505da74280
     extra_env:
-      DEBUG: "true"
+      DEBUG: "false"
       TELEGRAF_HOST: telegraf.graze-system.svc.cluster.local
       TELEGRAF_PORT: "8125"
       EXTERNAL_HOSTNAME: auth.m.graze.social
@@ -20,5 +20,9 @@ config:
         secure: v1:s9hVSfAD3jJo4cXu:HpknPPFQsAcH+VEt5DsIV84Mcy3XFcwT7TScoOQ54v6zuQzI1SD+dBmQpzwzFSIUykaLo5ME2jdqd5Neu776cX6+5ol+k9YoEIfSa5EqtLwiNjX2tFIMfrH32lu7GfPy8s/zJ/wG3gJPoyFz/QBiBdggL3CIooifljA=
       REDIS_DSN:
         secure: v1:2BN1jOksH3OHLFS/:504jZPCHlL1mDhiRGhRYJJojIcWm6N54yMlZFqpddMn4Wss/c4pB0g331HoNmp+dTLpXetpE4yj7cHR7ZOdp8vidzjGhu8We/ZBUVuYLJRZESKqPeBeGMjTLMNBt2uA=
+      SERVICE_AUTH_KEYS:
+        secure: v1:Rp/uKsmIJkguq3hv:uZcaA7ZA42Xi53WGykqdEcylX19EON47bieHqJ5IfoKjYPC8r7/QRJ5sH6Ozwg==
     signing_keys_json_string:
       secure: v1:4B9yslxAGhRJi5+4:tFXHx/ca5V5Etv89zlWyfS3HrqBwfEScJxhJzK0dr7ObiOFhgCNaQyA7poxHL5yAAhsmP8Srnglq//g13aZTP4dvkqa+OEp7s8w7O9j983D+hJg67Q+wfVqhyq1edU5O24h9ERzW49IPsikh9CsgN4IzOXj1J7JxGGdYEfjva8GPgufratS6NvceWzuGr1WxGSGb+sznFbMr6pFzOO0wR2yRg+S8KM5VYIgB1tyE++iYqHmsfKD7JveHfWQ2qnbsrfDkM4Xxez+keFWV56vwz+KRaLlP0YwH2XJOfQ/KPT6d+YdCsrgHZfetW51WUvoym/XzsKxISGB0+HRK
+  aip:eks: organization/eks/main
+  aip:import_kubeconfig: graze-01
