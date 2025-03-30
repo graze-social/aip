@@ -90,3 +90,5 @@ jobs:
           comment-on-pr: true
           work-dir: deploy/aip
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ""
