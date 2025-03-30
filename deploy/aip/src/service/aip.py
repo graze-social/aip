@@ -1,4 +1,4 @@
-from typing import Dict, Mapping, Optional, Sequence, TypedDict
+from typing import Mapping, Optional, Sequence, TypedDict
 from pulumi import ComponentResource, get_stack, ResourceOptions, Input
 import pulumi_kubernetes as k8s
 
@@ -25,6 +25,8 @@ class AIPRequiredEnv(TypedDict):
     JSON_WEB_KEYS: Input[str]
     # String array of active `kid` from webkeys json
     ACTIVE_SIGNING_KEYS: Input[str]
+    # Possible duplicate of ACTIVE_SIGNING_KEYS
+    SERVICE_AUTH_KEYS: Input[str]
     # more...
 
 
@@ -173,7 +175,7 @@ class AIPService(ComponentResource):
             {
                 "name": "aip",
                 "image": self.image,
-                "image_pull_policy": "IfNotPresent",
+                "image_pull_policy": "Always",
                 "ports": [
                     {"container_port": 8080, "name": "http", "protocol": "TCP"},
                     {"container_port": 5100, "name": "http-alt", "protocol": "TCP"},
