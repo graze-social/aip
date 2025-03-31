@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
 
     debug: bool = False
+    allowed_domains: str = "https://www.graze.social, https://sky-feeder-git-astro-graze.vercel.app"
 
     http_port: int = Field(alias="port", default=5100)
 
@@ -70,6 +71,15 @@ class Settings(BaseSettings):
     statsd_host: str = Field(alias="TELEGRAF_HOST", default="telegraf")
     statsd_port: int = Field(alias="TELEGRAF_PORT", default=8125)
     statsd_prefix: str = "aip"
+
+    #Styling Settings for login page:
+    svg_logo: str = "https://www.graze.social/logo.svg"
+    brand_name: str = "Graze"
+    destination: str = "https://graze.social/auth/callback"
+    background_from: str = "#0588f0"
+    background_to: str = "#5eb1ef"
+    text_color: str = "#FFFFFF"
+    form_color: str = "#FFFFFF"
 
     @field_validator("json_web_keys", mode="before")
     @classmethod

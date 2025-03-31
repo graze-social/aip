@@ -153,6 +153,19 @@ async def background_tasks(app):
 
 @web.middleware
 async def cors_middleware(request: web.Request, handler):
+    settings = Settings()  # type: ignore
+    allowed_domains = settings.allowed_domains.split(",")  # Convert to list
+    allowed_origin_pattern = re.compile(
+        "|".join(
+            [re.escape(domain.strip()) for domain in allowed_domains if domain.strip()]
+        )
+    )
+
+    # If in debug mode, allow localhost variations
+    if settings.debug:
+        debug_domains = [r"http://localhost:\d+", r"http://127\.0\.0\.1:\d+"]
+        allowed_origin_pattern = re.compile(f"{allowed_origin_pattern.pattern}|{'|'.join(debug_domains)}")
+
     origin: Optional[str] = request.headers.get("Origin")
 
     headers = {
