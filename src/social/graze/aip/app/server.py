@@ -12,7 +12,6 @@ import jinja2
 from aiohttp import web
 import aiohttp_jinja2
 import aiohttp
-import aiohttp_cors
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
