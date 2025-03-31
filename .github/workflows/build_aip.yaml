@@ -22,12 +22,16 @@ jobs:
         with:
           stack-name: main
 
-      - uses: actions/setup-python@v4
+      - name: setup_python
+        uses: actions/setup-python@v4
         with:
           python-version: "3.13.1"
 
-      - uses: Gr1N/setup-poetry@v8
-      - run: poetry --version
+      - name: install_poetry
+        uses: Gr1N/setup-poetry@v8
+
+      - name: poetry_version
+        run: poetry --version
 
       - name: setup_svu
         run: curl -kL https://github.com/caarlos0/svu/releases/download/v3.2.2/svu_3.2.2_linux_amd64.tar.gz | tar zx && mv svu /usr/local/bin/svu && chmod +x /usr/local/bin/svu
@@ -87,7 +91,8 @@ jobs:
           aws-region: us-east-1
           aws-secret-access-key: ${{ secrets.DEPLOYER_SECRET_ACCESS_KEY }}
 
-      - run: pulumi config set --path aip_config.image_tag ${{ env.VERSION_TAG }} --stack main
+      - name: pulumi_set_tag
+        run: pulumi config set --path aip_config.image_tag ${{ env.VERSION_TAG }} --stack main
         working-directory: deploy/aip
 
       - uses: pulumi/actions@v6
