@@ -5,6 +5,8 @@ on:
       - closed
     branches:
       - main
+    paths-ignore:
+      - deploy/**/*
 jobs:
   build_aip_image:
     env:
@@ -82,7 +84,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         run: |-
-          gh release create ${{ env.VERSION_TAG }} -n "Release version image available: ${{ env.ECR_REPO }}:${{ env.VERSION_TAG }}"
+          gh release create ${{ env.VERSION_TAG }} -t ${{ env.VERSION_TAG }} -n "Release version image available: ${{ env.ECR_REPO }}:${{ env.VERSION_TAG }}"
+
+      # Deployment
 
       - name: configuer_deployer_creds
         uses: aws-actions/configure-aws-credentials@v4
@@ -97,10 +101,49 @@ jobs:
 
       - uses: pulumi/actions@v6
         with:
-          command: preview
+          command: up
           stack-name: main
           comment-on-pr: true
           work-dir: deploy/aip
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
         env:
           PULUMI_CONFIG_PASSPHRASE: ""
+
+      - name: discord_notify_hook
+        uses: stegzilla/discord-notify@v2
+        with:
+          webhook_url: ${{ secrets.DEV_CHANNEL_DISCORD_WEBHOOK }}
+          title: "AIP Version: ${{ env.VERSION_TAG }} Deployed"
+          message: "**${{ github.event.pull_request.title }}**\n**Creator:** ${{ github.event.pull_request.user.login }}\n${{ github.event.pull_request.html_url }}"
+          include_image: true
+          avatar_url: https://avatars.githubusercontent.com/u/196731666?s=48&v=4
+          username: Graze Deploy Bot
+          colour: "#0090ff"
+
+      - name: commit_and_push
+        id: commit_and_push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        working-directory: deploy/aip
+        run: |
+          git config --global user.name "bgroupe"
+          git config --global user.email "casey@bgroupe.org"
+
+          BRANCH=deploy-main-${{ env.VERSION_TAG }}-${{github.run_number}}
+
+          git checkout -b $BRANCH
+          git add Pulumi.${{ inputs.stack }}.yaml
+          git commit -a -m "[auto] deploy-aip-pipeline"
+
+          git push origin -u HEAD
+          gh label create "deploy:main" --force
+          gh label create "image:${{ env.VERSION_TAG }}" --force
+          gh pr create  --title "[auto] deploy AIP: main-${{env.VERSION_TAG}}-${{ github.run_number }}" \
+            --body "[auto] triggered by upstream PR graze-social/aip#${{ github.event.pull_request.number }}" \
+            -l deploy:main \
+            -l image:${{ env.VERSION_TAG }} \
+            -l automerge \
+            --base main \
+            --head $BRANCH
+
+          gh pr merge -d -m --admin
