@@ -6,7 +6,7 @@ config:
     enable_init_containers: true
     ssl_cert_arn: arn:aws:acm:us-east-1:715841359524:certificate/7000ee41-29cf-47fa-8a25-63505da74280
     extra_env:
-      DEBUG: "false"
+      DEBUG: "true"
       TELEGRAF_HOST: telegraf.graze-system.svc.cluster.local
       TELEGRAF_PORT: "8125"
       EXTERNAL_HOSTNAME: auth.m.graze.social
