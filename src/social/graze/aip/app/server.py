@@ -257,10 +257,8 @@ async def start_web_server(settings: Optional[Settings] = None):
             integrations=[AioHttpIntegration()],
         )
 
-    loop = asyncio.get_event_loop()
-
     app = web.Application(
-        loop=loop, middlewares=[cors_middleware, statsd_middleware, sentry_middleware]
+        middlewares=[cors_middleware, statsd_middleware, sentry_middleware]
     )
 
     app[SettingsAppKey] = settings
