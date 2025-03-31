@@ -1,31 +1,22 @@
 {% extends "base.html" %}
+
 {% block content %}
-<header>
-    <hgroup>
-        <h1>AIP</h1>
-        <p>The Graze Social Authentication, Identity, and Permissions Server</p>
-    </hgroup>
-</header>
-<main>
-    <section>
-        <h2>Login</h2>
-        <form method="post" action="/auth/atproto">
-          <fieldset>
-            <input type="text" name="subject" {% if subject %}value="{{ subject }}"{% else %}placeholder="@you.bsky.social" {% endif %} aria-label="Handle" {% if error_message %} aria-invalid="true" aria-describedby="subject-error"{% endif %}  required=required>
-            <input type="text" name="destination" {% if destination %}value="{{ destination }}"{% else %}placeholder="https://graze.social/auth/callback" {% endif %} aria-label="Handle" {% if error_message %} aria-invalid="true" aria-describedby="destination-error"{% endif %}  required=required>
-            {% if error_message %}
-            <small id="subject-error" class="pico-text-red-450">{{ error_message }}</small>
-            {% endif %}
-          </fieldset>
-          <button type="submit">Submit</button>
-            <fieldset>
-              <label for="terms">
-                <input type="checkbox" role="switch" id="terms" name="terms">
-                I agree to the
-                <a href="#" onclick="event.preventDefault()">Privacy Policy and Terms of Service</a>
-              </label>
-            </fieldset>
-          </form>
-    </section>
-</main>
+<div class="login-container">
+    {% if svg_logo %}
+        <div class="logo">
+            <img alt="Company Logo" src="{{ svg_logo|safe }}">
+        </div>
+    {% endif %}
+    
+    {% if brand_name %}
+        <h1>{{ brand_name }}</h1>
+    {% endif %}
+
+    <label style="font-size: 1rem;">Bluesky/ATProto Username</label>
+    <form class="login-form" method="post" action="/auth/atproto">
+        <input type="text" name="subject" placeholder="user.bsky.social" required />
+        <input type="hidden" name="destination" value="{{ destination }}">
+        <button type="submit">Login</button>
+    </form>
+</div>
 {% endblock %}

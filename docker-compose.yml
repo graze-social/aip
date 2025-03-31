@@ -53,9 +53,14 @@ services:
       VALKEY_URL: redis://valkey:6379/0
       DEBUG: "true"
       WORKER_ID: "dev1"
+      ACTIVE_SIGNING_KEYS: '["01JNEKAHBPFQYJX3RS7HH7W2RY"]'
+      JSON_WEB_KEYS: /app/signing_keys.json
     ports:
       - "8080:8080"
       - "5100:5100"
+    volumes:
+      - .:/app  # Mount local directory to container
+      - /app/.venv  # Preserve virtual environment
     # TODO: move to Tilt-based debugging
     # volumes:
     #   - .:/app
