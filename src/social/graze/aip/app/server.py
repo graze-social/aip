@@ -153,7 +153,7 @@ async def background_tasks(app):
 
 @web.middleware
 async def cors_middleware(request: web.Request, handler):
-    settings = Settings()  # type: ignore
+    settings = request.app[SettingsAppKey]
     allowed_domains = settings.allowed_domains.split(",")  # Convert to list
     allowed_origin_pattern = re.compile(
         "|".join(
