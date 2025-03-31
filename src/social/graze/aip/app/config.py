@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
 
     debug: bool = False
+    allowed_domains: str = "https://www.graze.social, https://sky-feeder-git-astro-graze.vercel.app"
 
     http_port: int = Field(alias="port", default=5100)
 
