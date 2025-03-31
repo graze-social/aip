@@ -71,6 +71,15 @@ class Settings(BaseSettings):
     statsd_port: int = Field(alias="TELEGRAF_PORT", default=8125)
     statsd_prefix: str = "aip"
 
+    #Styling Settings for login page:
+    svg_logo: str = "https://www.graze.social/logo.svg"
+    brand_name: str = "Graze"
+    destination: str = "https://graze.social/auth/callback"
+    background_from: str = "#0588f0"
+    background_to: str = "#5eb1ef"
+    text_color: str = "#FFFFFF"
+    form_color: str = "#FFFFFF"
+
     @field_validator("json_web_keys", mode="before")
     @classmethod
     def decode_json_web_keys(cls, v) -> jwk.JWKSet:

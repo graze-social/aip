@@ -29,7 +29,6 @@ from social.graze.aip.model.handles import Handle, upsert_handle_stmt
 from social.graze.aip.model.oauth import OAuthRequest, OAuthSession
 from social.graze.aip.resolve.handle import resolve_subject
 
-
 def generate_pkce_verifier() -> Tuple[str, str]:
     pkce_token = secrets.token_urlsafe(80)
 

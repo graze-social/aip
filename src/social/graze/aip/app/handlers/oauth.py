@@ -29,6 +29,17 @@ from social.graze.aip.model.oauth import OAuthSession
 logger = logging.getLogger(__name__)
 
 
+def context_vars(settings):
+    return {
+        "svg_logo": settings.svg_logo,
+        "brand_name": settings.brand_name,
+        "destination": settings.destination,
+        "background_from": settings.background_from,
+        "background_to": settings.background_to,
+        "text_color": settings.text_color,
+        "form_color": settings.form_color,
+    }
+
 class ATProtocolOAuthClientMetadata(BaseModel):
     client_id: str
     dpop_bound_access_tokens: bool
@@ -49,12 +60,14 @@ class ATProtocolOAuthClientMetadata(BaseModel):
 
 
 async def handle_atproto_login(request: web.Request):
+    settings = request.app[SettingsAppKey]
     return await aiohttp_jinja2.render_template_async(
-        "atproto_login.html", request, context={}
+        "atproto_login.html", request, context=context_vars(settings)
     )
 
 
 async def handle_atproto_login_submit(request: web.Request):
+    settings = request.app[SettingsAppKey]
     data = await request.post()
     subject: Optional[str] = data.get("subject", None)  # type: ignore
     destination: Optional[str] = data.get("destination", None)  # type: ignore
@@ -63,10 +76,9 @@ async def handle_atproto_login_submit(request: web.Request):
         return await aiohttp_jinja2.render_template_async(
             "atproto_login.html",
             request,
-            context={"error_message": "No subject provided"},
+            context=dict(**context_vars(settings), **{"error_message": "No subject provided"}),
         )
 
-    settings = request.app[SettingsAppKey]
     http_session = request.app[SessionAppKey]
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     statsd_client = request.app[TelegrafStatsdClientAppKey]
@@ -89,7 +101,7 @@ async def handle_atproto_login_submit(request: web.Request):
         return await aiohttp_jinja2.render_template_async(
             "atproto_login.html",
             request,
-            context={"error_message": str(e)},
+            context=dict(**context_vars(settings), **{"error_message": str(e)}),
         )
 
     raise web.HTTPFound(str(redirect_destination))

@@ -5,11 +5,82 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <title>Graze Social AIP</title>
+    <title>{% block title %}Graze Social AIP{% endblock %}</title>
     <meta name="description" content="Authentication, Identity, and Permissions Server" />
 
-    <link rel="stylesheet" href="/static/pico.classless.blue.css" />
-    <link rel="stylesheet" href="/static/pico.colors.min.css" />
+    <style>
+        :root {
+            --background-from: {{ background_from }};
+            --background-to: {{ background_to }};
+            --text-color: {{ text_color }};
+            --form-color: {{ form_color }};
+        }
+
+        body {
+            background: linear-gradient(to bottom, var(--background-from), var(--background-to));
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .login-container {
+            text-align: center;
+            padding: 3rem;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .logo img {
+            width: 100px;
+            height: 100px;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: bold;
+        }
+
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            align-items: center;  /* Ensures button and inputs are centered */
+        }
+
+        .login-form input {
+            font-size: 1.5rem;
+            background-color: var(--form-color);
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .login-form button {
+            font-size: 1.5rem;
+            background-color: var(--text-color);
+            color: var(--background-from);
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 80%;  /* Ensures button has a width but remains centered */
+            text-align: center;
+        }
+
+        .login-form button:hover {
+            opacity: 0.9;
+        }
+    </style>
+
 </head>
 
 <body>
