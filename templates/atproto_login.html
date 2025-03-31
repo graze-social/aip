@@ -4,7 +4,7 @@
 <div class="login-container">
     {% if svg_logo %}
         <div class="logo">
-            <img alt="Graze" src="{{ svg_logo|safe }}">
+            <img alt="Company Logo" src="{{ svg_logo|safe }}">
         </div>
     {% endif %}
     
@@ -12,12 +12,10 @@
         <h1>{{ brand_name }}</h1>
     {% endif %}
 
-    <p style="font-size: 1.5rem;">Bluesky/ATProto Username</p>
+    <label style="font-size: 1rem;">Bluesky/ATProto Username</label>
     <form class="login-form" method="post" action="/auth/atproto">
         <input type="text" name="subject" placeholder="user.bsky.social" required />
         <input type="hidden" name="destination" value="{{ destination }}">
-        <br />
-        <br />
         <button type="submit">Login</button>
     </form>
 </div>
