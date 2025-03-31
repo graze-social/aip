@@ -2,7 +2,7 @@ encryptionsalt: v1:aaZCYIY4IfY=:v1:j2OSpCOqaH9qEwYq:9v01FZYOm1wSztPnKavSTqKNH0pr
 config:
   aip:k8s_context: arn:aws:eks:us-east-1:715841359524:cluster/graze-01
   aip:aip_config:
-    image_tag: v0.1.12
+    image_tag: v0.1.13
     enable_init_containers: true
     ssl_cert_arn: arn:aws:acm:us-east-1:715841359524:certificate/7000ee41-29cf-47fa-8a25-63505da74280
     extra_env:
