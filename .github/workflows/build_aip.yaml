@@ -114,9 +114,10 @@ jobs:
         uses: stegzilla/discord-notify@v2
         with:
           webhook_url: ${{ secrets.DEV_CHANNEL_DISCORD_WEBHOOK }}
-          title: "AIP Version: ${{ env.VERSION_TAG }} Deployed"
+          title: "AIP ${{ env.VERSION_TAG }} Deployed"
           message: "**${{ github.event.pull_request.title }}**\n**Creator:** ${{ github.event.pull_request.user.login }}\n${{ github.event.pull_request.html_url }}"
           include_image: true
+          custom_image_url: https://avatars.githubusercontent.com/u/196731666?s=400&v=4
           avatar_url: https://avatars.githubusercontent.com/u/196731666?s=48&v=4
           username: Graze Deploy Bot
           colour: "#0090ff"
@@ -133,7 +134,7 @@ jobs:
           BRANCH=deploy-main-${{ env.VERSION_TAG }}-${{github.run_number}}
 
           git checkout -b $BRANCH
-          git add Pulumi.${{ inputs.stack }}.yaml
+          git add Pulumi.main.yaml
           git commit -a -m "[auto] deploy-aip-pipeline"
 
           git push origin -u HEAD
