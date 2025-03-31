@@ -12,6 +12,7 @@ import jinja2
 from aiohttp import web
 import aiohttp_jinja2
 import aiohttp
+import aiohttp_cors
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
@@ -63,11 +64,12 @@ from social.graze.aip.model.health import HealthGauge
 
 logger = logging.getLogger(__name__)
 allowed_origin_pattern = re.compile(
-    r"https://(www\.)?graze\.social|"
-    r"https://(www\.)?sky-feeder-git-astro-graze\.vercel\.app|"
-    r"http://localhost:\d+|"
-    r"http://127\.0\.0\.1:\d+"
+    r"https:\/\/(www\.)?graze\.social"
+    r"https:\/\/(www\.)?sky-feeder-git-astro-graze\.vercel\.app"
+    r"http:\/\/localhost\:\d+"
+    r"http:\/\/127\.0\.0\.1\:\d+"
 )
+
 
 async def handle_index(request: web.Request):
     return await aiohttp_jinja2.render_template_async("index.html", request, context={})
@@ -152,9 +154,10 @@ async def background_tasks(app):
 
 @web.middleware
 async def cors_middleware(request: web.Request, handler):
-    origin = request.headers.get("Origin")
+    origin: Optional[str] = request.headers.get("Origin")
+
     headers = {
-        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Credentials": "false",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
     }
@@ -163,26 +166,24 @@ async def cors_middleware(request: web.Request, handler):
         headers["Access-Control-Allow-Origin"] = origin
 
         # Debug log to confirm middleware is being hit
-        print(f"[CORS] Handling request from {origin} for {request.method} {request.path}")
+        logger.debug(
+            f"[CORS] Handling request from {origin} for {request.method} {request.path}"
+        )
 
         if request.method == "OPTIONS":
-            print("[CORS] Returning early for OPTIONS request")
+            logger.debug("[CORS] Returning early for OPTIONS request")
             return web.Response(status=200, headers=headers)
 
     response = await handler(request)
 
-    # **Ensure CORS headers are applied to all responses, including redirects**
-    response.headers.update(headers)
+    # # **Ensure CORS headers are applied to all responses, including redirects**
+    for k, v in headers.items():
+        response.headers[k] = v
 
-    if origin and allowed_origin_pattern.match(origin):
-        response.headers["Access-Control-Allow-Origin"] = origin
-
-    # **If response is a redirect, ensure CORS headers are present**
-    if response.status in [301, 302]:
-        print("[CORS] Handling redirect response, adding CORS headers")
-        response.headers.update(headers)
+    logger.debug(f"[CORS] Modified access headers: {response.headers}")
 
     return response
+
 
 @web.middleware
 async def sentry_middleware(request: web.Request, handler):
@@ -244,6 +245,7 @@ async def shutdown(app):
     await app[RedisPoolAppKey].aclose()
     await app[TelegrafStatsdClientAppKey].close()
 
+
 async def start_web_server(settings: Optional[Settings] = None):
 
     if settings is None:
@@ -254,7 +256,12 @@ async def start_web_server(settings: Optional[Settings] = None):
             send_default_pii=True,
             integrations=[AioHttpIntegration()],
         )
-    app = web.Application(middlewares=[cors_middleware, statsd_middleware, sentry_middleware])
+
+    loop = asyncio.get_event_loop()
+
+    app = web.Application(
+        loop=loop, middlewares=[cors_middleware, statsd_middleware, sentry_middleware]
+    )
 
     app[SettingsAppKey] = settings
     app[HealthGaugeAppKey] = HealthGauge()
