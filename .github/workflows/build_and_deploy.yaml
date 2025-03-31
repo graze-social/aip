@@ -1,4 +1,4 @@
-name: Build AIP Service Image
+name: Build and Deploy AIP
 on:
   pull_request:
     types:
