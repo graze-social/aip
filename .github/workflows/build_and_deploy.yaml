@@ -1,4 +1,4 @@
-name: Build AIP Service Image
+name: Build and Deploy AIP
 on:
   pull_request:
     types:
@@ -8,7 +8,11 @@ on:
     paths-ignore:
       - deploy/**/*
 jobs:
-  build_aip_image:
+  build_and_deploy_aip:
+    name: build_and_deploy_aip
+    permissions:
+      contents: write
+      id-token: write
     env:
       AWS_REGION: us-east-1
       ECR_REPO: 715841359524.dkr.ecr.us-east-1.amazonaws.com/graze.social/aip
