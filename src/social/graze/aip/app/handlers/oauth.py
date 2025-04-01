@@ -22,6 +22,7 @@ from social.graze.aip.app.config import (
     SettingsAppKey,
     TelegrafStatsdClientAppKey,
 )
+from social.graze.aip.app.cors import get_cors_headers
 from social.graze.aip.atproto.oauth import oauth_complete, oauth_init, oauth_refresh
 from social.graze.aip.model.handles import Handle
 from social.graze.aip.model.oauth import OAuthSession
@@ -106,9 +107,9 @@ async def handle_atproto_login_submit(request: web.Request):
             request,
             context=dict(**context_vars(settings), **{"error_message": str(e)}),
         )
-
     raise web.HTTPFound(
-        str(redirect_destination), headers={"Allow-Access-Control-Origin": "*"}
+        str(redirect_destination),
+        headers=get_cors_headers(request.headers.get("Origin"), request.path, settings.debug),
     )
 
 

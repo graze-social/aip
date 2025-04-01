@@ -35,6 +35,7 @@ from social.graze.aip.app.config import (
     TelegrafStatsdClientAppKey,
     TickHealthTaskAppKey,
 )
+from social.graze.aip.app.cors import get_cors_headers
 from social.graze.aip.app.handlers.app_password import handle_internal_app_password
 from social.graze.aip.app.handlers.credentials import handle_internal_credentials
 from social.graze.aip.app.handlers.internal import (
@@ -154,61 +155,24 @@ async def background_tasks(app):
 @web.middleware
 async def cors_middleware(request: web.Request, handler):
     settings = request.app[SettingsAppKey]
-    # [HOLD]
-    allowed_domains = settings.allowed_domains.split(",")  # Convert to list
-    allowed_origin_pattern = re.compile(
-        "|".join(
-            [re.escape(domain.strip()) for domain in allowed_domains if domain.strip()]
-        )
-    )
-    # [Hold, Test]
-    allowed_origin_pattern = r"^((?:http|https):\/\/)?(?:.*\.graze\.social|.*\.sky-feeder-git-astro-graze\.vercel\.app)(?::\d+)?$"
 
-    # If in debug mode, allow localhost variations
-    logger.debug("{settings.debug}")
-    if settings.debug:
-        allowed_origin_pattern = r"^((?:http|https):\/\/)?(?:localhost|127\.0\.0\.1|.*\.graze\.social|.*\.sky-feeder-git-astro-graze\.vercel\.app)(?::\d+)?$"
-        # [HOLD]:
-        # debug_domains = [r"http:\/\/localhost:\d+", r"http://127\.0\.0\.1:\d+"]
-        # allowed_origin_pattern = re.compile(
-        #     f"{allowed_origin_pattern.pattern}|{'|'.join(debug_domains)}"
-        # )
+    origin = request.headers.get("Origin")
+    host = request.headers.get("Host")
+    origin_value = origin if origin else host
+    path = request.path
 
-    # Filter by host or origin
-    origin: Optional[str] = request.headers.get("Origin")
-    host: Optional[str] = request.headers.get("Host")
-    origin_value: Optional[str] = origin if origin else host
+    headers = get_cors_headers(origin_value, path, settings.debug)
 
-    headers = {
-        "Access-Control-Allow-Credentials": "false",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    }
-
-    logger.debug(f"origin_value: {origin_value}")
-
-    if origin_value and re.match(allowed_origin_pattern, origin_value):
-        headers["Access-Control-Allow-Origin"] = origin_value
-
-        # Debug log to confirm middleware is being hit
-        logger.debug(
-            f"[CORS] Handling request from {origin_value} for {request.method} {request.path}"
-        )
-
-        if request.method == "OPTIONS":
-            logger.debug("[CORS] Returning early for OPTIONS request")
-            return web.Response(status=200, headers=headers)
+    if request.method == "OPTIONS":
+        logger.debug(f"[CORS] Returning early for OPTIONS request: {path}")
+        return web.Response(status=200, headers=headers)
 
     response = await handler(request)
 
-    # # **Ensure CORS headers are applied to all responses, including redirects**
     for k, v in headers.items():
         response.headers[k] = v
 
-    logger.debug(f"[CORS] Modified access headers: {response.headers}")
-
     return response
-
 
 @web.middleware
 async def sentry_middleware(request: web.Request, handler):
