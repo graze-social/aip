@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 from urllib.parse import urlparse
 
 def get_cors_headers(
