@@ -35,6 +35,7 @@ from social.graze.aip.app.config import (
     TelegrafStatsdClientAppKey,
     TickHealthTaskAppKey,
 )
+from social.graze.aip.app.cors import get_cors_headers
 from social.graze.aip.app.handlers.app_password import handle_internal_app_password
 from social.graze.aip.app.handlers.credentials import handle_internal_credentials
 from social.graze.aip.app.handlers.internal import (
@@ -155,51 +156,13 @@ async def background_tasks(app):
 async def cors_middleware(request: web.Request, handler):
     settings = request.app[SettingsAppKey]
 
-    origin: Optional[str] = request.headers.get("Origin")
-    host: Optional[str] = request.headers.get("Host")
-    origin_value: Optional[str] = origin if origin else host
+    origin = request.headers.get("Origin")
+    host = request.headers.get("Host")
+    origin_value = origin if origin else host
     path = request.path
 
-    headers = {
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": (
-            "Keep-Alive, User-Agent, X-Requested-With, "
-            "If-Modified-Since, Cache-Control, Content-Type, "
-            "Authorization, X-Subject, X-Service"
-        ),
-        "Vary": "Origin"
-    }
+    headers = get_cors_headers(origin_value, path, settings.debug)
 
-    # Explicit list of allowed production origins (with exact scheme and host)
-    allowed_origins = {
-        "https://graze.social",
-        "https://www.graze.social",
-        "https://sky-feeder-git-astro-graze.vercel.app",
-    }
-
-    # Debug environments allow any port
-    allowed_debug_hosts = {
-        "localhost",
-        "127.0.0.1",
-    }
-
-    logger.debug(f"origin_value: {origin_value}, path: {path}")
-
-    # Special rule for /auth/ routes
-    if path.startswith("/auth/"):
-        headers["Access-Control-Allow-Origin"] = "*"
-    elif origin_value:
-        parsed = urlparse(origin_value)
-        base = f"{parsed.scheme}://{parsed.hostname}" if parsed.scheme and parsed.hostname else origin_value
-
-        if base in allowed_origins:
-            headers["Access-Control-Allow-Origin"] = origin_value
-        elif settings.debug and parsed.hostname in allowed_debug_hosts:
-            headers["Access-Control-Allow-Origin"] = origin_value
-        else:
-            logger.debug(f"[CORS] Denying CORS for origin: {origin_value}")
-
-    # Handle preflight
     if request.method == "OPTIONS":
         logger.debug(f"[CORS] Returning early for OPTIONS request: {path}")
         return web.Response(status=200, headers=headers)
@@ -209,9 +172,7 @@ async def cors_middleware(request: web.Request, handler):
     for k, v in headers.items():
         response.headers[k] = v
 
-    logger.debug(f"[CORS] Final headers: {response.headers}")
     return response
-
 
 @web.middleware
 async def sentry_middleware(request: web.Request, handler):
