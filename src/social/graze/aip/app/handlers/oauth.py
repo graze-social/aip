@@ -40,6 +40,7 @@ def context_vars(settings):
         "form_color": settings.form_color,
     }
 
+
 class ATProtocolOAuthClientMetadata(BaseModel):
     client_id: str
     dpop_bound_access_tokens: bool
@@ -76,7 +77,9 @@ async def handle_atproto_login_submit(request: web.Request):
         return await aiohttp_jinja2.render_template_async(
             "atproto_login.html",
             request,
-            context=dict(**context_vars(settings), **{"error_message": "No subject provided"}),
+            context=dict(
+                **context_vars(settings), **{"error_message": "No subject provided"}
+            ),
         )
 
     http_session = request.app[SessionAppKey]
@@ -104,7 +107,9 @@ async def handle_atproto_login_submit(request: web.Request):
             context=dict(**context_vars(settings), **{"error_message": str(e)}),
         )
 
-    raise web.HTTPFound(str(redirect_destination))
+    raise web.HTTPFound(
+        str(redirect_destination), headers={"Allow-Access-Control-Origin": "*"}
+    )
 
 
 async def handle_atproto_callback(request: web.Request):
