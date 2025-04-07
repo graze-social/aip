@@ -170,3 +170,5 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 scratch/
+.DS_Store
+**/*/.DS_Store
