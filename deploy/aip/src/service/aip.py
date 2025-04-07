@@ -1,5 +1,5 @@
 from typing import Mapping, Optional, Sequence, TypedDict
-from pulumi import ComponentResource, get_stack, ResourceOptions, Input
+from pulumi import ComponentResource, get_stack, ResourceOptions, Input, log as logger
 import pulumi_kubernetes as k8s
 
 
@@ -32,6 +32,7 @@ class AIPRequiredEnv(TypedDict):
 
 class AIPConfig(TypedDict):
     """A convenience object for controlling key values of a given deployment"""
+
     # Toggle init containers
     enable_init_containers: bool
     # The entire image slug
@@ -127,7 +128,9 @@ class AIPService(ComponentResource):
                     # Note that the backend talks over HTTP.
                     "service.beta.kubernetes.io/aws-load-balancer-type": "nlb",
                     # TODO: Fill in with the ARN of your certificate.
-                    "service.beta.kubernetes.io/aws-load-balancer-ssl-cert": self.cfg["ssl_cert_arn"],
+                    "service.beta.kubernetes.io/aws-load-balancer-ssl-cert": self.cfg[
+                        "ssl_cert_arn"
+                    ],
                     # Run TLS only on the port named "https" below.
                     "service.beta.kubernetes.io/aws-load-balancer-ssl-ports": "https",
                 },
@@ -178,6 +181,7 @@ class AIPService(ComponentResource):
                 "image_pull_policy": "Always",
                 "ports": [
                     {"container_port": 8080, "name": "http", "protocol": "TCP"},
+                    # TODO: I think this port is superfluous and can be removed
                     {"container_port": 5100, "name": "http-alt", "protocol": "TCP"},
                 ],
                 "env_from": self.env_from(),
@@ -272,7 +276,7 @@ class AIPService(ComponentResource):
 
         return corev1.Secret(
             secret_name,
-            metadata={"name": secret_name, "namespace": self.namespace},
+            metadata={"namespace": self.namespace},
             string_data=string_data,
             opts=ResourceOptions(parent=self),
         )
@@ -281,7 +285,7 @@ class AIPService(ComponentResource):
         secret_name = f"aip-extra-env-{STACK}"
         return corev1.Secret(
             secret_name,
-            metadata={"name": secret_name, "namespace": self.namespace},
+            metadata={"namespace": self.namespace},
             # TODO: cast all values as strings
             string_data=self.cfg["extra_env"],
             opts=ResourceOptions(parent=self),
@@ -291,8 +295,9 @@ class AIPService(ComponentResource):
         secret_name = f"aip-signing-keys-json-{STACK}"
         return corev1.Secret(
             secret_name,
-            metadata={"name": secret_name, "namespace": self.namespace},
+            metadata={"namespace": self.namespace},
             string_data={"signing_keys.json": self.cfg["signing_keys_json_string"]},
+            opts=ResourceOptions(parent=self)
         )
 
     # alias
@@ -307,7 +312,12 @@ class AIPService(ComponentResource):
 
     @property
     def image(self) -> str:
-        # if self.cfg["image_slug"]:
-        #     return self.cfg["image_slug"]
-        # else:
-        return f"{IMAGE_REPO}:{self.cfg['image_tag']}"
+        # TODO: try w/rescue key error
+        try:
+            if self.cfg["image_slug"]:
+                return self.cfg["image_slug"]
+            else:
+                return f"{IMAGE_REPO}:{self.cfg['image_tag']}"
+        except KeyError:
+            logger.warn("no `image_slug` present on config, defaulting to `image_tag`")
+            return f"{IMAGE_REPO}:{self.cfg['image_tag']}"
