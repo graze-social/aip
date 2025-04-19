@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 import logging
 from typing import (
@@ -102,14 +103,16 @@ async def auth_token_helper(
         if auth_token_session_group is None:
             raise AuthenticationException.jwt_session_group_missing()
 
+        now = datetime.now(timezone.utc)
+
         async with database_session.begin():
 
             # 1. Get the OAuthSession from the database and validate it.
 
             oauth_session_stmt = select(OAuthSession).where(
                 OAuthSession.guid == auth_token_subject,
-                OAuthSession.session_group == auth_token_session_group,
-            )
+                OAuthSession.access_token_expires_at > now,
+            ).order_by(OAuthSession.access_token_expires_at.desc())
             oauth_session: Optional[OAuthSession] = (
                 await database_session.scalars(oauth_session_stmt)
             ).first()
