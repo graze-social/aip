@@ -1,12 +1,7 @@
 name: Build and Deploy AIP
 on:
-  pull_request:
-    types:
-      - closed
-    branches:
-      - main
-    paths-ignore:
-      - deploy/**/*
+  discussion_comment:
+
 jobs:
   build_and_deploy_aip:
     name: build_and_deploy_aip
