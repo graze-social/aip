@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     #Styling Settings for login page:
     svg_logo: str = "https://www.graze.social/logo.svg"
     brand_name: str = "Graze"
-    destination: str = "https://graze.social/auth/callback"
+    destination: str = "https://graze.social/app/auth/callback"
     background_from: str = "#0588f0"
     background_to: str = "#5eb1ef"
     text_color: str = "#FFFFFF"
