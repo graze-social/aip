@@ -1,22 +1,57 @@
-{% extends "base.html" %}
-
-{% block content %}
-<div class="login-container">
-    {% if svg_logo %}
-        <div class="logo">
-            <img alt="Company Logo" src="{{ svg_logo|safe }}">
-        </div>
-    {% endif %}
-    
-    {% if brand_name %}
-        <h1>{{ brand_name }}</h1>
-    {% endif %}
-
-    <label style="font-size: 1rem;">Bluesky/ATProto Username</label>
-    <form class="login-form" method="post" action="/auth/atproto">
-        <input type="text" name="subject" placeholder="user.bsky.social" required />
-        <input type="hidden" name="destination" value="{{ destination }}">
-        <button type="submit">Login</button>
-    </form>
-</div>
+{% extends "base.html" %} {% block content %}
+<main class="flex flex-col min-h-screen relative">
+  <div
+    class="flex-1 flex justify-center items-center h-full bg-gradient-to-tl from-blue-10 to-blue-8 dark:from-bluedark-10 dark:to-bluedark-8"
+  >
+    <div class="px-4 flex flex-col gap-6 text-slate-normal">
+      <div class="flex flex-col items-center gap-1 px-6">
+        {% if svg_logo %}
+        <img
+          alt="Graze"
+          class="w-32 h-32 lg:w-48 lg:h-48"
+          src="{{ svg_logo|safe }}"
+        />
+        {% endif %} {% if brand_name %}
+        <h1
+          class="scroll-m-20 text-4xl font-extrabold tracking-tight m-0 text-center text-blue-1 dark:text-bluedark-1 lg:text-6xl"
+          style="line-height: 1.2"
+        >
+          {{ brand_name }}
+        </h1>
+        {% endif %}
+      </div>
+      <div class="flex-1 flex flex-col items-center pb-20">
+        <form
+          class="px-6 max-w-md w-full flex flex-col items-center gap-4"
+          method="post"
+          action="/auth/atproto"
+        >
+          <div class="flex flex-col gap-4">
+            <label
+              for="username"
+              class="text-center text-sm font-semibold leading-none text-blue-4 dark:text-bluedark-4"
+              >Bluesky/Atproto Username</label
+            ><input
+              data-1p-ignore="true"
+              class="text-slate-normal relative flex h-10 w-full rounded-md px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-slate-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm border border-blue-8 dark:border-bluedark-8 hover:border-blue-9 dark:hover:border-bluedark-9 bg-blue-subtle text-center max-w-xs lg:w-[50vw] !text-lg !placeholder:text-lg !h-12"
+              placeholder="user.bsky.social"
+              id="username"
+              autocomplete="username"
+              name="subject"
+            />
+          </div>
+          <input type="hidden" name="destination" value="{{ destination }}" />
+          <div class="flex justify-end gap-4">
+            <button
+              type="submit"
+              class="inline-flex flex-shrink-0 items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 aria-[disabled]:pointer-events-none aria-[disabled]:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 aria-[expanded=true]:bg-slate-action h-11 rounded-md px-8 relative text-blue-normal border border-blue-normal bg-blue-4 dark:bg-bluedark-4 hover:bg-blue-3 dark:hover:bg-bluedark-3 data-[state=on]:bg-bluedark-3"
+            >
+              <span class="inline-flex items-center gap-2">Login</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</main>
 {% endblock %}
