@@ -1,0 +1,47 @@
+version: '3.8'
+volumes:
+  aip_db:
+  aip_ts:
+services:
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/python:3.13
+    volumes:
+      - ..:/workspace:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: sleep infinity
+    environment:
+      - HTTP_PORT=5100
+      - TZ=America/New_York
+      - DATABASE_URL=postgres://postgres:password@postgres/aip
+      - JSON_WEB_KEYS=/workspace/signing_keys.json
+      
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    volumes:
+      - aip_db:/var/lib/postgresql/data
+      - ./postgres_init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_PASSWORD=password
+    healthcheck:
+      test: 'pg_isready -U postgres'
+      interval: 500ms
+      timeout: 10s
+      retries: 20
+
+  telegraf:
+    image: docker.io/telegraf:latest
+    volumes:
+        - ./telegraf.conf:/etc/telegraf/telegraf.conf
+
+  valkey:
+    image: valkey/valkey:8-alpine
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    restart: unless-stopped
+    environment:
+      - TS_STATE_DIR=/var/run/tailscale
+      - TS_EXTRA_ARGS=--advertise-tags=tag:aip
+    volumes:
+      - aip_ts:/var/run/tailscale

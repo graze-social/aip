@@ -1,0 +1,12 @@
+{
+	"dockerComposeFile": [
+		"docker-compose.yml"
+	],
+	"service": "devcontainer",
+	"workspaceFolder": "/workspace",
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {}
+	},
+	"postCreateCommand": "/workspace/.devcontainer/post-create.sh",
+	"forwardPorts": [5100]
+}

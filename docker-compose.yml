@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:17
+    container_name: aip_db
+    restart: always
+    environment:
+      POSTGRES_USER: aip
+      POSTGRES_PASSWORD: aip_password
+      POSTGRES_DB: aip_db
+    volumes:
+      - aip_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aip -d aip_db"]
+      interval: 5s
+      retries: 5
+      timeout: 3s
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: aip_valkey
+    restart: always
+    ports:
+      - "6379:6379"
+
+  telegraf:
+    image: telegraf:latest
+    container_name: aip_telegraf
+    restart: always
+    depends_on:
+      - db
+      - valkey
+    ports:
+      - "8125:8125/udp"
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf
+
+  aip:
+    build: .
+    container_name: aip_service
+    command: ["pdm", "run", "aipserver"]
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+      telegraf:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+asyncpg://aip:aip_password@db:5432/aip_db
+      VALKEY_URL: redis://valkey:6379/0
+      DEBUG: "true"
+      WORKER_ID: "dev1"
+      ACTIVE_SIGNING_KEYS: '["01JNEKAHBPFQYJX3RS7HH7W2RY"]'
+      JSON_WEB_KEYS: /app/signing_keys.json
+    ports:
+      - "8080:8080"
+      - "5100:5100"
+    volumes:
+      - .:/app  # Mount local directory to container
+      - /app/.venv  # Preserve virtual environment
+    # TODO: move to Tilt-based debugging
+    # volumes:
+    #   - .:/app
+    #   - /app/.venv
+
+volumes:
+  aip_db_data:
+  influxdb_data:
