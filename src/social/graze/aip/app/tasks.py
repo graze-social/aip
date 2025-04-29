@@ -167,6 +167,8 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
 
                     try:
                         async with database_session.begin():
+                            if isinstance(session_group, bytes):
+                                session_group = session_group.decode()
                             oauth_session_stmt = select(OAuthSession).where(
                                 OAuthSession.session_group == session_group
                             )
