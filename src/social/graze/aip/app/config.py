@@ -182,6 +182,29 @@ class Settings(BaseSettings):
     Redis queue name for App Password refresh tasks.
     Set with REFRESH_QUEUE_APP_PASSWORD environment variable.
     """
+    
+    # Token expiration settings
+    app_password_access_token_expiry: int = 720  # 12 minutes
+    """
+    Expiration time in seconds for app password access tokens.
+    Set with APP_PASSWORD_ACCESS_TOKEN_EXPIRY environment variable.
+    Default: 720 (12 minutes)
+    """
+    
+    app_password_refresh_token_expiry: int = 7776000  # 90 days
+    """
+    Expiration time in seconds for app password refresh tokens.
+    Set with APP_PASSWORD_REFRESH_TOKEN_EXPIRY environment variable.
+    Default: 7776000 (90 days)
+    """
+    
+    token_refresh_before_expiry_ratio: float = 0.8
+    """
+    Ratio of token lifetime to wait before refreshing.
+    For example, 0.8 means tokens are refreshed after 80% of their lifetime.
+    Set with TOKEN_REFRESH_BEFORE_EXPIRY_RATIO environment variable.
+    Default: 0.8
+    """
 
     default_destination: str = "https://localhost:5100/auth/atproto/debug"
     """

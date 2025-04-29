@@ -84,6 +84,7 @@ async def oauth_init(
     statsd_client: TelegrafStatsdClient,
     http_session: ClientSession,
     database_session_maker: async_sessionmaker[AsyncSession],
+    redis_session: redis.Redis,
     subject: str,
     destination: Optional[str] = None,
 ):
@@ -257,9 +258,13 @@ async def oauth_init(
     if par_request_uri is None:
         raise Exception("No PAR request URI found")
 
-    # TODO: Use the following redis command to implement a 120 second lock on the resolved subject.
-    #       SET "login:{resolved_handle.did}" "1" NX EX 120
-    #       https://redis.io/docs/latest/commands/set/
+    # Implement a 120 second lock on the resolved subject to prevent duplicate login attempts
+    login_lock_key = f"login:{resolved_handle.did}"
+    try:
+        lock_acquired = await redis_session.set(login_lock_key, "1", nx=True, ex=120)
+        
+        if not lock_acquired:
+            raise Exception("Another login attempt for this user is in progress")
 
     # Store request data for later verification
     async with database_session_maker() as database_session:
@@ -288,6 +293,10 @@ async def oauth_init(
             )
 
             await database_session.commit()
+    
+    finally:
+        # Release the lock when we're done with handle resolution and database operations
+        await redis_session.delete(login_lock_key)
 
     # Construct redirect URL with request URI
     parsed_authorization_endpoint = urlparse(authorization_endpoint)

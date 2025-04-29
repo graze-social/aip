@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert
 import sentry_sdk
 from social.graze.aip.model.app_password import AppPassword, AppPasswordSession
 from social.graze.aip.model.handles import Handle
-from social.graze.aip.app.config import APP_PASSWORD_REFRESH_QUEUE
+from social.graze.aip.app.config import APP_PASSWORD_REFRESH_QUEUE, Settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ async def populate_session(
     database_session_maker: async_sessionmaker[AsyncSession],
     redis_session: redis.Redis,
     subject_guid: str,
+    settings: Optional[Settings] = None,
 ) -> None:
     now = datetime.now(timezone.utc)
     async with database_session_maker() as database_session:
@@ -57,15 +58,17 @@ async def populate_session(
             start_over = False
             access_token: str | None = None
 
-            # TODO: Pull this from the access token JWT claims payload. Last time I looked, access tokens expire in
-            #       720 seconds (12 minutes).
-            access_token_expires_at = now + timedelta(0, 720)
+            # Use settings if provided, otherwise use defaults
+            access_token_expiry = settings.app_password_access_token_expiry if settings else 720
+            refresh_token_expiry = settings.app_password_refresh_token_expiry if settings else 7776000
+            
+            # TODO: Pull this from the access token JWT claims payload
+            access_token_expires_at = now + timedelta(0, access_token_expiry)
 
             refresh_token: str | None = None
 
-            # TODO: Pull this from the refresh token JWT claims payload. Last time I looked, refresh tokens expire in
-            #       7776000 seconds (90 days).
-            refresh_token_expires_at = now + timedelta(0, 7776000)
+            # TODO: Pull this from the refresh token JWT claims payload
+            refresh_token_expires_at = now + timedelta(0, refresh_token_expiry)
 
             # 4. If AppPasswordSession exists: refresh it, update row, and return
             if app_password_session is not None:
@@ -121,8 +124,8 @@ async def populate_session(
                     )
                     await database_session.execute(update_session_stmt)
 
-                    # TODO: Remove this hardcoded value.
-                    expires_in_mod = 720 * 0.8
+                    refresh_ratio = settings.token_refresh_before_expiry_ratio if settings else 0.8
+                    expires_in_mod = access_token_expiry * refresh_ratio
                     refresh_at = now + timedelta(0, expires_in_mod)
                     await redis_session.zadd(
                         APP_PASSWORD_REFRESH_QUEUE,
@@ -193,8 +196,8 @@ async def populate_session(
                     )
                     await database_session.execute(update_session_stmt)
 
-                    # TODO: Remove this hardcoded value.
-                    expires_in_mod = 720 * 0.8
+                    refresh_ratio = settings.token_refresh_before_expiry_ratio if settings else 0.8
+                    expires_in_mod = access_token_expiry * refresh_ratio
                     refresh_at = now + timedelta(0, expires_in_mod)
                     await redis_session.zadd(
                         APP_PASSWORD_REFRESH_QUEUE,

@@ -174,8 +174,6 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
                                 await database_session.scalars(oauth_session_stmt)
                             ).one()
 
-                            await database_session.commit()
-
                         await oauth_refresh(
                             settings,
                             http_session,
@@ -259,81 +257,87 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
 
             if worker_queue_count == 0 and global_queue_count > 0:
                 async with redis_session.pipeline() as redis_pipe:
-                    logger.debug(
-                        f"tick_task: processing {APP_PASSWORD_REFRESH_QUEUE} up to {int(now.timestamp())}"
-                    )
+                    try:
+                        logger.debug(
+                            f"tick_task: processing {APP_PASSWORD_REFRESH_QUEUE} up to {int(now.timestamp())}"
+                        )
 
-                    redis_pipe.zrangestore(
-                        worker_queue,
-                        APP_PASSWORD_REFRESH_QUEUE,
-                        0,
-                        int(now.timestamp()),
-                        num=5,
-                        offset=0,
-                        byscore=True,
-                    )
+                        redis_pipe.zrangestore(
+                            worker_queue,
+                            APP_PASSWORD_REFRESH_QUEUE,
+                            0,
+                            int(now.timestamp()),
+                            num=5,
+                            offset=0,
+                            byscore=True,
+                        )
 
-                    redis_pipe.zdiffstore(
-                        APP_PASSWORD_REFRESH_QUEUE,
-                        [APP_PASSWORD_REFRESH_QUEUE, worker_queue],
-                    )
+                        redis_pipe.zdiffstore(
+                            APP_PASSWORD_REFRESH_QUEUE,
+                            [APP_PASSWORD_REFRESH_QUEUE, worker_queue],
+                        )
 
-                    (zrangestore_res, zdiffstore_res) = await redis_pipe.execute()
-                    statsd_client.increment(
-                        "aip.task.app_password_refresh.work_queued",
-                        zrangestore_res,
-                        tag_dict={"worker_id": settings.worker_id},
-                    )
+                        (zrangestore_res, zdiffstore_res) = await redis_pipe.execute()
+                        statsd_client.increment(
+                            "aip.task.app_password_refresh.work_queued",
+                            zrangestore_res,
+                            tag_dict={"worker_id": settings.worker_id},
+                        )
+                    except Exception as e:
+                        sentry_sdk.capture_exception(e)
+                        logging.exception("error populating app password worker queue")
 
             tasks: List[Tuple[str, float]] = await redis_session.zrange(
                 worker_queue, 0, int(now.timestamp()), byscore=True, withscores=True
             )
 
-            for handle_guid, deadline in tasks:
+            if len(tasks) > 0:
+                for handle_guid, deadline in tasks:
 
-                logger.debug(
-                    "tick_task: processing guid %s deadline %s",
-                    handle_guid,
-                    deadline,
-                )
-
-                start_time = time()
-                try:
-                    await populate_session(
-                        http_session,
-                        database_session_maker,
-                        redis_session,
+                    logger.debug(
+                        "tick_task: processing guid %s deadline %s",
                         handle_guid,
+                        deadline,
                     )
 
-                except Exception as e:
-                    sentry_sdk.capture_exception(e)
-                    logging.exception("error processing guid %s", handle_guid)
-                    # TODO: Don't actually tag session_group because cardinality will be very high.
-                    statsd_client.increment(
-                        "aip.task.app_password_refresh.exception",
-                        1,
-                        tag_dict={
-                            "exception": type(e).__name__,
-                            "guid": handle_guid,
-                            "worker": settings.worker_id,
-                        },
-                    )
+                    start_time = time()
+                    try:
+                        await populate_session(
+                            http_session,
+                            database_session_maker,
+                            redis_session,
+                            handle_guid,
+                            settings,
+                        )
 
-                finally:
-                    statsd_client.timer(
-                        "aip.task.app_password_refresh.time",
-                        time() - start_time,
-                        tag_dict={"worker": settings.worker_id},
-                    )
-                    # TODO: Probably don't need this because it is the same as
-                    #       `COUNT(aip.task.app_password_refresh.time)`
-                    statsd_client.increment(
-                        "aip.task.app_password_refresh.count",
-                        1,
-                        tag_dict={"worker": settings.worker_id},
-                    )
-                    await redis_session.zrem(worker_queue, handle_guid)
+                    except Exception as e:
+                        sentry_sdk.capture_exception(e)
+                        logging.exception("error processing guid %s", handle_guid)
+                        # TODO: Don't actually tag session_group because cardinality will be very high.
+                        statsd_client.increment(
+                            "aip.task.app_password_refresh.exception",
+                            1,
+                            tag_dict={
+                                "exception": type(e).__name__,
+                                "guid": handle_guid,
+                                "worker_id": settings.worker_id,
+                            },
+                        )
+
+                    finally:
+                        statsd_client.timer(
+                            "aip.task.app_password_refresh.time",
+                            time() - start_time,
+                            tag_dict={"worker_id": settings.worker_id},
+                        )
+                        # TODO: Probably don't need this because it is the same as
+                        #       `COUNT(aip.task.app_password_refresh.time)`
+                        statsd_client.increment(
+                            "aip.task.app_password_refresh.count",
+                            1,
+                            tag_dict={"worker_id": settings.worker_id},
+                        )
+                        await redis_session.zrem(worker_queue, handle_guid)
 
         except Exception as e:
             sentry_sdk.capture_exception(e)
