@@ -1,3 +1,29 @@
+"""
+AT Protocol OAuth Handlers
+
+This module implements the web request handlers for OAuth authentication with AT Protocol.
+It provides endpoints for initiating authentication, handling callbacks from the AT Protocol
+authorization server, refreshing tokens, and debugging authentication information.
+
+OAuth Flow with AT Protocol:
+1. User enters their handle/DID in the login form
+2. Application initiates OAuth flow by redirecting to AT Protocol authorization server
+3. User authenticates with their AT Protocol PDS (Personal Data Server)
+4. PDS redirects back to the application with an authorization code
+5. Application exchanges the code for access and refresh tokens
+6. Application stores tokens and returns an auth token to the client
+7. Tokens are refreshed before they expire
+
+The handlers in this module provide the following endpoints:
+- GET /auth/atproto - Login form for entering AT Protocol handle/DID
+- POST /auth/atproto - Submit login form to initiate OAuth flow
+- GET /auth/atproto/callback - OAuth callback from AT Protocol authorization server
+- GET /auth/atproto/refresh - Manually refresh tokens
+- GET /auth/atproto/debug - Display debug information about authentication
+- GET /.well-known/jwks.json - JWKS endpoint for key verification
+- GET /auth/atproto/client-metadata.json - OAuth client metadata
+"""
+
 import json
 import logging
 from typing import (
@@ -31,6 +57,18 @@ logger = logging.getLogger(__name__)
 
 
 def context_vars(settings):
+    """
+    Create a context dictionary for template rendering with UI customization settings.
+    
+    This function extracts UI customization settings from the application settings
+    to be passed to the template rendering engine.
+    
+    Args:
+        settings: Application settings object
+        
+    Returns:
+        Dict containing UI customization variables for templates
+    """
     return {
         "svg_logo": settings.svg_logo,
         "brand_name": settings.brand_name,
@@ -43,25 +81,78 @@ def context_vars(settings):
 
 
 class ATProtocolOAuthClientMetadata(BaseModel):
+    """
+    OAuth 2.0 Client Metadata for AT Protocol integration.
+    
+    This model represents the client metadata used for OAuth registration with AT Protocol.
+    It follows the OAuth 2.0 Dynamic Client Registration Protocol (RFC 7591) with
+    additional fields specific to AT Protocol requirements.
+    
+    The metadata is exposed at the client-metadata.json endpoint and is used by
+    AT Protocol authorization servers to validate OAuth requests.
+    """
     client_id: str
+    """Client identifier URI"""
+    
     dpop_bound_access_tokens: bool
+    """Whether access tokens are bound to DPoP proofs"""
+    
     application_type: str
+    """Type of application (web, native)"""
+    
     redirect_uris: List[str]
+    """List of allowed redirect URIs for this client"""
+    
     client_uri: str
+    """URI of the client's homepage"""
+    
     grant_types: List[str]
+    """OAuth grant types supported by this client"""
+    
     response_types: List[str]
+    """OAuth response types supported by this client"""
+    
     scope: str
+    """OAuth scopes requested by this client"""
+    
     client_name: str
+    """Human-readable name of the client application"""
+    
     token_endpoint_auth_method: str
+    """Authentication method for the token endpoint"""
+    
     jwks_uri: str
+    """URI of the client's JWKS (JSON Web Key Set)"""
+    
     logo_uri: str
+    """URI of the client's logo"""
+    
     tos_uri: str
+    """URI of the client's terms of service"""
+    
     policy_uri: str
+    """URI of the client's policy document"""
+    
     subject_type: str
+    """Subject type requested for responses"""
+    
     token_endpoint_auth_signing_alg: str
+    """Algorithm used for signing token endpoint authentication assertions"""
 
 
 async def handle_atproto_login(request: web.Request):
+    """
+    Handle GET request to the AT Protocol login page.
+    
+    This handler renders the login form where users can enter their
+    AT Protocol handle or DID to begin the authentication process.
+    
+    Args:
+        request: HTTP request object
+        
+    Returns:
+        HTTP response with rendered login template
+    """
     settings = request.app[SettingsAppKey]
     return await aiohttp_jinja2.render_template_async(
         "atproto_login.html", request, context=context_vars(settings)
@@ -69,6 +160,31 @@ async def handle_atproto_login(request: web.Request):
 
 
 async def handle_atproto_login_submit(request: web.Request):
+    """
+    Handle POST request from the AT Protocol login form.
+    
+    This handler processes the login form submission and initiates the OAuth flow.
+    It extracts the subject (handle or DID) and optional destination from the form,
+    then calls oauth_init to start the OAuth process.
+    
+    Request Parameters:
+        subject: AT Protocol handle or DID
+        destination: Optional redirect URL after authentication
+        
+    Args:
+        request: HTTP request object
+        
+    Returns:
+        HTTP redirect to the AT Protocol authorization server
+        
+    Raises:
+        HTTPFound: To redirect to authorization server
+        
+    Flow:
+        1. Extract subject and destination from form
+        2. Initialize OAuth flow with oauth_init
+        3. Redirect user to authorization server
+    """
     settings = request.app[SettingsAppKey]
     data = await request.post()
     subject: Optional[str] = data.get("subject", None)  # type: ignore
@@ -114,6 +230,33 @@ async def handle_atproto_login_submit(request: web.Request):
 
 
 async def handle_atproto_callback(request: web.Request):
+    """
+    Handle OAuth callback from AT Protocol authorization server.
+    
+    This handler processes the callback from the AT Protocol authorization server,
+    exchanging the authorization code for access and refresh tokens, then redirecting
+    the user to their final destination with an auth token.
+    
+    Query Parameters:
+        state: OAuth state parameter to prevent CSRF
+        iss: Issuer identifier (authorization server)
+        code: Authorization code to exchange for tokens
+        
+    Args:
+        request: HTTP request object
+        
+    Returns:
+        HTTP redirect to the final destination with auth token
+        
+    Raises:
+        HTTPFound: To redirect to final destination
+        
+    Flow:
+        1. Extract state, issuer, and code from query parameters
+        2. Complete OAuth flow with oauth_complete
+        3. Add auth token to destination URL
+        4. Redirect user to final destination
+    """
     state: Optional[str] = request.query.get("state", None)
     issuer: Optional[str] = request.query.get("iss", None)
     code: Optional[str] = request.query.get("code", None)
@@ -151,6 +294,32 @@ async def handle_atproto_callback(request: web.Request):
 
 
 async def handle_atproto_refresh(request: web.Request):
+    """
+    Handle manual token refresh request.
+    
+    This handler allows for manual refreshing of OAuth tokens. It extracts the
+    auth token from the query parameters, validates it, finds the associated
+    OAuth session, and refreshes the token.
+    
+    Query Parameters:
+        auth_token: JWT authentication token
+        
+    Args:
+        request: HTTP request object
+        
+    Returns:
+        HTTP redirect to debug page with refreshed token
+        
+    Raises:
+        HTTPFound: To redirect to debug page
+        Exception: If auth token is invalid or session not found
+        
+    Flow:
+        1. Extract and validate auth token
+        2. Find associated OAuth session
+        3. Refresh tokens with oauth_refresh
+        4. Redirect to debug page
+    """
     settings = request.app[SettingsAppKey]
     http_session = request.app[SessionAppKey]
     statsd_client = request.app[TelegrafStatsdClientAppKey]
@@ -195,6 +364,25 @@ async def handle_atproto_refresh(request: web.Request):
 
 
 async def handle_atproto_debug(request: web.Request):
+    """
+    Handle debug page request showing authentication information.
+    
+    This handler displays detailed information about the authentication session,
+    including the JWT token contents, OAuth session details, and user handle.
+    It's primarily used for debugging and development purposes.
+    
+    Query Parameters:
+        auth_token: JWT authentication token
+        
+    Args:
+        request: HTTP request object
+        
+    Returns:
+        HTTP response with rendered debug template
+        
+    Raises:
+        Exception: If auth token is invalid or session/handle not found
+    """
     settings = request.app[SettingsAppKey]
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
 
@@ -247,6 +435,18 @@ async def handle_atproto_debug(request: web.Request):
 
 
 async def handle_jwks(request: web.Request):
+    """
+    Handle JWKS (JSON Web Key Set) endpoint request.
+    
+    This handler provides the public keys used for verifying JWT signatures.
+    It returns a JWKS document containing the public portions of the active signing keys.
+    
+    Args:
+        request: HTTP request object
+        
+    Returns:
+        HTTP JSON response with JWKS document
+    """
     settings = request.app[SettingsAppKey]
     results: List[Dict[str, Any]] = []
     for kid in settings.active_signing_keys:
@@ -258,6 +458,22 @@ async def handle_jwks(request: web.Request):
 
 
 async def handle_atproto_client_metadata(request: web.Request):
+    """
+    Handle OAuth client metadata endpoint request.
+    
+    This handler provides OAuth client metadata according to the OAuth 2.0
+    Dynamic Client Registration Protocol (RFC 7591). It returns a JSON document
+    describing this client to AT Protocol authorization servers.
+    
+    The metadata includes client identification, capabilities, endpoints,
+    and authentication methods.
+    
+    Args:
+        request: HTTP request object
+        
+    Returns:
+        HTTP JSON response with client metadata
+    """
     settings = request.app[SettingsAppKey]
     client_id = (
         f"https://{settings.external_hostname}/auth/atproto/client-metadata.json"
