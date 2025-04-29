@@ -63,8 +63,14 @@ class ATProtocolOAuthClientMetadata(BaseModel):
 
 async def handle_atproto_login(request: web.Request):
     settings = request.app[SettingsAppKey]
+    context = context_vars(settings)
+
+    destination = request.query.get("destination")
+    if destination:
+        context["destination"] = destination
+
     return await aiohttp_jinja2.render_template_async(
-        "atproto_login.html", request, context=context_vars(settings)
+        "atproto_login.html", request, context=context
     )
 
 
