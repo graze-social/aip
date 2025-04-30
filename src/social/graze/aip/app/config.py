@@ -238,7 +238,7 @@ class Settings(BaseSettings):
     brand_name: str = "Graze"
     """Brand name displayed on the login page"""
     
-    destination: str = "https://graze.social/auth/callback"
+    destination: str = "https://graze.social/app/auth/callback"
     """Default destination URL after authentication"""
     
     background_from: str = "#0588f0"
