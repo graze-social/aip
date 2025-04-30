@@ -202,6 +202,7 @@ async def handle_atproto_login_submit(request: web.Request):
     http_session = request.app[SessionAppKey]
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     statsd_client = request.app[TelegrafStatsdClientAppKey]
+    redis_session = request.app[RedisClientAppKey]
 
     if destination is None:
         destination = settings.default_destination
@@ -212,10 +213,13 @@ async def handle_atproto_login_submit(request: web.Request):
             statsd_client,
             http_session,
             database_session_maker,
+            redis_session,
             subject,
             destination,
         )
     except Exception as e:
+        logger.exception("login error")
+
         sentry_sdk.capture_exception(e)
         # TODO: Return a localized error message.
         return await aiohttp_jinja2.render_template_async(

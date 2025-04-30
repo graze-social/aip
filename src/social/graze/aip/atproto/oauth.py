@@ -266,34 +266,34 @@ async def oauth_init(
         if not lock_acquired:
             raise Exception("Another login attempt for this user is in progress")
 
-    # Store request data for later verification
-    async with database_session_maker() as database_session:
+        # Store request data for later verification
+        async with database_session_maker() as database_session:
 
-        async with database_session.begin():
-            # Store or update handle information
-            stmt = upsert_handle_stmt(
-                resolved_handle.did, resolved_handle.handle, resolved_handle.pds
-            )
-            guid_result = await database_session.execute(stmt)
-            guid = guid_result.scalars().one()
-
-            # Store OAuth request data
-            database_session.add(
-                OAuthRequest(
-                    oauth_state=state,
-                    issuer=issuer,
-                    guid=guid,
-                    pkce_verifier=pkce_verifier,
-                    secret_jwk_id=signing_key_id,
-                    dpop_jwk=dpop_key.export(private_key=True, as_dict=True),
-                    destination=destination,
-                    created_at=now,
-                    expires_at=now + timedelta(0, par_expires),
+            async with database_session.begin():
+                # Store or update handle information
+                stmt = upsert_handle_stmt(
+                    resolved_handle.did, resolved_handle.handle, resolved_handle.pds
                 )
-            )
+                guid_result = await database_session.execute(stmt)
+                guid = guid_result.scalars().one()
 
-            await database_session.commit()
-    
+                # Store OAuth request data
+                database_session.add(
+                    OAuthRequest(
+                        oauth_state=state,
+                        issuer=issuer,
+                        guid=guid,
+                        pkce_verifier=pkce_verifier,
+                        secret_jwk_id=signing_key_id,
+                        dpop_jwk=dpop_key.export(private_key=True, as_dict=True),
+                        destination=destination,
+                        created_at=now,
+                        expires_at=now + timedelta(0, par_expires),
+                    )
+                )
+
+                await database_session.commit()
+
     finally:
         # Release the lock when we're done with handle resolution and database operations
         await redis_session.delete(login_lock_key)
