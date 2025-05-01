@@ -1,5 +1,5 @@
 #ATmosphere Authentication, Identity, and Permission Proxy
-
+![Image from 391 Vol 1– 19 by Francis Picabia, https://archive.org/details/391-vol-1-19/page/n98/mode/1up](./aip.png)
 ### Running Locally
 http://localhost:8080/internal/api/resolve?subject=ngerakines.me&subject=mattie.thegem.city
 
