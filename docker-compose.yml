@@ -6,10 +6,11 @@ x-environment: &aip-environment
   VALKEY_URL: redis://valkey:6379/0
   DEBUG: "true"
   WORKER_ID: "dev1"
+  # Add your generated key id here
   ACTIVE_SIGNING_KEYS: '["change-this-value"]'
   JSON_WEB_KEYS: /app/signing_keys.json
   # Add your hostname here
-  # EXTERNAL_HOSTNAME: "myhost.local"
+  EXTERNAL_HOSTNAME: "change.this.value"
 
 # Change AIP volume mounts here
 x-volumes: &aip-volumes
