@@ -12,7 +12,7 @@ x-environment: &aip-environment
   # Add your hostname here
   EXTERNAL_HOSTNAME: "change.this.value"
 
-# Change AIP volume mounts here
+# AIP Volume Mounts
 x-volumes: &aip-volumes
   - .:/app # Mount local directory to container
   - /app/.venv # Preserve virtual environment
