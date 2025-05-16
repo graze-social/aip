@@ -1,3 +1,21 @@
+version: "3.8"
+
+# Change AIP env vars here
+x-environment: &aip-environment
+  DATABASE_URL: postgresql+asyncpg://aip:aip_password@db:5432/aip_db
+  VALKEY_URL: redis://valkey:6379/0
+  DEBUG: "true"
+  WORKER_ID: "dev1"
+  ACTIVE_SIGNING_KEYS: '["change-this-value"]'
+  JSON_WEB_KEYS: /app/signing_keys.json
+  # Add your hostname here
+  # EXTERNAL_HOSTNAME: "myhost.local"
+
+# Change AIP volume mounts here
+x-volumes: &aip-volumes
+  - .:/app # Mount local directory to container
+  - /app/.venv # Preserve virtual environment
+
 services:
   db:
     image: postgres:17
@@ -36,11 +54,11 @@ services:
     volumes:
       - ./telegraf.conf:/etc/telegraf/telegraf.conf
 
-  aip:
+  aip_db_migrations:
     build: .
-    container_name: aip_service
-    command: ["pdm", "run", "aipserver"]
-    restart: always
+    container_name: aip_db_migrations
+    command: ["pdm", "run", "alembic", "upgrade", "head"]
+    restart: no
     depends_on:
       db:
         condition: service_healthy
@@ -48,23 +66,27 @@ services:
         condition: service_started
       telegraf:
         condition: service_started
-    environment:
-      DATABASE_URL: postgresql+asyncpg://aip:aip_password@db:5432/aip_db
-      VALKEY_URL: redis://valkey:6379/0
-      DEBUG: "true"
-      WORKER_ID: "dev1"
-      ACTIVE_SIGNING_KEYS: '["01JNEKAHBPFQYJX3RS7HH7W2RY"]'
-      JSON_WEB_KEYS: /app/signing_keys.json
+    environment: *aip-environment
+    volumes: *aip-volumes
+
+  aip:
+    build: .
+    container_name: aip_service
+    command: ["pdm", "run", "aipserver"]
+    restart: always
+    depends_on:
+      aip_db_migrations:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+      telegraf:
+        condition: service_started
+    environment: *aip-environment
     ports:
       - "8080:8080"
-      - "5100:5100"
-    volumes:
-      - .:/app  # Mount local directory to container
-      - /app/.venv  # Preserve virtual environment
-    # TODO: move to Tilt-based debugging
-    # volumes:
-    #   - .:/app
-    #   - /app/.venv
+    volumes: *aip-volumes
 
 volumes:
   aip_db_data:
