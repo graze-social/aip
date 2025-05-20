@@ -50,7 +50,7 @@ services:
         condition: service_started
     environment:
       DATABASE_URL: postgresql+asyncpg://aip:aip_password@db:5432/aip_db
-      VALKEY_URL: redis://valkey:6379/0
+      REDIS_URL: redis://valkey:6379/0
       DEBUG: "true"
       WORKER_ID: "dev1"
       ACTIVE_SIGNING_KEYS: '["01JNEKAHBPFQYJX3RS7HH7W2RY"]'
@@ -59,8 +59,8 @@ services:
       - "8080:8080"
       - "5100:5100"
     volumes:
-      - .:/app  # Mount local directory to container
-      - /app/.venv  # Preserve virtual environment
+      - .:/app # Mount local directory to container
+      - /app/.venv # Preserve virtual environment
     # TODO: move to Tilt-based debugging
     # volumes:
     #   - .:/app
