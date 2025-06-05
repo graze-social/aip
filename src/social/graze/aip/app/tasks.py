@@ -4,12 +4,13 @@ import logging
 from time import time
 from typing import List, NoReturn, Tuple
 from aiohttp import web
-from sqlalchemy import select
+from sqlalchemy import select, delete
 import sentry_sdk
 
 from social.graze.aip.app.config import (
     APP_PASSWORD_REFRESH_QUEUE,
     OAUTH_REFRESH_QUEUE,
+    OAUTH_REFRESH_RETRY_QUEUE,
     DatabaseSessionMakerAppKey,
     HealthGaugeAppKey,
     RedisClientAppKey,
@@ -19,7 +20,7 @@ from social.graze.aip.app.config import (
 )
 from social.graze.aip.atproto.app_password import populate_session
 from social.graze.aip.atproto.oauth import oauth_refresh
-from social.graze.aip.model.oauth import OAuthSession
+from social.graze.aip.model.oauth import OAuthSession, OAuthRequest
 
 logger = logging.getLogger(__name__)
 
@@ -184,12 +185,63 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
                             redis_session,
                             oauth_session,
                         )
+                        
+                        # Clear retry count on successful refresh
+                        session_group_str = session_group.decode() if isinstance(session_group, bytes) else session_group
+                        await redis_session.hdel(OAUTH_REFRESH_RETRY_QUEUE, session_group_str)
 
                     except Exception as e:
                         sentry_sdk.capture_exception(e)
                         logging.exception(
                             "error processing session group %s", session_group
                         )
+                        
+                        # Implement retry logic with exponential backoff
+                        session_group_str = session_group.decode() if isinstance(session_group, bytes) else session_group
+                        current_retries = await redis_session.hget(OAUTH_REFRESH_RETRY_QUEUE, session_group_str)
+                        current_retries = int(current_retries) if current_retries else 0
+                        
+                        if current_retries < settings.oauth_refresh_max_retries:
+                            # Calculate exponential backoff delay
+                            retry_delay = settings.oauth_refresh_retry_base_delay * (2 ** current_retries)
+                            retry_timestamp = int(now.timestamp()) + retry_delay
+                            
+                            # Re-queue with delay and increment retry count
+                            await redis_session.zadd(OAUTH_REFRESH_QUEUE, {session_group_str: retry_timestamp})
+                            await redis_session.hset(OAUTH_REFRESH_RETRY_QUEUE, session_group_str, current_retries + 1)
+                            
+                            logging.info(
+                                "Scheduled retry %d/%d for session_group %s in %d seconds",
+                                current_retries + 1,
+                                settings.oauth_refresh_max_retries,
+                                session_group_str,
+                                retry_delay
+                            )
+                            
+                            statsd_client.increment(
+                                "aip.task.oauth_refresh.retry_scheduled",
+                                1,
+                                tag_dict={
+                                    "retry_attempt": str(current_retries + 1),
+                                    "worker_id": settings.worker_id,
+                                },
+                            )
+                        else:
+                            # Max retries exceeded, give up and clean up retry tracking
+                            await redis_session.hdel(OAUTH_REFRESH_RETRY_QUEUE, session_group_str)
+                            
+                            logging.error(
+                                "Max retries exceeded for session_group %s, giving up after %d attempts",
+                                session_group_str,
+                                settings.oauth_refresh_max_retries
+                            )
+                            
+                            statsd_client.increment(
+                                "aip.task.oauth_refresh.max_retries_exceeded",
+                                1,
+                                tag_dict={"worker_id": settings.worker_id},
+                            )
+                        
                         # TODO: Don't actually tag session_group because cardinality will be very high.
                         statsd_client.increment(
                             "aip.task.oauth_refresh.exception",
@@ -344,3 +396,68 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
         except Exception as e:
             sentry_sdk.capture_exception(e)
             logging.exception("app password tick failed")
+
+
+async def oauth_cleanup_task(app: web.Application) -> NoReturn:
+    """
+    Background task to clean up expired OAuth records.
+    
+    This task runs every hour and removes:
+    - OAuthRequest records that have expired
+    - OAuthSession records that have reached their hard expiration
+    
+    This prevents database bloat from accumulating expired records.
+    """
+    logger.info("Starting OAuth cleanup task")
+
+    settings = app[SettingsAppKey]
+    database_session_maker = app[DatabaseSessionMakerAppKey]
+    statsd_client = app[TelegrafStatsdClientAppKey]
+
+    while True:
+        try:
+            # Run cleanup every hour
+            await asyncio.sleep(3600)
+
+            now = datetime.now(timezone.utc)
+            
+            async with (database_session_maker() as database_session,):
+                async with database_session.begin():
+                    # Clean up expired OAuthRequest records
+                    expired_requests_stmt = delete(OAuthRequest).where(
+                        OAuthRequest.expires_at < now
+                    )
+                    expired_requests_result = await database_session.execute(expired_requests_stmt)
+                    expired_requests_count = expired_requests_result.rowcount
+                    
+                    # Clean up expired OAuthSession records
+                    expired_sessions_stmt = delete(OAuthSession).where(
+                        OAuthSession.hard_expires_at < now
+                    )
+                    expired_sessions_result = await database_session.execute(expired_sessions_stmt)
+                    expired_sessions_count = expired_sessions_result.rowcount
+                    
+                    await database_session.commit()
+
+            if expired_requests_count > 0 or expired_sessions_count > 0:
+                logger.info(
+                    "Cleaned up %d expired OAuth requests and %d expired OAuth sessions",
+                    expired_requests_count,
+                    expired_sessions_count
+                )
+
+            # Report metrics
+            statsd_client.increment(
+                "aip.task.oauth_cleanup.expired_requests_removed",
+                expired_requests_count,
+                tag_dict={"worker_id": settings.worker_id},
+            )
+            statsd_client.increment(
+                "aip.task.oauth_cleanup.expired_sessions_removed", 
+                expired_sessions_count,
+                tag_dict={"worker_id": settings.worker_id},
+            )
+
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            logging.exception("OAuth cleanup task failed")

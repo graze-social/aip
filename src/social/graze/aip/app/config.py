@@ -205,6 +205,21 @@ class Settings(BaseSettings):
     Set with TOKEN_REFRESH_BEFORE_EXPIRY_RATIO environment variable.
     Default: 0.8
     """
+    
+    oauth_refresh_max_retries: int = 3
+    """
+    Maximum number of retry attempts for failed OAuth refresh operations.
+    Set with OAUTH_REFRESH_MAX_RETRIES environment variable.
+    Default: 3
+    """
+    
+    oauth_refresh_retry_base_delay: int = 300
+    """
+    Base delay in seconds for OAuth refresh retry attempts (exponential backoff).
+    Actual delay = base_delay * (2 ^ retry_attempt)
+    Set with OAUTH_REFRESH_RETRY_BASE_DELAY environment variable.
+    Default: 300 (5 minutes)
+    """
 
     default_destination: str = "https://localhost:5100/auth/atproto/debug"
     """
@@ -316,6 +331,12 @@ OAUTH_REFRESH_QUEUE = "auth_session:oauth:refresh"
 """
 Redis sorted set key for scheduling OAuth token refresh operations.
 Contains session_group IDs with refresh timestamps as scores.
+"""
+
+OAUTH_REFRESH_RETRY_QUEUE = "auth_session:oauth:refresh:retry"
+"""
+Redis hash key for tracking OAuth refresh retry attempts.
+Keys are session_group IDs, values are retry counts.
 """
 
 APP_PASSWORD_REFRESH_QUEUE = "auth_session:app-password:refresh"
