@@ -348,6 +348,7 @@ async def handle_atproto_refresh(request: web.Request):
     auth_token_subject: Optional[str] = auth_token_claims.get("sub", None)
     auth_token_session_group: Optional[str] = auth_token_claims.get("grp", None)
 
+    # Fetch OAuth session first
     async with (database_session_maker() as database_session,):
         async with database_session.begin():
             oauth_session_stmt = select(OAuthSession).where(
@@ -358,13 +359,13 @@ async def handle_atproto_refresh(request: web.Request):
                 await database_session.scalars(oauth_session_stmt)
             ).one()
 
-            await database_session.commit()
-
+    # Create fresh database session for oauth_refresh to avoid transaction conflicts
+    async with (database_session_maker() as fresh_database_session,):
         await oauth_refresh(
             settings,
             http_session,
             statsd_client,
-            database_session,
+            fresh_database_session,
             redis_session,
             oauth_session,
         )

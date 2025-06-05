@@ -23,6 +23,7 @@ Each stage involves secure cryptographic operations, endpoint discovery from the
 PDS (Personal Data Server), and proper token storage with automatic refresh scheduling.
 """
 
+import asyncio
 import base64
 from datetime import datetime, timezone, timedelta
 import hashlib
@@ -35,6 +36,7 @@ from ulid import ULID
 from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
 import redis.asyncio as redis
 from sqlalchemy import select, update
+from sqlalchemy.exc import OperationalError, IntegrityError
 from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     AsyncSession,
@@ -537,14 +539,13 @@ async def oauth_complete(
 
             await database_session.commit()
 
-        # Cache the access token in redis. For users with multiple devices, this just shoves the latest one into the
-        # cache keyed on the guid, which is probably fine.
-        oauth_session_key = f"auth_session:oauth:{str(oauth_request.guid)}"
+        # Cache the access token in redis with session-specific key to avoid collisions
+        oauth_session_key = f"auth_session:oauth:{str(oauth_request.guid)}:{session_group}"
         await redis_session.set(oauth_session_key, access_token, ex=(expires_in - 1))
 
         # Set a queue entry to refresh the token. We don't want to wait until the token is expired to refresh it, so
-        # the deadline is 80% of the expires in time from now.
-        expires_in_mod = expires_in * 0.8
+        # the deadline is based on the configured refresh ratio from now.
+        expires_in_mod = expires_in * settings.token_refresh_before_expiry_ratio
         refresh_at = now + timedelta(0, expires_in_mod)
 
         await redis_session.zadd(
@@ -740,33 +741,52 @@ async def oauth_refresh(
 
     expires_in = token_response.get("expires_in", 1800)
 
-    # Update tokens in database
-    async with database_session.begin():
+    # Update tokens in database with deadlock protection
+    max_retries = 3
+    base_delay = 0.1  # 100ms base delay
+    
+    for retry_attempt in range(max_retries):
+        try:
+            async with database_session.begin():
+                update_oauth_session_stmt = (
+                    update(OAuthSession)
+                    .where(
+                        OAuthSession.guid == current_oauth_session.guid,
+                        OAuthSession.session_group == current_oauth_session.session_group,
+                    )
+                    .values(
+                        access_token=access_token,
+                        refresh_token=refresh_token,
+                        access_token_expires_at=now + timedelta(0, expires_in),
+                    )
+                )
+                await database_session.execute(update_oauth_session_stmt)
+                await database_session.commit()
+                break  # Success, exit retry loop
+                
+        except (OperationalError, IntegrityError) as e:
+            # Check if this is a deadlock or lock timeout error
+            error_str = str(e).lower()
+            if "deadlock" in error_str or "lock wait timeout" in error_str or "could not obtain lock" in error_str:
+                if retry_attempt < max_retries - 1:
+                    # Calculate exponential backoff delay
+                    delay = base_delay * (2 ** retry_attempt)
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    # Max retries exceeded, re-raise the exception
+                    raise
+            else:
+                # Not a deadlock/lock error, re-raise immediately
+                raise
 
-        update_oauth_session_stmt = (
-            update(OAuthSession)
-            .where(
-                OAuthSession.guid == current_oauth_session.guid,
-                OAuthSession.session_group == current_oauth_session.session_group,
-            )
-            .values(
-                access_token=access_token,
-                refresh_token=refresh_token,
-                access_token_expires_at=now + timedelta(0, expires_in),
-            )
-        )
-        await database_session.execute(update_oauth_session_stmt)
-
-        await database_session.commit()
-
-    # Cache the access token in redis. For users with multiple devices, this just shoves the latest one into the
-    # cache keyed on the guid, which is probably fine.
-    oauth_session_key = f"auth_session:oauth:{str(current_oauth_session.guid)}"
+    # Cache the access token in redis with session-specific key to avoid collisions
+    oauth_session_key = f"auth_session:oauth:{str(current_oauth_session.guid)}:{current_oauth_session.session_group}"
     await redis_session.set(oauth_session_key, access_token, ex=(expires_in - 1))
 
     # Set a queue entry to refresh the token. We don't want to wait until the token is expired to refresh it, so
-    # the deadline is 80% of the expires in time from now.
-    expires_in_mod = expires_in * 0.8
+    # the deadline is based on the configured refresh ratio from now.
+    expires_in_mod = expires_in * settings.token_refresh_before_expiry_ratio
     refresh_at = now + timedelta(0, expires_in_mod)
     await redis_session.zadd(
         OAUTH_REFRESH_QUEUE,
