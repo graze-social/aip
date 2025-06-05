@@ -1,9 +1,8 @@
 import json
 import logging
-
+import traceback
 from aiohttp import web
 import sentry_sdk
-
 from social.graze.aip.app.config import (
     DatabaseSessionMakerAppKey,
     HealthGaugeAppKey,
@@ -17,11 +16,9 @@ from social.graze.aip.resolve.handle import resolve_subject
 
 logger = logging.getLogger(__name__)
 
-
 async def handle_internal_me(request: web.Request):
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     statsd_client = request.app[TelegrafStatsdClientAppKey]
-
     try:
         async with (database_session_maker() as database_session,):
             auth_token = await auth_token_helper(
@@ -32,9 +29,7 @@ async def handle_internal_me(request: web.Request):
                     body=json.dumps({"error": "Not Authorized"}),
                     content_type="application/json",
                 )
-
             # TODO: Include has_app_password boolean in the response.
-
             return web.json_response(
                 {
                     "handle": auth_token.handle,
@@ -47,15 +42,47 @@ async def handle_internal_me(request: web.Request):
                 }
             )
     except web.HTTPException as e:
+        # Log the full exception details
+        logger.error(
+            f"HTTP Exception in handle_internal_me: {type(e).__name__}: {str(e)}\n"
+            f"Traceback:\n{traceback.format_exc()}"
+        )
         sentry_sdk.capture_exception(e)
         raise e
     except Exception as e:
+        # Capture full exception details
+        error_details = {
+            "error": "Internal Server Error",
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "traceback": traceback.format_exc()
+        }
+        
+        # Log the full error details
+        logger.error(
+            f"Unexpected error in handle_internal_me: {type(e).__name__}: {str(e)}\n"
+            f"Traceback:\n{traceback.format_exc()}"
+        )
+        
         sentry_sdk.capture_exception(e)
+        
+        # Determine if we should include detailed error info in response
+        # You might want to check if in debug/development mode
+        settings = request.app.get(SettingsAppKey)
+        if settings and getattr(settings, 'debug', False):
+            # Include full error details in debug mode
+            response_body = json.dumps(error_details)
+        else:
+            # Production: only include safe error info
+            response_body = json.dumps({
+                "error": "Internal Server Error",
+                "error_type": type(e).__name__
+            })
+        
         raise web.HTTPInternalServerError(
-            body=json.dumps({"error": "Internal Server Error"}),
+            body=response_body,
             content_type="application/json",
         )
-
 
 async def handle_internal_ready(request: web.Request):
     health_gauge = request.app[HealthGaugeAppKey]
