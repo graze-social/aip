@@ -189,14 +189,14 @@ async def sentry_middleware(request: web.Request, handler):
 
 @web.middleware
 async def statsd_middleware(request: web.Request, handler):
-    statsd_client = request.app[TelegrafStatsdClientAppKey]
-    request_method: str = request.method
-    request_path = request.path
-
-    start_time: float = time()
-    response_status_code = 0
-
     try:
+        statsd_client = request.app[TelegrafStatsdClientAppKey]
+        request_method: str = request.method
+        request_path = request.path
+
+        start_time: float = time()
+        response_status_code = 0
+
         response = await handler(request)
         response_status_code = response.status
         return response
@@ -212,20 +212,23 @@ async def statsd_middleware(request: web.Request, handler):
         )
         raise e
     finally:
-        statsd_client.timer(
-            "aip.server.request.time",
-            time() - start_time,
-            tag_dict={"path": request_path, "method": request_method},
-        )
-        statsd_client.increment(
-            "aip.server.request.count",
-            1,
-            tag_dict={
-                "path": request_path,
-                "method": request_method,
-                "status": response_status_code,
-            },
-        )
+        try:
+            statsd_client.timer(
+                "aip.server.request.time",
+                time() - start_time,
+                tag_dict={"path": request_path, "method": request_method},
+            )
+            statsd_client.increment(
+                "aip.server.request.count",
+                1,
+                tag_dict={
+                    "path": request_path,
+                    "method": request_method,
+                    "status": response_status_code,
+                },
+            )
+        except Exception as e:
+            print("No statsd!!!")
 
 
 async def shutdown(app):
