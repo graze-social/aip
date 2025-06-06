@@ -607,8 +607,8 @@ async def log_responses(client_resp, chain_resp):
     chain_info = introspect_chain_response(chain_resp)
 
     # Log locally (you can change this to debug/info)
-    logging.info("ClientResponse: %s", json.dumps(client_info, indent=2))
-    logging.info("ChainResponse: %s", json.dumps(chain_info, indent=2))
+    logging.info("ClientResponse: %s", str(client_info))
+    logging.info("ChainResponse: %s", str(chain_info))
 
     # Send to Sentry without scrubbing (use with care!)
     with sentry_sdk.push_scope() as scope:
