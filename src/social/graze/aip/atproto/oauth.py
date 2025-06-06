@@ -771,13 +771,13 @@ async def oauth_refresh(
         chain_response,
     ):
         if client_response.status != 200:
-            await log_responses(client_resp, chain_resp)
+            await log_responses(client_response, chain_response)
             raise Exception("Invalid token response")
 
         if isinstance(chain_response.body, dict):
             token_response = chain_response.body
         else:
-            await log_responses(client_resp, chain_resp)
+            await log_responses(client_response, chain_response)
             raise ValueError("Invalid token response")
 
     # Extract tokens from response
