@@ -602,7 +602,7 @@ def introspect_chain_response(chain_resp) -> dict:
 import sentry_sdk
 import asyncio
 
-async def log_responses(client_resp, chain_resp):
+async def log_responses(client_resp, chain_resp, token_response=None, message="OAuth token refresh response inspection"):
     client_info = await introspect_aiohttp_response(client_resp)
     chain_info = introspect_chain_response(chain_resp)
 
@@ -612,9 +612,10 @@ async def log_responses(client_resp, chain_resp):
 
     # Send to Sentry without scrubbing (use with care!)
     with sentry_sdk.push_scope() as scope:
+        scope.set_extra("token_response", token_response)
         scope.set_extra("client_response", client_info)
         scope.set_extra("chain_response", chain_info)
-        sentry_sdk.capture_message("OAuth token refresh response inspection")
+        sentry_sdk.capture_message(message)
 
 async def oauth_refresh(
     settings: Settings,
@@ -776,6 +777,7 @@ async def oauth_refresh(
 
         if isinstance(chain_response.body, dict):
             token_response = chain_response.body
+            await log_responses(client_response, chain_response, token_response, "Successfully set response!")
         else:
             await log_responses(client_response, chain_response)
             raise ValueError("Invalid token response")
@@ -794,7 +796,6 @@ async def oauth_refresh(
     # Update tokens in database with deadlock protection
     max_retries = 3
     base_delay = 0.1  # 100ms base delay
-    
     for retry_attempt in range(max_retries):
         try:
             async with database_session.begin():
