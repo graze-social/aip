@@ -568,6 +568,54 @@ async def oauth_complete(
     return str(serialized_auth_token), str(oauth_request.destination)
 
 
+import json
+import logging
+
+async def introspect_aiohttp_response(resp: "aiohttp.ClientResponse") -> dict:
+    info = {
+        "url": str(resp.url),
+        "status": resp.status,
+        "reason": resp.reason,
+        "headers": dict(resp.headers),
+        "cookies": {k: v.value for k, v in resp.cookies.items()},
+    }
+    try:
+        # Try to get JSON body
+        info["json"] = await resp.json()
+    except Exception:
+        try:
+            # If not JSON, get text body
+            info["text"] = await resp.text()
+        except Exception:
+            # If reading body fails, log error and mark
+            info["body_read_error"] = True
+    return info
+
+def introspect_chain_response(chain_resp) -> dict:
+    info = {
+        "status": getattr(chain_resp, "status", None),
+        "headers": getattr(chain_resp, "headers", None),
+        "body": getattr(chain_resp, "body", None),
+    }
+    return info
+
+import sentry_sdk
+import asyncio
+
+async def log_responses(client_resp, chain_resp):
+    client_info = await introspect_aiohttp_response(client_resp)
+    chain_info = introspect_chain_response(chain_resp)
+
+    # Log locally (you can change this to debug/info)
+    logging.info("ClientResponse: %s", json.dumps(client_info, indent=2))
+    logging.info("ChainResponse: %s", json.dumps(chain_info, indent=2))
+
+    # Send to Sentry without scrubbing (use with care!)
+    with sentry_sdk.push_scope() as scope:
+        scope.set_extra("client_response", client_info)
+        scope.set_extra("chain_response", chain_info)
+        sentry_sdk.capture_message("OAuth token refresh response inspection")
+
 async def oauth_refresh(
     settings: Settings,
     http_session: ClientSession,
@@ -723,11 +771,13 @@ async def oauth_refresh(
         chain_response,
     ):
         if client_response.status != 200:
+            await log_responses(client_resp, chain_resp)
             raise Exception("Invalid token response")
 
         if isinstance(chain_response.body, dict):
             token_response = chain_response.body
         else:
+            await log_responses(client_resp, chain_resp)
             raise ValueError("Invalid token response")
 
     # Extract tokens from response
