@@ -24,12 +24,13 @@ from typing import (
     Dict,
 )
 import logging
-from aio_statsd import TelegrafStatsdClient
 from aiohttp import web, ClientResponse, ClientSession, FormData, hdrs
 from aiohttp.typedefs import StrOrURL
 from multidict import CIMultiDictProxy
 from jwcrypto import jwt, jwk
 import sentry_sdk
+
+from social.graze.aip.app.metrics import MetricsClient
 
 RequestFunc = Callable[..., Awaitable[ClientResponse]]
 """Type alias for async HTTP request functions."""
@@ -191,15 +192,20 @@ class RequestMiddlewareBase(ABC):
 
 
 class StatsdMiddleware(RequestMiddlewareBase):
-    """Middleware for collecting request timing and count metrics via StatsD."""
+    """Middleware for collecting request timing and count metrics via metrics abstraction layer.
+    
+    This middleware supports multiple metrics backends (OTEL, Telegraf, NoOp) through
+    the MetricsClient interface, providing vendor-agnostic telemetry collection for
+    HTTP client requests in the middleware chain.
+    """
 
     def __init__(
         self,
-        statsd_client: TelegrafStatsdClient,
+        metrics_client: MetricsClient,
     ) -> None:
-        """Initialize with StatsD client for telemetry."""
+        """Initialize with metrics client for telemetry collection."""
         super().__init__()
-        self._statsd_client = statsd_client
+        self._metrics_client = metrics_client
 
     async def handle(
         self, next: NextChainCallbackType, request: ChainRequest
@@ -211,14 +217,14 @@ class StatsdMiddleware(RequestMiddlewareBase):
             sentry_sdk.capture_exception(e)
             raise e
         finally:
-            self._statsd_client.timer(
+            self._metrics_client.timer(
                 "aip.client.request.time",
                 time() - start_time,
                 tag_dict={
                     "method": request.method.lower(),
                 },
             )
-            self._statsd_client.increment(
+            self._metrics_client.increment(
                 "aip.client.request.count",
                 1,
                 tag_dict={

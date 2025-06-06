@@ -16,7 +16,7 @@ from social.graze.aip.app.config import (
     RedisClientAppKey,
     SessionAppKey,
     SettingsAppKey,
-    TelegrafStatsdClientAppKey,
+    MetricsClientAppKey,
 )
 from social.graze.aip.atproto.app_password import populate_session
 from social.graze.aip.atproto.oauth import oauth_refresh
@@ -42,13 +42,13 @@ class QueueManager:
     def __init__(
         self,
         redis_client: Any,
-        statsd_client: Any,
+        metrics_client: Any,
         queue_name: str,
         worker_id: str,
         batch_size: int = 5,
     ):
         self.redis_client = redis_client
-        self.statsd_client = statsd_client
+        self.metrics_client = metrics_client
         self.queue_name = queue_name
         self.worker_id = worker_id
         self.batch_size = batch_size
@@ -118,7 +118,7 @@ class RetryHandler:
     def __init__(
         self,
         redis_client: Any,
-        statsd_client: Any,
+        metrics_client: Any,
         queue_name: str,
         retry_queue_name: str,
         worker_id: str,
@@ -126,7 +126,7 @@ class RetryHandler:
         base_delay: int,
     ):
         self.redis_client = redis_client
-        self.statsd_client = statsd_client
+        self.metrics_client = metrics_client
         self.queue_name = queue_name
         self.retry_queue_name = retry_queue_name
         self.worker_id = worker_id
@@ -166,7 +166,7 @@ class RetryHandler:
                 retry_delay,
             )
 
-            self.statsd_client.increment(
+            self.metrics_client.increment(
                 "aip.task.retry_scheduled",
                 1,
                 tag_dict={
@@ -183,7 +183,7 @@ class RetryHandler:
                 task_id,
                 self.max_retries,
             )
-            self.statsd_client.increment(
+            self.metrics_client.increment(
                 "aip.task.max_retries_exceeded",
                 1,
                 tag_dict={"worker_id": self.worker_id},
@@ -202,8 +202,8 @@ class TaskProcessor:
     Generic task processor with timing, metrics, and error handling.
     """
 
-    def __init__(self, statsd_client: Any, worker_id: str, task_type: str):
-        self.statsd_client = statsd_client
+    def __init__(self, metrics_client: Any, worker_id: str, task_type: str):
+        self.metrics_client = metrics_client
         self.worker_id = worker_id
         self.task_type = task_type
 
@@ -228,7 +228,7 @@ class TaskProcessor:
             sentry_sdk.capture_exception(e)
             logger.exception("Error processing task %s", task_id_str)
 
-            self.statsd_client.increment(
+            self.metrics_client.increment(
                 f"aip.task.{self.task_type}.exception",
                 1,
                 tag_dict={
@@ -239,12 +239,12 @@ class TaskProcessor:
             )
             return False
         finally:
-            self.statsd_client.timer(
+            self.metrics_client.timer(
                 f"aip.task.{self.task_type}.time",
                 time() - start_time,
                 tag_dict={"worker_id": self.worker_id},
             )
-            self.statsd_client.increment(
+            self.metrics_client.increment(
                 f"aip.task.{self.task_type}.count",
                 1,
                 tag_dict={"worker_id": self.worker_id},
@@ -267,7 +267,7 @@ async def tick_health_task(app: web.Application) -> NoReturn:
 async def _process_oauth_session(
     settings,
     http_session,
-    statsd_client,
+    metrics_client,
     database_session,
     redis_session,
     session_group: str,
@@ -286,7 +286,7 @@ async def _process_oauth_session(
     await oauth_refresh(
         settings,
         http_session,
-        statsd_client,
+        metrics_client,
         database_session,
         redis_session,
         oauth_session,
@@ -315,22 +315,22 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
     database_session_maker = app[DatabaseSessionMakerAppKey]
     http_session = app[SessionAppKey]
     redis_session = app[RedisClientAppKey]
-    statsd_client = app[TelegrafStatsdClientAppKey]
+    metrics_client = app[MetricsClientAppKey]
 
     # Initialize helper components
     queue_manager = QueueManager(
-        redis_session, statsd_client, OAUTH_REFRESH_QUEUE, settings.worker_id
+        redis_session, metrics_client, OAUTH_REFRESH_QUEUE, settings.worker_id
     )
     retry_handler = RetryHandler(
         redis_session,
-        statsd_client,
+        metrics_client,
         OAUTH_REFRESH_QUEUE,
         OAUTH_REFRESH_RETRY_QUEUE,
         settings.worker_id,
         settings.oauth_refresh_max_retries,
         settings.oauth_refresh_retry_base_delay,
     )
-    task_processor = TaskProcessor(statsd_client, settings.worker_id, "oauth_refresh")
+    task_processor = TaskProcessor(metrics_client, settings.worker_id, "oauth_refresh")
 
     while True:
         await asyncio.sleep(10)
@@ -345,12 +345,12 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
         worker_queue_count, global_queue_count = await queue_manager.get_queue_metrics(
             timestamp
         )
-        statsd_client.gauge(
+        metrics_client.gauge(
             "aip.task.oauth_refresh.worker_queue_count",
             worker_queue_count,
             tag_dict={"worker_id": settings.worker_id},
         )
-        statsd_client.gauge(
+        metrics_client.gauge(
             "aip.task.oauth_refresh.global_queue_count",
             global_queue_count,
             tag_dict={"worker_id": settings.worker_id},
@@ -363,7 +363,7 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
                     f"tick_task: processing {OAUTH_REFRESH_QUEUE} up to {timestamp}"
                 )
                 work_queued = await queue_manager.populate_worker_queue(timestamp)
-                statsd_client.increment(
+                metrics_client.increment(
                     "aip.task.oauth_refresh.work_queued",
                     work_queued,
                     tag_dict={"worker_id": settings.worker_id},
@@ -391,7 +391,7 @@ async def oauth_refresh_task(app: web.Application) -> NoReturn:
                         _process_oauth_session,
                         settings,
                         http_session,
-                        statsd_client,
+                        metrics_client,
                         database_session,
                         redis_session,
                         session_group_str,
@@ -416,7 +416,7 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
     database_session_maker = app[DatabaseSessionMakerAppKey]
     http_session = app[SessionAppKey]
     redis_session = app[RedisClientAppKey]
-    statsd_client = app[TelegrafStatsdClientAppKey]
+    metrics_client = app[MetricsClientAppKey]
 
     while True:
         try:
@@ -434,7 +434,7 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
             worker_queue_count: int = await redis_session.zcount(
                 worker_queue, 0, int(now.timestamp())
             )
-            statsd_client.gauge(
+            metrics_client.gauge(
                 "aip.task.app_password_refresh.worker_queue_count",
                 worker_queue_count,
                 tag_dict={"worker_id": settings.worker_id},
@@ -443,7 +443,7 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
             global_queue_count: int = await redis_session.zcount(
                 APP_PASSWORD_REFRESH_QUEUE, 0, int(now.timestamp())
             )
-            statsd_client.gauge(
+            metrics_client.gauge(
                 "aip.task.app_password_refresh.global_queue_count",
                 global_queue_count,
                 tag_dict={"worker_id": settings.worker_id},
@@ -472,7 +472,7 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
                         )
 
                         (zrangestore_res, zdiffstore_res) = await redis_pipe.execute()
-                        statsd_client.increment(
+                        metrics_client.increment(
                             "aip.task.app_password_refresh.work_queued",
                             zrangestore_res,
                             tag_dict={"worker_id": settings.worker_id},
@@ -508,7 +508,7 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
                         sentry_sdk.capture_exception(e)
                         logging.exception("error processing guid %s", handle_guid)
                         # TODO: Don't actually tag session_group because cardinality will be very high.
-                        statsd_client.increment(
+                        metrics_client.increment(
                             "aip.task.app_password_refresh.exception",
                             1,
                             tag_dict={
@@ -519,14 +519,14 @@ async def app_password_refresh_task(app: web.Application) -> NoReturn:
                         )
 
                     finally:
-                        statsd_client.timer(
+                        metrics_client.timer(
                             "aip.task.app_password_refresh.time",
                             time() - start_time,
                             tag_dict={"worker_id": settings.worker_id},
                         )
                         # TODO: Probably don't need this because it is the same as
                         #       `COUNT(aip.task.app_password_refresh.time)`
-                        statsd_client.increment(
+                        metrics_client.increment(
                             "aip.task.app_password_refresh.count",
                             1,
                             tag_dict={"worker_id": settings.worker_id},
@@ -552,7 +552,7 @@ async def oauth_cleanup_task(app: web.Application) -> NoReturn:
 
     settings = app[SettingsAppKey]
     database_session_maker = app[DatabaseSessionMakerAppKey]
-    statsd_client = app[TelegrafStatsdClientAppKey]
+    metrics_client = app[MetricsClientAppKey]
 
     while True:
         try:
@@ -591,12 +591,12 @@ async def oauth_cleanup_task(app: web.Application) -> NoReturn:
                 )
 
             # Report metrics
-            statsd_client.increment(
+            metrics_client.increment(
                 "aip.task.oauth_cleanup.expired_requests_removed",
                 expired_requests_count,
                 tag_dict={"worker_id": settings.worker_id},
             )
-            statsd_client.increment(
+            metrics_client.increment(
                 "aip.task.oauth_cleanup.expired_sessions_removed",
                 expired_sessions_count,
                 tag_dict={"worker_id": settings.worker_id},

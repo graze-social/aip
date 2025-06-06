@@ -13,8 +13,8 @@ import pytest_asyncio
 from social.graze.aip.app.tasks import QueueManager, normalize_redis_string
 
 
-class MockStatsdClient:
-    """Mock StatsD client for integration testing."""
+class MockMetricsClient:
+    """Mock metrics client for integration testing."""
 
     def __init__(self):
         self.gauges = {}
@@ -31,19 +31,23 @@ class MockStatsdClient:
     def timer(self, metric_name, value, tag_dict=None):
         self.timers[metric_name] = {"value": value, "tags": tag_dict or {}}
 
-
-@pytest_asyncio.fixture
-async def mock_statsd():
-    """Provide mock StatsD client for integration testing."""
-    return MockStatsdClient()
+    async def close(self):
+        """Mock close method."""
+        pass
 
 
 @pytest_asyncio.fixture
-async def integration_queue_manager(redis_client, mock_statsd):
+async def mock_metrics():
+    """Provide mock metrics client for integration testing."""
+    return MockMetricsClient()
+
+
+@pytest_asyncio.fixture
+async def integration_queue_manager(redis_client, mock_metrics):
     """Provide QueueManager instance with real Redis for integration tests."""
     return QueueManager(
         redis_client=redis_client,
-        statsd_client=mock_statsd,
+        metrics_client=mock_metrics,
         queue_name="integration_test_queue",
         worker_id="integration_worker_1",
         batch_size=5,
@@ -93,7 +97,7 @@ class TestQueueManagerRedisIntegration:
         assert global_remaining == 0
         assert worker_count == 3
 
-    async def test_concurrent_worker_access(self, redis_client, mock_statsd):
+    async def test_concurrent_worker_access(self, redis_client, mock_metrics):
         """Test multiple workers accessing Redis concurrently."""
         current_time = int(time.time())
 
@@ -101,7 +105,7 @@ class TestQueueManagerRedisIntegration:
         workers = [
             QueueManager(
                 redis_client,
-                mock_statsd,
+                mock_metrics,
                 "concurrent_queue",
                 f"worker_{i}",
                 batch_size=3,
@@ -138,14 +142,14 @@ class TestQueueManagerRedisIntegration:
         assert total_worker_tasks + remaining_global == 15
 
     async def test_redis_persistence_across_connections(
-        self, redis_client, mock_statsd
+        self, redis_client, mock_metrics
     ):
         """Test that data persists correctly across different QueueManager instances."""
         current_time = int(time.time())
 
         # Create first QueueManager instance
         qm1 = QueueManager(
-            redis_client, mock_statsd, "persistence_queue", "persistent_worker"
+            redis_client, mock_metrics, "persistence_queue", "persistent_worker"
         )
 
         # Add data and update heartbeat
@@ -156,7 +160,7 @@ class TestQueueManagerRedisIntegration:
 
         # Create second QueueManager instance (simulating restart)
         qm2 = QueueManager(
-            redis_client, mock_statsd, "persistence_queue", "persistent_worker"
+            redis_client, mock_metrics, "persistence_queue", "persistent_worker"
         )
 
         # Verify data persists
@@ -253,13 +257,13 @@ class TestQueueManagerRedisIntegration:
         final_tasks = await integration_queue_manager.get_pending_tasks(current_time)
         assert len(final_tasks) == 0
 
-    async def test_redis_memory_efficiency(self, redis_client, mock_statsd):
+    async def test_redis_memory_efficiency(self, redis_client, mock_metrics):
         """Test Redis memory usage with large datasets."""
         current_time = int(time.time())
 
         qm = QueueManager(
             redis_client,
-            mock_statsd,
+            mock_metrics,
             "memory_test_queue",
             "memory_worker",
             batch_size=100,
@@ -326,7 +330,7 @@ class TestQueueManagerRedisIntegration:
 class TestQueueManagerRedisScenarios:
     """Real-world scenario tests with Redis."""
 
-    async def test_production_like_workflow(self, redis_client, mock_statsd):
+    async def test_production_like_workflow(self, redis_client, mock_metrics):
         """Test a production-like workflow with multiple workers and continuous processing."""
         current_time = int(time.time())
 
@@ -334,7 +338,7 @@ class TestQueueManagerRedisScenarios:
         workers = [
             QueueManager(
                 redis_client,
-                mock_statsd,
+                mock_metrics,
                 "prod_queue",
                 f"prod_worker_{i}",
                 batch_size=10,
@@ -369,13 +373,13 @@ class TestQueueManagerRedisScenarios:
         final_global = await redis_client.zcount("prod_queue", 0, current_time)
         assert final_global == 0
 
-    async def test_worker_failure_recovery(self, redis_client, mock_statsd):
+    async def test_worker_failure_recovery(self, redis_client, mock_metrics):
         """Test recovery from worker failures in Redis."""
         current_time = int(time.time())
 
         # Create initial worker
         worker1 = QueueManager(
-            redis_client, mock_statsd, "recovery_queue", "failing_worker"
+            redis_client, mock_metrics, "recovery_queue", "failing_worker"
         )
 
         # Add tasks and populate worker queue
@@ -392,7 +396,7 @@ class TestQueueManagerRedisScenarios:
         # Simulate worker failure by creating new worker instance
         # (orphaned tasks remain in worker queue)
         worker2 = QueueManager(
-            redis_client, mock_statsd, "recovery_queue", "failing_worker"
+            redis_client, mock_metrics, "recovery_queue", "failing_worker"
         )
 
         # New worker should be able to process orphaned tasks
@@ -407,14 +411,14 @@ class TestQueueManagerRedisScenarios:
         final_tasks = await worker2.get_pending_tasks(current_time)
         assert len(final_tasks) == 0
 
-    async def test_high_throughput_processing(self, redis_client, mock_statsd):
+    async def test_high_throughput_processing(self, redis_client, mock_metrics):
         """Test high-throughput task processing scenarios."""
         current_time = int(time.time())
 
         # Create high-throughput worker
         worker = QueueManager(
             redis_client,
-            mock_statsd,
+            mock_metrics,
             "throughput_queue",
             "throughput_worker",
             batch_size=50,

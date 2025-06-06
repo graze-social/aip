@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, Mock, patch
 from typing import Any, Dict
 
 import pytest
-from aio_statsd import TelegrafStatsdClient
 from aiohttp import ClientResponse, ClientSession, FormData, hdrs, web
 from jwcrypto import jwt, jwk
 from multidict import CIMultiDictProxy
@@ -27,6 +26,7 @@ from social.graze.aip.atproto.chain import (
     ChainMiddlewareContext,
     ChainMiddlewareClient,
 )
+from social.graze.aip.app.metrics import MetricsClient
 
 
 # Test fixtures and utilities
@@ -372,17 +372,17 @@ class TestStatsdMiddleware:
     """Test StatsdMiddleware for metrics collection."""
 
     def test_statsd_middleware_creation(self):
-        """Test StatsdMiddleware can be created with StatsD client."""
-        mock_statsd = Mock(spec=TelegrafStatsdClient)
-        middleware = StatsdMiddleware(mock_statsd)
+        """Test StatsdMiddleware can be created with metrics client."""
+        mock_metrics = Mock(spec=MetricsClient)
+        middleware = StatsdMiddleware(mock_metrics)
 
-        assert middleware._statsd_client == mock_statsd
+        assert middleware._metrics_client == mock_metrics
 
     @pytest.mark.asyncio
     async def test_statsd_middleware_success_metrics(self):
         """Test that metrics are sent on successful request."""
-        mock_statsd = Mock(spec=TelegrafStatsdClient)
-        middleware = StatsdMiddleware(mock_statsd)
+        mock_metrics = Mock(spec=MetricsClient)
+        middleware = StatsdMiddleware(mock_metrics)
 
         mock_next = AsyncMock(return_value=("response", "chain_response"))
         request = ChainRequest("POST", "https://example.com/api")
@@ -396,18 +396,18 @@ class TestStatsdMiddleware:
         assert result == ("response", "chain_response")
 
         # Verify metrics were sent
-        mock_statsd.timer.assert_called_once_with(
+        mock_metrics.timer.assert_called_once_with(
             "aip.client.request.time", 1.5, tag_dict={"method": "post"}
         )
-        mock_statsd.increment.assert_called_once_with(
+        mock_metrics.increment.assert_called_once_with(
             "aip.client.request.count", 1, tag_dict={"method": "post"}
         )
 
     @pytest.mark.asyncio
     async def test_statsd_middleware_exception_handling(self):
         """Test that exceptions are captured by Sentry and metrics still sent."""
-        mock_statsd = Mock(spec=TelegrafStatsdClient)
-        middleware = StatsdMiddleware(mock_statsd)
+        mock_metrics = Mock(spec=MetricsClient)
+        middleware = StatsdMiddleware(mock_metrics)
 
         test_exception = Exception("Test error")
         mock_next = AsyncMock(side_effect=test_exception)
@@ -424,19 +424,19 @@ class TestStatsdMiddleware:
         mock_sentry.assert_called_once_with(test_exception)
 
         # Verify metrics were still sent
-        timer_call = mock_statsd.timer.call_args
+        timer_call = mock_metrics.timer.call_args
         assert timer_call[0][0] == "aip.client.request.time"
         assert abs(timer_call[0][1] - 0.2) < 0.001  # Allow small floating point error
         assert timer_call[1]["tag_dict"] == {"method": "get"}
-        mock_statsd.increment.assert_called_once_with(
+        mock_metrics.increment.assert_called_once_with(
             "aip.client.request.count", 1, tag_dict={"method": "get"}
         )
 
     @pytest.mark.asyncio
     async def test_statsd_middleware_method_case_handling(self):
         """Test that HTTP methods are properly lowercased for metrics."""
-        mock_statsd = Mock(spec=TelegrafStatsdClient)
-        middleware = StatsdMiddleware(mock_statsd)
+        mock_metrics = Mock(spec=MetricsClient)
+        middleware = StatsdMiddleware(mock_metrics)
 
         mock_next = AsyncMock(return_value=("response", "chain_response"))
         request = ChainRequest("PUT", "https://example.com")
@@ -446,10 +446,10 @@ class TestStatsdMiddleware:
 
         # Verify method is lowercased in tags
         expected_tags = {"method": "put"}
-        mock_statsd.timer.assert_called_once_with(
+        mock_metrics.timer.assert_called_once_with(
             "aip.client.request.time", 1.0, tag_dict=expected_tags
         )
-        mock_statsd.increment.assert_called_once_with(
+        mock_metrics.increment.assert_called_once_with(
             "aip.client.request.count", 1, tag_dict=expected_tags
         )
 
@@ -1299,9 +1299,9 @@ class TestIntegrationScenarios:
         signing_key = create_test_jwk()
 
         # Create middleware stack
-        statsd_client = Mock(spec=TelegrafStatsdClient)
+        metrics_client = Mock(spec=MetricsClient)
         middleware_stack = [
-            StatsdMiddleware(statsd_client),
+            StatsdMiddleware(metrics_client),
             DebugMiddleware(),
             GenerateClaimAssertionMiddleware(
                 signing_key,
@@ -1336,8 +1336,8 @@ class TestIntegrationScenarios:
                     assert chain_resp.body["access_token"] == "token"  # type: ignore
 
         # Verify metrics were collected
-        statsd_client.timer.assert_called_once()
-        statsd_client.increment.assert_called_once()
+        metrics_client.timer.assert_called_once()
+        metrics_client.increment.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_dpop_nonce_retry_flow(self):

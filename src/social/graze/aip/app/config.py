@@ -26,7 +26,6 @@ import os
 import asyncio
 from typing import Annotated, Final, List, Optional
 import logging
-from aio_statsd import TelegrafStatsdClient
 from jwcrypto import jwk
 from pydantic import (
     AliasChoices,
@@ -48,6 +47,7 @@ from aiohttp import ClientSession
 from redis import asyncio as redis
 
 from social.graze.aip.model.health import HealthGauge
+from social.graze.aip.app.metrics import MetricsClient
 
 
 logger = logging.getLogger(__name__)
@@ -230,22 +230,77 @@ class Settings(BaseSettings):
     """
 
     # Monitoring and observability settings
-    statsd_host: str = Field(alias="TELEGRAF_HOST", default="telegraf")
+    metrics_backend: str = Field(default="telegraf")
     """
-    StatsD/Telegraf host for metrics collection.
-    Set with TELEGRAF_HOST environment variable.
-    """
-
-    statsd_port: int = Field(alias="TELEGRAF_PORT", default=8125)
-    """
-    StatsD/Telegraf port for metrics collection.
-    Set with TELEGRAF_PORT environment variable.
+    Metrics backend to use: 'otel' (OpenTelemetry), 'telegraf' (StatsD), or 'none' (disabled).
+    Set with METRICS_BACKEND environment variable.
+    Default: telegraf (for backward compatibility)
     """
 
-    statsd_prefix: str = "aip"
+    metrics_host: str = Field(
+        validation_alias=AliasChoices("metrics_host", "METRICS_HOST", "telegraf_host", "TELEGRAF_HOST"),
+        default="telegraf"
+    )
     """
-    Prefix for all StatsD metrics from this service.
-    Set with STATSD_PREFIX environment variable.
+    Metrics host for StatsD/Telegraf backend.
+    Set with METRICS_HOST or TELEGRAF_HOST environment variable.
+    Default: telegraf
+    """
+
+    metrics_port: int = Field(
+        validation_alias=AliasChoices("metrics_port", "METRICS_PORT", "telegraf_port", "TELEGRAF_PORT"),
+        default=8125
+    )
+    """
+    Metrics port for StatsD/Telegraf backend.
+    Set with METRICS_PORT or TELEGRAF_PORT environment variable.
+    Default: 8125
+    """
+
+    metrics_prefix: str = Field(
+        validation_alias=AliasChoices("metrics_prefix", "METRICS_PREFIX", "statsd_prefix", "STATSD_PREFIX"),
+        default="aip"
+    )
+    """
+    Prefix for all metrics from this service.
+    Set with METRICS_PREFIX or STATSD_PREFIX environment variable.
+    Default: aip
+    """
+
+    # OpenTelemetry-specific settings
+    otel_exporter_endpoint: Optional[str] = None
+    """
+    OpenTelemetry OTLP gRPC endpoint for metrics export.
+    Set with OTEL_EXPORTER_ENDPOINT environment variable.
+    Example: http://localhost:4317
+    """
+
+    otel_service_name: str = "aip"
+    """
+    Service name for OpenTelemetry resource attribution.
+    Set with OTEL_SERVICE_NAME environment variable.
+    Default: aip
+    """
+
+    otel_service_version: str = "1.0.0"
+    """
+    Service version for OpenTelemetry resource attribution.
+    Set with OTEL_SERVICE_VERSION environment variable.
+    Default: 1.0.0
+    """
+
+    otel_export_interval_seconds: int = 30
+    """
+    How often to export metrics to OTEL backend (in seconds).
+    Set with OTEL_EXPORT_INTERVAL_SECONDS environment variable.
+    Default: 30
+    """
+
+    otel_enable_prometheus: bool = False
+    """
+    Whether to enable Prometheus metrics endpoint for OTEL backend.
+    Set with OTEL_ENABLE_PROMETHEUS environment variable.
+    Default: false
     """
 
     # UI customization settings for login page
@@ -382,7 +437,5 @@ AppPasswordRefreshTaskAppKey: Final = web.AppKey(
 TickHealthTaskAppKey: Final = web.AppKey("tick_health_task", asyncio.Task[None])
 """AppKey for the background task that monitors service health"""
 
-TelegrafStatsdClientAppKey: Final = web.AppKey(
-    "telegraf_statsd_client", TelegrafStatsdClient
-)
-"""AppKey for the Telegraf/StatsD metrics client"""
+MetricsClientAppKey: Final = web.AppKey("metrics_client", MetricsClient)
+"""AppKey for the metrics client (supports multiple backends: OTEL, Telegraf, NoOp)"""

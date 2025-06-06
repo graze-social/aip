@@ -29,7 +29,6 @@ from datetime import datetime, timezone, timedelta
 import hashlib
 import secrets
 from typing import Optional, Tuple
-from aio_statsd import TelegrafStatsdClient
 from aiohttp import ClientSession, FormData
 from jwcrypto import jwt, jwk
 from ulid import ULID
@@ -46,6 +45,7 @@ import sentry_sdk
 import asyncio
 from aiohttp import ClientResponse
 from social.graze.aip.app.config import Settings, OAUTH_REFRESH_QUEUE
+from social.graze.aip.app.metrics import MetricsClient
 from social.graze.aip.atproto.chain import (
     ChainMiddlewareClient,
     GenerateClaimAssertionMiddleware,
@@ -93,7 +93,7 @@ def generate_pkce_verifier() -> Tuple[str, str]:
 
 async def oauth_init(
     settings: Settings,
-    statsd_client: TelegrafStatsdClient,
+    metrics_client: MetricsClient,
     http_session: ClientSession,
     database_session_maker: async_sessionmaker[AsyncSession],
     redis_session: redis.Redis,
@@ -113,7 +113,7 @@ async def oauth_init(
 
     Args:
         settings: Application settings
-        statsd_client: Metrics client for tracking requests
+        metrics_client: Metrics client for tracking requests
         http_session: HTTP session for making requests
         database_session_maker: Database session factory
         subject: User's handle or DID
@@ -225,7 +225,7 @@ async def oauth_init(
 
     # Set up middleware chain for request authentication and metrics
     chain_middleware = [
-        StatsdMiddleware(statsd_client),
+        StatsdMiddleware(metrics_client),
         GenerateDpopMiddleware(
             dpop_key,
             dpop_assertation_header,
@@ -314,7 +314,7 @@ async def oauth_init(
 async def oauth_complete(
     settings: Settings,
     http_session: ClientSession,
-    statsd_client: TelegrafStatsdClient,
+    metrics_client: MetricsClient,
     database_session_maker: async_sessionmaker[AsyncSession],
     redis_session: redis.Redis,
     state: Optional[str],
@@ -335,7 +335,7 @@ async def oauth_complete(
     Args:
         settings: Application settings
         http_session: HTTP session for making requests
-        statsd_client: Metrics client for tracking requests
+        metrics_client: Metrics client for tracking requests
         database_session_maker: Database session factory
         redis_session: Redis client for token caching
         state: OAuth state parameter from callback
@@ -468,7 +468,7 @@ async def oauth_complete(
 
         # Set up middleware chain for request authentication and metrics
         chain_middleware = [
-            StatsdMiddleware(statsd_client),
+            StatsdMiddleware(metrics_client),
             GenerateDpopMiddleware(
                 dpop_key,
                 dpop_assertation_header,
@@ -615,7 +615,7 @@ async def log_responses(
 async def oauth_refresh(
     settings: Settings,
     http_session: ClientSession,
-    statsd_client: TelegrafStatsdClient,
+    metrics_client: MetricsClient,
     database_session: AsyncSession,
     redis_session: redis.Redis,
     current_oauth_session: OAuthSession,
@@ -634,7 +634,7 @@ async def oauth_refresh(
     Args:
         settings: Application settings
         http_session: HTTP session for making requests
-        statsd_client: Metrics client for tracking requests
+        metrics_client: Metrics client for tracking requests
         database_session: Database session
         redis_session: Redis client for token caching
         current_oauth_session: Current OAuth session with tokens
@@ -735,7 +735,7 @@ async def oauth_refresh(
 
     # Set up middleware chain for request authentication and metrics
     chain_middleware = [
-        StatsdMiddleware(statsd_client),
+        StatsdMiddleware(metrics_client),
         GenerateDpopMiddleware(
             dpop_key,
             dpop_assertation_header,

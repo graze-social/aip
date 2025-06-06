@@ -6,7 +6,6 @@ from typing import (
     Optional,
     Dict,
 )
-from aio_statsd import TelegrafStatsdClient
 from aiohttp import web
 from jwcrypto import jwt
 from sqlalchemy import select
@@ -18,6 +17,7 @@ import sentry_sdk
 from social.graze.aip.app.config import (
     SettingsAppKey,
 )
+from social.graze.aip.app.metrics import MetricsClient
 from social.graze.aip.model.app_password import AppPasswordSession
 from social.graze.aip.model.handles import Handle
 from social.graze.aip.model.oauth import OAuthSession, Permission
@@ -111,7 +111,7 @@ class AuthenticationException(Exception):
 
 async def auth_token_helper(
     database_session: AsyncSession,
-    statsd_client: TelegrafStatsdClient,
+    metrics_client: MetricsClient,
     request: web.Request,
     allow_permissions: bool = True,
 ) -> Optional[AuthToken]:
@@ -128,7 +128,7 @@ async def auth_token_helper(
 
     Args:
         database_session: SQLAlchemy async session for database queries
-        statsd_client: Statsd client for metrics
+        metrics_client: Metrics client for telemetry collection
         request: The HTTP request to authenticate
         allow_permissions: Whether to allow acting on behalf of another user via permissions
 
@@ -311,7 +311,7 @@ async def auth_token_helper(
         raise
     except Exception as e:
         sentry_sdk.capture_exception(e)
-        statsd_client.increment(
+        metrics_client.increment(
             "aip.auth.exception",
             1,
             tag_dict={"exception": type(e).__name__},

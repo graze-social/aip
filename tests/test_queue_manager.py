@@ -12,10 +12,11 @@ import pytest_asyncio
 import fakeredis.aioredis
 
 from social.graze.aip.app.tasks import QueueManager
+from social.graze.aip.app.metrics import MetricsClient
 
 
-class MockStatsdClient:
-    """Mock StatsD client for testing metrics collection."""
+class MockMetricsClient:
+    """Mock metrics client for testing metrics collection."""
 
     def __init__(self):
         self.gauges = {}
@@ -35,6 +36,10 @@ class MockStatsdClient:
         """Record timer metric."""
         self.timers[metric_name] = {"value": value, "tags": tag_dict or {}}
 
+    async def close(self):
+        """Mock close method."""
+        pass
+
 
 @pytest_asyncio.fixture
 async def fake_redis():
@@ -46,17 +51,17 @@ async def fake_redis():
 
 
 @pytest_asyncio.fixture
-async def mock_statsd():
-    """Provide mock StatsD client for testing."""
-    return MockStatsdClient()
+async def mock_metrics():
+    """Provide mock metrics client for testing."""
+    return MockMetricsClient()
 
 
 @pytest_asyncio.fixture
-async def queue_manager(fake_redis, mock_statsd):
-    """Provide QueueManager instance with fake Redis and mock StatsD."""
+async def queue_manager(fake_redis, mock_metrics):
+    """Provide QueueManager instance with fake Redis and mock metrics."""
     return QueueManager(
         redis_client=fake_redis,
-        statsd_client=mock_statsd,
+        metrics_client=mock_metrics,
         queue_name="test_queue",
         worker_id="worker_1",
         batch_size=5,
@@ -66,21 +71,21 @@ async def queue_manager(fake_redis, mock_statsd):
 class TestQueueManagerInitialization:
     """Test QueueManager initialization and property setup."""
 
-    def test_queue_manager_creation(self, queue_manager, fake_redis, mock_statsd):
+    def test_queue_manager_creation(self, queue_manager, fake_redis, mock_metrics):
         """Test QueueManager is created with correct properties."""
         assert queue_manager.redis_client == fake_redis
-        assert queue_manager.statsd_client == mock_statsd
+        assert queue_manager.metrics_client == mock_metrics
         assert queue_manager.queue_name == "test_queue"
         assert queue_manager.worker_id == "worker_1"
         assert queue_manager.batch_size == 5
         assert queue_manager.worker_queue == "test_queue:worker_1"
         assert queue_manager.workers_heartbeat == "test_queue:workers"
 
-    def test_queue_manager_custom_batch_size(self, fake_redis, mock_statsd):
+    def test_queue_manager_custom_batch_size(self, fake_redis, mock_metrics):
         """Test QueueManager with custom batch size."""
         qm = QueueManager(
             redis_client=fake_redis,
-            statsd_client=mock_statsd,
+            metrics_client=mock_metrics,
             queue_name="custom_queue",
             worker_id="custom_worker",
             batch_size=10,
@@ -88,11 +93,11 @@ class TestQueueManagerInitialization:
         assert qm.batch_size == 10
         assert qm.worker_queue == "custom_queue:custom_worker"
 
-    def test_queue_manager_default_batch_size(self, fake_redis, mock_statsd):
+    def test_queue_manager_default_batch_size(self, fake_redis, mock_metrics):
         """Test QueueManager uses default batch size when not specified."""
         qm = QueueManager(
             redis_client=fake_redis,
-            statsd_client=mock_statsd,
+            metrics_client=mock_metrics,
             queue_name="default_queue",
             worker_id="default_worker",
         )
@@ -112,10 +117,10 @@ class TestUpdateHeartbeat:
         heartbeat_value = await fake_redis.hget("test_queue:workers", "worker_1")
         assert heartbeat_value.decode() == str(timestamp)
 
-    async def test_update_heartbeat_multiple_workers(self, fake_redis, mock_statsd):
+    async def test_update_heartbeat_multiple_workers(self, fake_redis, mock_metrics):
         """Test multiple workers can update heartbeat independently."""
-        qm1 = QueueManager(fake_redis, mock_statsd, "test_queue", "worker_1")
-        qm2 = QueueManager(fake_redis, mock_statsd, "test_queue", "worker_2")
+        qm1 = QueueManager(fake_redis, mock_metrics, "test_queue", "worker_1")
+        qm2 = QueueManager(fake_redis, mock_metrics, "test_queue", "worker_2")
 
         timestamp1 = int(time.time())
         timestamp2 = timestamp1 + 10
@@ -242,11 +247,11 @@ class TestPopulateWorkerQueue:
         assert b"task_4" in global_items
 
     async def test_populate_worker_queue_respects_batch_size(
-        self, fake_redis, mock_statsd
+        self, fake_redis, mock_metrics
     ):
         """Test worker queue population respects batch size limit."""
         qm = QueueManager(
-            fake_redis, mock_statsd, "test_queue", "worker_1", batch_size=2
+            fake_redis, mock_metrics, "test_queue", "worker_1", batch_size=2
         )
         current_time = int(time.time())
 
@@ -511,16 +516,16 @@ class TestQueueManagerIntegration:
         assert final_worker_count == 0
         assert final_global_count == 0
 
-    async def test_concurrent_workers(self, fake_redis, mock_statsd):
+    async def test_concurrent_workers(self, fake_redis, mock_metrics):
         """Test multiple workers operating on same queue simultaneously."""
         current_time = int(time.time())
 
         # Create two workers for same queue
         worker1 = QueueManager(
-            fake_redis, mock_statsd, "shared_queue", "worker_1", batch_size=2
+            fake_redis, mock_metrics, "shared_queue", "worker_1", batch_size=2
         )
         worker2 = QueueManager(
-            fake_redis, mock_statsd, "shared_queue", "worker_2", batch_size=2
+            fake_redis, mock_metrics, "shared_queue", "worker_2", batch_size=2
         )
 
         # Add tasks to global queue
@@ -701,7 +706,7 @@ class TestQueueManagerPerformance:
         assert populate_time < 1.0  # Should complete within 1 second
 
     @pytest.mark.asyncio
-    async def test_batch_processing_efficiency(self, fake_redis, mock_statsd):
+    async def test_batch_processing_efficiency(self, fake_redis, mock_metrics):
         """Test batch processing with different batch sizes."""
         current_time = int(time.time())
 
@@ -713,7 +718,7 @@ class TestQueueManagerPerformance:
             await fake_redis.flushall()
 
             qm = QueueManager(
-                fake_redis, mock_statsd, "test_queue", "worker_1", batch_size
+                fake_redis, mock_metrics, "test_queue", "worker_1", batch_size
             )
 
             # Add more tasks than batch size
