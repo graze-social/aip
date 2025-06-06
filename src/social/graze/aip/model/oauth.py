@@ -13,10 +13,10 @@ class OAuthRequest(Base):
     oauth_state: Mapped[str] = mapped_column(String(64), primary_key=True)
     issuer: Mapped[str512]
     guid: Mapped[str512]
-    pkce_verifier: Mapped[str]
-    secret_jwk_id: Mapped[str]
+    pkce_verifier: Mapped[str] = mapped_column(String(128), nullable=False)
+    secret_jwk_id: Mapped[str] = mapped_column(String(32), nullable=False)
     dpop_jwk: Mapped[Any] = mapped_column(JSON, nullable=False)
-    destination: Mapped[str]
+    destination: Mapped[str] = mapped_column(String(512), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -33,7 +33,7 @@ class OAuthSession(Base):
     guid: Mapped[str512]
     access_token: Mapped[str1024]
     refresh_token: Mapped[str512]
-    secret_jwk_id: Mapped[str512]
+    secret_jwk_id: Mapped[str] = mapped_column(String(32), nullable=False)
     dpop_jwk: Mapped[Any] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False

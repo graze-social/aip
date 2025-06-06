@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Mapped
+from sqlalchemy import Index
 from sqlalchemy.dialects.postgresql import insert
 from ulid import ULID
 
@@ -12,6 +13,11 @@ class Handle(Base):
     did: Mapped[str512]
     handle: Mapped[str512]
     pds: Mapped[str512]
+
+    __table_args__ = (
+        Index("idx_handles_did", "did", unique=True),
+        Index("idx_handles_handle", "handle"),
+    )
 
 
 def upsert_handle_stmt(did: str, handle: str, pds: str):
