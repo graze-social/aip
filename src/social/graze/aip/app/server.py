@@ -174,6 +174,7 @@ async def cors_middleware(request: web.Request, handler):
 
     return response
 
+
 @web.middleware
 async def sentry_middleware(request: web.Request, handler):
     request_method: str = request.method

@@ -1,6 +1,7 @@
 from typing import Dict, Optional
 from urllib.parse import urlparse
 
+
 def get_cors_headers(
     origin_value: Optional[str], path: str, debug: bool
 ) -> Dict[str, str]:
@@ -23,14 +24,18 @@ def get_cors_headers(
             "If-Modified-Since, Cache-Control, Content-Type, "
             "Authorization, X-Subject, X-Service"
         ),
-        "Vary": "Origin"
+        "Vary": "Origin",
     }
 
     if path.startswith("/auth/"):
         headers["Access-Control-Allow-Origin"] = "*"
     elif origin_value:
         parsed = urlparse(origin_value)
-        base = f"{parsed.scheme}://{parsed.hostname}" if parsed.scheme and parsed.hostname else origin_value
+        base = (
+            f"{parsed.scheme}://{parsed.hostname}"
+            if parsed.scheme and parsed.hostname
+            else origin_value
+        )
 
         if base in allowed_origins:
             headers["Access-Control-Allow-Origin"] = origin_value

@@ -16,6 +16,7 @@ from social.graze.aip.resolve.handle import resolve_subject
 
 logger = logging.getLogger(__name__)
 
+
 async def handle_internal_me(request: web.Request):
     database_session_maker = request.app[DatabaseSessionMakerAppKey]
     statsd_client = request.app[TelegrafStatsdClientAppKey]
@@ -55,34 +56,34 @@ async def handle_internal_me(request: web.Request):
             "error": "Internal Server Error",
             "error_type": type(e).__name__,
             "error_message": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc(),
         }
-        
+
         # Log the full error details
         logger.error(
             f"Unexpected error in handle_internal_me: {type(e).__name__}: {str(e)}\n"
             f"Traceback:\n{traceback.format_exc()}"
         )
-        
+
         sentry_sdk.capture_exception(e)
-        
+
         # Determine if we should include detailed error info in response
         # You might want to check if in debug/development mode
         settings = request.app.get(SettingsAppKey)
-        if settings and getattr(settings, 'debug', False):
+        if settings and getattr(settings, "debug", False):
             # Include full error details in debug mode
             response_body = json.dumps(error_details)
         else:
             # Production: only include safe error info
-            response_body = json.dumps({
-                "error": "Internal Server Error",
-                "error_type": type(e).__name__
-            })
-        
+            response_body = json.dumps(
+                {"error": "Internal Server Error", "error_type": type(e).__name__}
+            )
+
         raise web.HTTPInternalServerError(
             body=response_body,
             content_type="application/json",
         )
+
 
 async def handle_internal_ready(request: web.Request):
     health_gauge = request.app[HealthGaugeAppKey]

@@ -21,7 +21,7 @@ from tests.test_helpers import (
     assert_primary_key_uniqueness,
     assert_field_length_constraint,
     create_test_data_variants,
-    assert_multiple_records_creation
+    assert_multiple_records_creation,
 )
 
 
@@ -123,13 +123,15 @@ class TestHandleModel:
 
     async def test_read_nonexistent_handle(self, session: AsyncSession):
         """Test reading nonexistent Handle returns None."""
-        await assert_read_nonexistent_record(session, Handle, "guid", "nonexistent-guid")
+        await assert_read_nonexistent_record(
+            session, Handle, "guid", "nonexistent-guid"
+        )
 
     async def test_update_handle(self, session: AsyncSession, sample_handle_data):
         """Test updating Handle fields."""
         updates = {
             "handle": "updated.bsky.social",
-            "pds": "https://updated-pds.example.com"
+            "pds": "https://updated-pds.example.com",
         }
         await assert_update_record(session, Handle, sample_handle_data, updates, "guid")
 
@@ -170,7 +172,7 @@ class TestHandleModel:
         """Test that multiple records can have the same handle (handle is indexed but not unique)."""
         # Modify alternative data to have same handle but different DID
         alternative_handle_data["handle"] = sample_handle_data["handle"]
-        
+
         data_variants = [sample_handle_data, alternative_handle_data]
         await assert_multiple_records_creation(session, Handle, data_variants, 2)
 
@@ -284,7 +286,9 @@ class TestHandleConstraintsAndIndexes:
             "handle": "test2.bsky.social",
             "pds": "https://pds2.example.com",
         }
-        await assert_primary_key_uniqueness(session, Handle, first_data, second_data, "guid")
+        await assert_primary_key_uniqueness(
+            session, Handle, first_data, second_data, "guid"
+        )
 
     async def test_did_index_uniqueness(self, session: AsyncSession):
         """Test that DID index enforces uniqueness."""
@@ -301,7 +305,9 @@ class TestHandleConstraintsAndIndexes:
             "handle": "second.bsky.social",
             "pds": "https://second-pds.example.com",
         }
-        await assert_primary_key_uniqueness(session, Handle, first_data, second_data, "did")
+        await assert_primary_key_uniqueness(
+            session, Handle, first_data, second_data, "did"
+        )
 
     async def test_handle_index_allows_duplicates(self, session: AsyncSession):
         """Test that handle index allows duplicate values."""
@@ -318,7 +324,7 @@ class TestHandleConstraintsAndIndexes:
                 "did": "did:plc:second",
                 "handle": handle_value,  # Same handle
                 "pds": "https://second-pds.example.com",
-            }
+            },
         ]
         await assert_multiple_records_creation(session, Handle, data_variants, 2)
 
@@ -335,8 +341,10 @@ class TestHandleConstraintsAndIndexes:
             "guid": generate_ulid_string(),
             "did": "did:plc:test",
             "handle": "test.bsky.social",
-            "pds": "https://test.com"
+            "pds": "https://test.com",
         }
         # Test each string field constraint
         for field_name in ["did", "handle", "pds"]:
-            await assert_field_length_constraint(session, Handle, base_data, field_name, 512, "guid")
+            await assert_field_length_constraint(
+                session, Handle, base_data, field_name, 512, "guid"
+            )

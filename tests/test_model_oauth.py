@@ -13,10 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from social.graze.aip.model.oauth import (
-    OAuthRequest, 
-    OAuthSession, 
-    Permission, 
-    upsert_permission_stmt
+    OAuthRequest,
+    OAuthSession,
+    Permission,
+    upsert_permission_stmt,
 )
 from tests.test_helpers import (
     generate_ulid_string,
@@ -27,7 +27,7 @@ from tests.test_helpers import (
     assert_delete_record,
     assert_primary_key_uniqueness,
     assert_field_length_constraint,
-    assert_datetime_timezone_handling
+    assert_datetime_timezone_handling,
 )
 
 
@@ -43,7 +43,7 @@ def sample_oauth_request_data():
         "dpop_jwk": {"kty": "EC", "crv": "P-256", "x": "test_x", "y": "test_y"},
         "destination": "https://client.example.com/callback",
         "created_at": generate_test_datetime(),
-        "expires_at": generate_test_datetime(10)  # 10 minutes from now
+        "expires_at": generate_test_datetime(10),  # 10 minutes from now
     }
 
 
@@ -60,7 +60,7 @@ def sample_oauth_session_data():
         "dpop_jwk": {"kty": "EC", "crv": "P-256", "x": "test_x", "y": "test_y"},
         "created_at": generate_test_datetime(),
         "access_token_expires_at": generate_test_datetime(60),  # 1 hour from now
-        "hard_expires_at": generate_test_datetime(43200)  # 30 days from now
+        "hard_expires_at": generate_test_datetime(43200),  # 30 days from now
     }
 
 
@@ -71,7 +71,7 @@ def sample_permission_data():
         "guid": generate_ulid_string(),
         "target_guid": generate_ulid_string(),
         "permission": 1,
-        "created_at": generate_test_datetime()
+        "created_at": generate_test_datetime(),
     }
 
 
@@ -87,16 +87,20 @@ def alternative_oauth_request_data():
         "dpop_jwk": {"kty": "RSA", "n": "test_n", "e": "AQAB"},
         "destination": "https://alt-client.example.com/callback",
         "created_at": datetime.now(timezone.utc),
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15)
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15),
     }
 
 
 class TestOAuthRequestModel:
     """Test suite for OAuthRequest model CRUD operations."""
 
-    async def test_create_oauth_request(self, session: AsyncSession, sample_oauth_request_data):
+    async def test_create_oauth_request(
+        self, session: AsyncSession, sample_oauth_request_data
+    ):
         """Test creating a new OAuthRequest record."""
-        await create_and_verify_record(session, OAuthRequest, sample_oauth_request_data, "oauth_state")
+        await create_and_verify_record(
+            session, OAuthRequest, sample_oauth_request_data, "oauth_state"
+        )
 
     async def test_create_oauth_request_with_invalid_data(self, session: AsyncSession):
         """Test creating OAuthRequest with invalid data raises appropriate errors."""
@@ -113,7 +117,7 @@ class TestOAuthRequestModel:
                 dpop_jwk={"kty": "EC"},
                 destination="https://test.com/callback",
                 created_at=datetime.now(timezone.utc),
-                expires_at=datetime.now(timezone.utc) + timedelta(minutes=10)
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
             )
             session.add(oauth_request)
             await session.commit()
@@ -122,7 +126,9 @@ class TestOAuthRequestModel:
         except Exception:
             await session.rollback()
 
-    async def test_read_oauth_request_by_state(self, session: AsyncSession, sample_oauth_request_data):
+    async def test_read_oauth_request_by_state(
+        self, session: AsyncSession, sample_oauth_request_data
+    ):
         """Test reading OAuthRequest by primary key (oauth_state)."""
         oauth_request = OAuthRequest(**sample_oauth_request_data)
         session.add(oauth_request)
@@ -130,7 +136,9 @@ class TestOAuthRequestModel:
 
         # Read by oauth_state
         result = await session.execute(
-            select(OAuthRequest).where(OAuthRequest.oauth_state == sample_oauth_request_data["oauth_state"])
+            select(OAuthRequest).where(
+                OAuthRequest.oauth_state == sample_oauth_request_data["oauth_state"]
+            )
         )
         retrieved_request = result.scalar_one()
 
@@ -139,21 +147,33 @@ class TestOAuthRequestModel:
 
     async def test_read_nonexistent_oauth_request(self, session: AsyncSession):
         """Test reading nonexistent OAuthRequest returns None."""
-        await assert_read_nonexistent_record(session, OAuthRequest, "oauth_state", "nonexistent-state")
+        await assert_read_nonexistent_record(
+            session, OAuthRequest, "oauth_state", "nonexistent-state"
+        )
 
-    async def test_update_oauth_request(self, session: AsyncSession, sample_oauth_request_data):
+    async def test_update_oauth_request(
+        self, session: AsyncSession, sample_oauth_request_data
+    ):
         """Test updating OAuthRequest fields."""
         updates = {
             "destination": "https://updated.example.com/callback",
-            "issuer": "https://updated.bsky.social"
+            "issuer": "https://updated.bsky.social",
         }
-        await assert_update_record(session, OAuthRequest, sample_oauth_request_data, updates, "oauth_state")
+        await assert_update_record(
+            session, OAuthRequest, sample_oauth_request_data, updates, "oauth_state"
+        )
 
-    async def test_delete_oauth_request(self, session: AsyncSession, sample_oauth_request_data):
+    async def test_delete_oauth_request(
+        self, session: AsyncSession, sample_oauth_request_data
+    ):
         """Test deleting OAuthRequest record."""
-        await assert_delete_record(session, OAuthRequest, sample_oauth_request_data, "oauth_state")
+        await assert_delete_record(
+            session, OAuthRequest, sample_oauth_request_data, "oauth_state"
+        )
 
-    async def test_oauth_request_json_field(self, session: AsyncSession, sample_oauth_request_data):
+    async def test_oauth_request_json_field(
+        self, session: AsyncSession, sample_oauth_request_data
+    ):
         """Test that dpop_jwk JSON field stores and retrieves complex data correctly."""
         complex_jwk = {
             "kty": "EC",
@@ -161,7 +181,7 @@ class TestOAuthRequestModel:
             "x": "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGHwHitJBcBmXdmqhDShAhOLdElvPUm7T-",
             "y": "ECYw_Z1cKRHfIJYLnp3yBFnjAzTejXm6FeNwpOxdQ3k",
             "use": "sig",
-            "kid": "test-key-id"
+            "kid": "test-key-id",
         }
         sample_oauth_request_data["dpop_jwk"] = complex_jwk
 
@@ -171,7 +191,9 @@ class TestOAuthRequestModel:
 
         # Verify JSON field retrieval
         result = await session.execute(
-            select(OAuthRequest).where(OAuthRequest.oauth_state == sample_oauth_request_data["oauth_state"])
+            select(OAuthRequest).where(
+                OAuthRequest.oauth_state == sample_oauth_request_data["oauth_state"]
+            )
         )
         retrieved_request = result.scalar_one()
 
@@ -183,7 +205,9 @@ class TestOAuthRequestModel:
 class TestOAuthSessionModel:
     """Test suite for OAuthSession model CRUD operations."""
 
-    async def test_create_oauth_session(self, session: AsyncSession, sample_oauth_session_data):
+    async def test_create_oauth_session(
+        self, session: AsyncSession, sample_oauth_session_data
+    ):
         """Test creating a new OAuthSession record."""
         oauth_session = OAuthSession(**sample_oauth_session_data)
         session.add(oauth_session)
@@ -191,19 +215,34 @@ class TestOAuthSessionModel:
 
         # Verify the session was created
         result = await session.execute(
-            select(OAuthSession).where(OAuthSession.session_group == sample_oauth_session_data["session_group"])
+            select(OAuthSession).where(
+                OAuthSession.session_group == sample_oauth_session_data["session_group"]
+            )
         )
         retrieved_session = result.scalar_one()
 
-        assert retrieved_session.session_group == sample_oauth_session_data["session_group"]
+        assert (
+            retrieved_session.session_group
+            == sample_oauth_session_data["session_group"]
+        )
         assert retrieved_session.issuer == sample_oauth_session_data["issuer"]
         assert retrieved_session.guid == sample_oauth_session_data["guid"]
-        assert retrieved_session.access_token == sample_oauth_session_data["access_token"]
-        assert retrieved_session.refresh_token == sample_oauth_session_data["refresh_token"]
-        assert retrieved_session.secret_jwk_id == sample_oauth_session_data["secret_jwk_id"]
+        assert (
+            retrieved_session.access_token == sample_oauth_session_data["access_token"]
+        )
+        assert (
+            retrieved_session.refresh_token
+            == sample_oauth_session_data["refresh_token"]
+        )
+        assert (
+            retrieved_session.secret_jwk_id
+            == sample_oauth_session_data["secret_jwk_id"]
+        )
         assert retrieved_session.dpop_jwk == sample_oauth_session_data["dpop_jwk"]
 
-    async def test_create_oauth_session_with_long_tokens(self, session: AsyncSession, sample_oauth_session_data):
+    async def test_create_oauth_session_with_long_tokens(
+        self, session: AsyncSession, sample_oauth_session_data
+    ):
         """Test creating OAuthSession with very long tokens (testing str1024 constraint)."""
         # Create long access token (exactly 1024 characters)
         long_access_token = "bearer_" + "x" * 1017  # 7 + 1017 = 1024 chars
@@ -215,13 +254,17 @@ class TestOAuthSessionModel:
 
         # Verify creation succeeded
         result = await session.execute(
-            select(OAuthSession).where(OAuthSession.session_group == sample_oauth_session_data["session_group"])
+            select(OAuthSession).where(
+                OAuthSession.session_group == sample_oauth_session_data["session_group"]
+            )
         )
         retrieved_session = result.scalar_one()
 
         assert retrieved_session.access_token == long_access_token
 
-    async def test_read_oauth_session_by_group(self, session: AsyncSession, sample_oauth_session_data):
+    async def test_read_oauth_session_by_group(
+        self, session: AsyncSession, sample_oauth_session_data
+    ):
         """Test reading OAuthSession by primary key (session_group)."""
         oauth_session = OAuthSession(**sample_oauth_session_data)
         session.add(oauth_session)
@@ -229,14 +272,18 @@ class TestOAuthSessionModel:
 
         # Read by session_group
         result = await session.execute(
-            select(OAuthSession).where(OAuthSession.session_group == sample_oauth_session_data["session_group"])
+            select(OAuthSession).where(
+                OAuthSession.session_group == sample_oauth_session_data["session_group"]
+            )
         )
         retrieved_session = result.scalar_one()
 
         assert retrieved_session.issuer == sample_oauth_session_data["issuer"]
         assert retrieved_session.guid == sample_oauth_session_data["guid"]
 
-    async def test_update_oauth_session_tokens(self, session: AsyncSession, sample_oauth_session_data):
+    async def test_update_oauth_session_tokens(
+        self, session: AsyncSession, sample_oauth_session_data
+    ):
         """Test updating OAuthSession token fields."""
         # Create initial session
         oauth_session = OAuthSession(**sample_oauth_session_data)
@@ -250,18 +297,22 @@ class TestOAuthSessionModel:
 
         await session.execute(
             update(OAuthSession)
-            .where(OAuthSession.session_group == sample_oauth_session_data["session_group"])
+            .where(
+                OAuthSession.session_group == sample_oauth_session_data["session_group"]
+            )
             .values(
                 access_token=new_access_token,
                 refresh_token=new_refresh_token,
-                access_token_expires_at=new_expires_at
+                access_token_expires_at=new_expires_at,
             )
         )
         await session.commit()
 
         # Verify updates
         result = await session.execute(
-            select(OAuthSession).where(OAuthSession.session_group == sample_oauth_session_data["session_group"])
+            select(OAuthSession).where(
+                OAuthSession.session_group == sample_oauth_session_data["session_group"]
+            )
         )
         updated_session = result.scalar_one()
 
@@ -270,7 +321,9 @@ class TestOAuthSessionModel:
         assert updated_session.access_token_expires_at == new_expires_at
         assert updated_session.guid == sample_oauth_session_data["guid"]  # Unchanged
 
-    async def test_delete_oauth_session(self, session: AsyncSession, sample_oauth_session_data):
+    async def test_delete_oauth_session(
+        self, session: AsyncSession, sample_oauth_session_data
+    ):
         """Test deleting OAuthSession record."""
         # Create session
         oauth_session = OAuthSession(**sample_oauth_session_data)
@@ -279,13 +332,17 @@ class TestOAuthSessionModel:
 
         # Delete session
         await session.execute(
-            delete(OAuthSession).where(OAuthSession.session_group == sample_oauth_session_data["session_group"])
+            delete(OAuthSession).where(
+                OAuthSession.session_group == sample_oauth_session_data["session_group"]
+            )
         )
         await session.commit()
 
         # Verify deletion
         result = await session.execute(
-            select(OAuthSession).where(OAuthSession.session_group == sample_oauth_session_data["session_group"])
+            select(OAuthSession).where(
+                OAuthSession.session_group == sample_oauth_session_data["session_group"]
+            )
         )
         deleted_session = result.scalar_one_or_none()
 
@@ -295,7 +352,9 @@ class TestOAuthSessionModel:
 class TestPermissionModel:
     """Test suite for Permission model CRUD operations."""
 
-    async def test_create_permission(self, session: AsyncSession, sample_permission_data):
+    async def test_create_permission(
+        self, session: AsyncSession, sample_permission_data
+    ):
         """Test creating a new Permission record."""
         permission = Permission(**sample_permission_data)
         session.add(permission)
@@ -304,8 +363,8 @@ class TestPermissionModel:
         # Verify the permission was created
         result = await session.execute(
             select(Permission).where(
-                (Permission.guid == sample_permission_data["guid"]) &
-                (Permission.target_guid == sample_permission_data["target_guid"])
+                (Permission.guid == sample_permission_data["guid"])
+                & (Permission.target_guid == sample_permission_data["target_guid"])
             )
         )
         retrieved_permission = result.scalar_one()
@@ -315,7 +374,9 @@ class TestPermissionModel:
         assert retrieved_permission.permission == sample_permission_data["permission"]
         assert retrieved_permission.created_at == sample_permission_data["created_at"]
 
-    async def test_read_permission_by_composite_key(self, session: AsyncSession, sample_permission_data):
+    async def test_read_permission_by_composite_key(
+        self, session: AsyncSession, sample_permission_data
+    ):
         """Test reading Permission by composite primary key (guid + target_guid)."""
         permission = Permission(**sample_permission_data)
         session.add(permission)
@@ -324,15 +385,17 @@ class TestPermissionModel:
         # Read by composite key
         result = await session.execute(
             select(Permission).where(
-                (Permission.guid == sample_permission_data["guid"]) &
-                (Permission.target_guid == sample_permission_data["target_guid"])
+                (Permission.guid == sample_permission_data["guid"])
+                & (Permission.target_guid == sample_permission_data["target_guid"])
             )
         )
         retrieved_permission = result.scalar_one()
 
         assert retrieved_permission.permission == sample_permission_data["permission"]
 
-    async def test_read_permissions_by_guid(self, session: AsyncSession, sample_permission_data):
+    async def test_read_permissions_by_guid(
+        self, session: AsyncSession, sample_permission_data
+    ):
         """Test reading all permissions for a specific guid."""
         # Create multiple permissions for the same guid
         guid = sample_permission_data["guid"]
@@ -357,7 +420,9 @@ class TestPermissionModel:
         permission_values = [p.permission for p in retrieved_permissions]
         assert set(permission_values) == {1, 2, 4}
 
-    async def test_update_permission_value(self, session: AsyncSession, sample_permission_data):
+    async def test_update_permission_value(
+        self, session: AsyncSession, sample_permission_data
+    ):
         """Test updating Permission value."""
         # Create initial permission
         permission = Permission(**sample_permission_data)
@@ -370,8 +435,8 @@ class TestPermissionModel:
         await session.execute(
             update(Permission)
             .where(
-                (Permission.guid == sample_permission_data["guid"]) &
-                (Permission.target_guid == sample_permission_data["target_guid"])
+                (Permission.guid == sample_permission_data["guid"])
+                & (Permission.target_guid == sample_permission_data["target_guid"])
             )
             .values(permission=new_permission_value)
         )
@@ -380,15 +445,17 @@ class TestPermissionModel:
         # Verify update
         result = await session.execute(
             select(Permission).where(
-                (Permission.guid == sample_permission_data["guid"]) &
-                (Permission.target_guid == sample_permission_data["target_guid"])
+                (Permission.guid == sample_permission_data["guid"])
+                & (Permission.target_guid == sample_permission_data["target_guid"])
             )
         )
         updated_permission = result.scalar_one()
 
         assert updated_permission.permission == new_permission_value
 
-    async def test_delete_permission(self, session: AsyncSession, sample_permission_data):
+    async def test_delete_permission(
+        self, session: AsyncSession, sample_permission_data
+    ):
         """Test deleting Permission record."""
         # Create permission
         permission = Permission(**sample_permission_data)
@@ -398,8 +465,8 @@ class TestPermissionModel:
         # Delete permission
         await session.execute(
             delete(Permission).where(
-                (Permission.guid == sample_permission_data["guid"]) &
-                (Permission.target_guid == sample_permission_data["target_guid"])
+                (Permission.guid == sample_permission_data["guid"])
+                & (Permission.target_guid == sample_permission_data["target_guid"])
             )
         )
         await session.commit()
@@ -407,8 +474,8 @@ class TestPermissionModel:
         # Verify deletion
         result = await session.execute(
             select(Permission).where(
-                (Permission.guid == sample_permission_data["guid"]) &
-                (Permission.target_guid == sample_permission_data["target_guid"])
+                (Permission.guid == sample_permission_data["guid"])
+                & (Permission.target_guid == sample_permission_data["target_guid"])
             )
         )
         deleted_permission = result.scalar_one_or_none()
@@ -423,10 +490,7 @@ class TestPermissionModel:
 
         # Create first permission
         permission1 = Permission(
-            guid=guid,
-            target_guid=target_guid,
-            permission=1,
-            created_at=created_at
+            guid=guid, target_guid=target_guid, permission=1, created_at=created_at
         )
         session.add(permission1)
         await session.commit()
@@ -440,7 +504,7 @@ class TestPermissionModel:
                 guid=guid,  # Same guid
                 target_guid=target_guid,  # Same target_guid
                 permission=2,  # Different permission value
-                created_at=created_at
+                created_at=created_at,
             )
             session.add(permission2)
             await session.commit()
@@ -464,7 +528,7 @@ class TestUpsertPermissionStmt:
             guid=guid,
             target_guid=target_guid,
             permission=permission,
-            created_at=created_at
+            created_at=created_at,
         )
         await session.execute(stmt)
         await session.commit()
@@ -472,8 +536,7 @@ class TestUpsertPermissionStmt:
         # Verify the permission was created
         result = await session.execute(
             select(Permission).where(
-                (Permission.guid == guid) &
-                (Permission.target_guid == target_guid)
+                (Permission.guid == guid) & (Permission.target_guid == target_guid)
             )
         )
         created_permission = result.scalar_one()
@@ -483,7 +546,9 @@ class TestUpsertPermissionStmt:
         assert created_permission.permission == permission
         assert created_permission.created_at == created_at
 
-    async def test_upsert_existing_permission(self, session: AsyncSession, sample_permission_data):
+    async def test_upsert_existing_permission(
+        self, session: AsyncSession, sample_permission_data
+    ):
         """Test upserting an existing Permission (UPDATE behavior)."""
         # Create initial permission
         permission = Permission(**sample_permission_data)
@@ -498,7 +563,7 @@ class TestUpsertPermissionStmt:
             guid=sample_permission_data["guid"],
             target_guid=sample_permission_data["target_guid"],
             permission=new_permission_value,
-            created_at=new_created_at
+            created_at=new_created_at,
         )
         await session.execute(stmt)
         await session.commit()
@@ -509,8 +574,8 @@ class TestUpsertPermissionStmt:
         # Verify the permission was updated
         result = await session.execute(
             select(Permission).where(
-                (Permission.guid == sample_permission_data["guid"]) &
-                (Permission.target_guid == sample_permission_data["target_guid"])
+                (Permission.guid == sample_permission_data["guid"])
+                & (Permission.target_guid == sample_permission_data["target_guid"])
             )
         )
         updated_permission = result.scalar_one()
@@ -534,14 +599,16 @@ class TestUpsertPermissionStmt:
                 guid=guid,
                 target_guid=target_guid,
                 permission=perm,
-                created_at=created_at
+                created_at=created_at,
             )
             await session.execute(stmt)
         await session.commit()
 
         # Verify all permissions were created
         result = await session.execute(
-            select(Permission).where(Permission.guid == guid).order_by(Permission.permission)
+            select(Permission)
+            .where(Permission.guid == guid)
+            .order_by(Permission.permission)
         )
         created_permissions = result.scalars().all()
 
@@ -559,7 +626,7 @@ class TestOAuthConstraintsAndEdgeCases:
         oauth_state = "unique_state_test"
         created_at = generate_test_datetime()
         expires_at = generate_test_datetime(10)
-        
+
         first_data = {
             "oauth_state": oauth_state,
             "issuer": "https://first.bsky.social",
@@ -569,9 +636,9 @@ class TestOAuthConstraintsAndEdgeCases:
             "dpop_jwk": {"kty": "EC"},
             "destination": "https://first.example.com",
             "created_at": created_at,
-            "expires_at": expires_at
+            "expires_at": expires_at,
         }
-        
+
         second_data = {
             "oauth_state": oauth_state,  # Same state
             "issuer": "https://second.bsky.social",
@@ -581,10 +648,12 @@ class TestOAuthConstraintsAndEdgeCases:
             "dpop_jwk": {"kty": "RSA"},
             "destination": "https://second.example.com",
             "created_at": created_at,
-            "expires_at": expires_at
+            "expires_at": expires_at,
         }
-        
-        await assert_primary_key_uniqueness(session, OAuthRequest, first_data, second_data, "oauth_state")
+
+        await assert_primary_key_uniqueness(
+            session, OAuthRequest, first_data, second_data, "oauth_state"
+        )
 
     async def test_session_group_primary_key_uniqueness(self, session: AsyncSession):
         """Test that session_group primary key enforces uniqueness."""
@@ -602,7 +671,7 @@ class TestOAuthConstraintsAndEdgeCases:
             dpop_jwk={"kty": "EC"},
             created_at=created_at,
             access_token_expires_at=created_at + timedelta(hours=1),
-            hard_expires_at=created_at + timedelta(days=30)
+            hard_expires_at=created_at + timedelta(days=30),
         )
         session.add(session1)
         await session.commit()
@@ -620,7 +689,7 @@ class TestOAuthConstraintsAndEdgeCases:
                 dpop_jwk={"kty": "RSA"},
                 created_at=created_at,
                 access_token_expires_at=created_at + timedelta(hours=1),
-                hard_expires_at=created_at + timedelta(days=30)
+                hard_expires_at=created_at + timedelta(days=30),
             )
             session.add(session2)
             await session.commit()
@@ -639,20 +708,30 @@ class TestOAuthConstraintsAndEdgeCases:
             "dpop_jwk": {"kty": "EC"},
             "destination": "https://test.com",
             "created_at": generate_test_datetime(),
-            "expires_at": generate_test_datetime(10)
+            "expires_at": generate_test_datetime(10),
         }
-        
-        # Test oauth_state length constraint (64 chars)
-        await assert_field_length_constraint(session, OAuthRequest, base_data, "oauth_state", 64, "oauth_state")
 
-    async def test_datetime_timezone_handling(self, session: AsyncSession, sample_oauth_request_data):
+        # Test oauth_state length constraint (64 chars)
+        await assert_field_length_constraint(
+            session, OAuthRequest, base_data, "oauth_state", 64, "oauth_state"
+        )
+
+    async def test_datetime_timezone_handling(
+        self, session: AsyncSession, sample_oauth_request_data
+    ):
         """Test that datetime fields handle timezone-aware values correctly."""
         datetime_fields = ["created_at", "expires_at"]
         await assert_datetime_timezone_handling(
-            session, OAuthRequest, sample_oauth_request_data, datetime_fields, "oauth_state"
+            session,
+            OAuthRequest,
+            sample_oauth_request_data,
+            datetime_fields,
+            "oauth_state",
         )
 
-    async def test_json_field_edge_cases(self, session: AsyncSession, sample_oauth_request_data):
+    async def test_json_field_edge_cases(
+        self, session: AsyncSession, sample_oauth_request_data
+    ):
         """Test JSON field with various edge cases."""
         # Test empty dict
         sample_oauth_request_data["dpop_jwk"] = {}
@@ -663,7 +742,7 @@ class TestOAuthConstraintsAndEdgeCases:
         # Test nested JSON
         sample_oauth_request_data["dpop_jwk"] = {
             "kty": "EC",
-            "nested": {"deep": {"value": 42}, "array": [1, 2, 3]}
+            "nested": {"deep": {"value": 42}, "array": [1, 2, 3]},
         }
         sample_oauth_request_data["oauth_state"] = "nested_json_test"
         request2 = OAuthRequest(**sample_oauth_request_data)

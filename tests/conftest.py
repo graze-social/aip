@@ -23,9 +23,7 @@ TEST_DB_PASSWORD = os.getenv("TEST_DB_PASSWORD", "password")
 TEST_DB_NAME = os.getenv("TEST_DB_NAME", "aip_test_db")
 
 # Admin URL for database creation/deletion (connects to postgres database)
-ADMIN_DATABASE_URL = (
-    f"postgresql+asyncpg://{TEST_DB_USER}:{TEST_DB_PASSWORD}@{TEST_DB_HOST}:{TEST_DB_PORT}/postgres"
-)
+ADMIN_DATABASE_URL = f"postgresql+asyncpg://{TEST_DB_USER}:{TEST_DB_PASSWORD}@{TEST_DB_HOST}:{TEST_DB_PORT}/postgres"
 
 
 async def check_postgres_available():
@@ -50,7 +48,8 @@ async def test_database():
     # Use a unique database name for each test to avoid conflicts
     unique_db_name = f"aip_test_{uuid.uuid4().hex[:8]}"
     unique_db_url = (
-        f"postgresql+asyncpg://{TEST_DB_USER}:{TEST_DB_PASSWORD}@{TEST_DB_HOST}:{TEST_DB_PORT}/{unique_db_name}"
+        f"postgresql+asyncpg://{TEST_DB_USER}:{TEST_DB_PASSWORD}@"
+        f"{TEST_DB_HOST}:{TEST_DB_PORT}/{unique_db_name}"
     )
 
     # Create admin engine to manage database creation/deletion

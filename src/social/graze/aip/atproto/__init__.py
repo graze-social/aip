@@ -5,7 +5,7 @@ This package provides integration with the AT Protocol, handling authentication 
 and communication with Personal Data Server (PDS) instances.
 
 Key Components:
-- app_password.py: Implementation of app password authentication 
+- app_password.py: Implementation of app password authentication
 - oauth.py: Implementation of OAuth flows including authorization code and refresh token
 - chain.py: Middleware chain for API requests (DPoP, claims, metrics)
 - pds.py: Interaction with PDS (Personal Data Server) instances

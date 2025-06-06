@@ -56,11 +56,11 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     """
     Application settings for the AIP service.
-    
+
     This class uses Pydantic's BaseSettings to automatically load values from environment
     variables, with sensible defaults for development environments. It handles validation,
     type conversion, and provides centralized configuration management.
-    
+
     Settings are organized into the following categories:
     - Environment and debugging
     - Network and service identification
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     - Background task configuration
     - Monitoring and observability
     - UI customization
-    
+
     Environment variables are automatically mapped to settings fields, with aliases
     provided for backward compatibility. For example, the database connection string
     can be set with either PG_DSN or DATABASE_URL environment variables.
@@ -81,8 +81,10 @@ class Settings(BaseSettings):
     Enable debug mode for verbose logging and development features.
     Set with DEBUG=true environment variable.
     """
-    
-    allowed_domains: str = "https://www.graze.social, https://sky-feeder-git-astro-graze.vercel.app"
+
+    allowed_domains: str = (
+        "https://www.graze.social, https://sky-feeder-git-astro-graze.vercel.app"
+    )
     """
     Comma-separated list of domains allowed for CORS.
     Set with ALLOWED_DOMAINS environment variable.
@@ -182,7 +184,7 @@ class Settings(BaseSettings):
     Redis queue name for App Password refresh tasks.
     Set with REFRESH_QUEUE_APP_PASSWORD environment variable.
     """
-    
+
     # Token expiration settings
     app_password_access_token_expiry: int = 720  # 12 minutes
     """
@@ -190,14 +192,14 @@ class Settings(BaseSettings):
     Set with APP_PASSWORD_ACCESS_TOKEN_EXPIRY environment variable.
     Default: 720 (12 minutes)
     """
-    
+
     app_password_refresh_token_expiry: int = 7776000  # 90 days
     """
     Expiration time in seconds for app password refresh tokens.
     Set with APP_PASSWORD_REFRESH_TOKEN_EXPIRY environment variable.
     Default: 7776000 (90 days)
     """
-    
+
     token_refresh_before_expiry_ratio: float = 0.8
     """
     Ratio of token lifetime to wait before refreshing.
@@ -205,14 +207,14 @@ class Settings(BaseSettings):
     Set with TOKEN_REFRESH_BEFORE_EXPIRY_RATIO environment variable.
     Default: 0.8
     """
-    
+
     oauth_refresh_max_retries: int = 3
     """
     Maximum number of retry attempts for failed OAuth refresh operations.
     Set with OAUTH_REFRESH_MAX_RETRIES environment variable.
     Default: 3
     """
-    
+
     oauth_refresh_retry_base_delay: int = 300
     """
     Base delay in seconds for OAuth refresh retry attempts (exponential backoff).
@@ -233,13 +235,13 @@ class Settings(BaseSettings):
     StatsD/Telegraf host for metrics collection.
     Set with TELEGRAF_HOST environment variable.
     """
-    
+
     statsd_port: int = Field(alias="TELEGRAF_PORT", default=8125)
     """
     StatsD/Telegraf port for metrics collection.
     Set with TELEGRAF_PORT environment variable.
     """
-    
+
     statsd_prefix: str = "aip"
     """
     Prefix for all StatsD metrics from this service.
@@ -249,22 +251,22 @@ class Settings(BaseSettings):
     # UI customization settings for login page
     svg_logo: str = "https://www.graze.social/logo.svg"
     """URL for the logo displayed on the login page"""
-    
+
     brand_name: str = "Graze"
     """Brand name displayed on the login page"""
-    
+
     destination: str = "https://graze.social/app/auth/callback"
     """Default destination URL after authentication"""
-    
+
     background_from: str = "#0588f0"
     """Starting gradient color for login page background"""
-    
+
     background_to: str = "#5eb1ef"
     """Ending gradient color for login page background"""
-    
+
     text_color: str = "#FFFFFF"
     """Text color for login page"""
-    
+
     form_color: str = "#FFFFFF"
     """Form background color for login page"""
 
@@ -273,17 +275,17 @@ class Settings(BaseSettings):
     def decode_json_web_keys(cls, v) -> jwk.JWKSet:
         """
         Validate and process the json_web_keys setting.
-        
+
         This validator accepts either:
         - An existing JWKSet object (for programmatic configuration)
         - A file path to a JSON file containing a JWK Set
-        
+
         Args:
             v: The input value to validate
-            
+
         Returns:
             jwk.JWKSet: A valid JWKSet object
-            
+
         Raises:
             ValueError: If the input is neither a JWKSet nor a valid file path
         """
@@ -302,17 +304,17 @@ class Settings(BaseSettings):
     def decode_encryption_key(cls, v) -> Fernet:
         """
         Validate and process the encryption_key setting.
-        
+
         This validator accepts either:
         - An existing Fernet object (for programmatic configuration)
         - A base64-encoded string containing a Fernet key
-        
+
         Args:
             v: The input value to validate
-            
+
         Returns:
             Fernet: A valid Fernet encryption object
-            
+
         Raises:
             ValueError: If the input is neither a Fernet object nor a valid base64 key
         """

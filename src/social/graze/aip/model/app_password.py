@@ -3,6 +3,7 @@
 Provides SQLAlchemy models for app password credentials and active sessions,
 enabling alternative authentication method for AT Protocol applications.
 """
+
 from datetime import datetime
 from sqlalchemy import String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
@@ -12,10 +13,11 @@ from social.graze.aip.model.base import Base, str1024
 
 class AppPassword(Base):
     """AT Protocol app password credentials for third-party authentication.
-    
+
     Stores app password credentials that allow applications to authenticate
     with AT Protocol services without full OAuth flow.
     """
+
     __tablename__ = "atproto_app_passwords"
 
     guid: Mapped[str] = mapped_column(String(512), primary_key=True)
@@ -27,10 +29,11 @@ class AppPassword(Base):
 
 class AppPasswordSession(Base):
     """Active app password session with access and refresh tokens.
-    
+
     Represents authenticated session using app password credentials
     with token lifecycle management for AT Protocol access.
     """
+
     __tablename__ = "atproto_app_password_sessions"
 
     guid: Mapped[str] = mapped_column(String(512), primary_key=True)
