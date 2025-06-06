@@ -41,6 +41,10 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     AsyncSession,
 )
+import logging
+import sentry_sdk
+import asyncio
+from aiohttp import ClientResponse
 from social.graze.aip.app.config import Settings, OAUTH_REFRESH_QUEUE
 from social.graze.aip.atproto.chain import (
     ChainMiddlewareClient,
@@ -568,10 +572,7 @@ async def oauth_complete(
     return str(serialized_auth_token), str(oauth_request.destination)
 
 
-import json
-import logging
-
-async def introspect_aiohttp_response(resp: "aiohttp.ClientResponse") -> dict:
+async def introspect_aiohttp_response(resp: ClientResponse) -> dict:
     info = {
         "url": str(resp.url),
         "status": resp.status,
@@ -598,9 +599,6 @@ def introspect_chain_response(chain_resp) -> dict:
         "body": getattr(chain_resp, "body", None),
     }
     return info
-
-import sentry_sdk
-import asyncio
 
 async def log_responses(client_resp, chain_resp, token_response=None, message="OAuth token refresh response inspection"):
     client_info = await introspect_aiohttp_response(client_resp)
