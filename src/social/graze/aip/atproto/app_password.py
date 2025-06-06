@@ -3,6 +3,7 @@
 Handles creation, refresh, and lifecycle management of AT Protocol app password sessions.
 Automatically refreshes expired tokens and schedules background refresh jobs.
 """
+
 from datetime import datetime, timezone, timedelta
 import logging
 from typing import Any, Dict, Optional
@@ -38,7 +39,7 @@ async def populate_session(
     Args:
         http_session: HTTP client for AT Protocol API calls
         database_session_maker: SQLAlchemy async session factory
-        redis_session: Redis client for refresh scheduling  
+        redis_session: Redis client for refresh scheduling
         subject_guid: GUID of the subject to populate session for
         settings: Optional app settings for token expiry configuration
 

@@ -14,6 +14,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 
 from social.graze.aip.model.base import Base
 
+# Try to import Redis testing dependencies
+try:
+    import redis.asyncio as redis
+    import fakeredis.aioredis
+
+    REDIS_AVAILABLE = True
+except ImportError:
+    redis = None
+    fakeredis = None
+    REDIS_AVAILABLE = False
+
 
 # Test database configuration
 TEST_DB_HOST = os.getenv("TEST_DB_HOST", "postgres")
@@ -97,3 +108,65 @@ async def session(engine):
 
     async with async_session() as session:
         yield session
+
+
+# Redis test configuration and fixtures
+TEST_REDIS_HOST = os.getenv("TEST_REDIS_HOST", "valkey")
+TEST_REDIS_PORT = int(os.getenv("TEST_REDIS_PORT", "6379"))
+TEST_REDIS_DB = int(os.getenv("TEST_REDIS_DB", "15"))  # Use a separate test DB
+
+
+async def check_redis_available():
+    """Check if Redis is available for testing."""
+    if not REDIS_AVAILABLE or redis is None:
+        return False
+
+    try:
+        redis_client = redis.Redis(
+            host=TEST_REDIS_HOST,
+            port=TEST_REDIS_PORT,
+            db=TEST_REDIS_DB,
+            decode_responses=False,
+        )
+        await redis_client.ping()
+        await redis_client.aclose()
+        return True
+    except Exception:
+        return False
+
+
+@pytest_asyncio.fixture
+async def redis_client():
+    """Provide real Redis client for integration tests."""
+    if not await check_redis_available():
+        pytest.skip("Redis server not available for testing")
+
+    assert redis is not None, "Redis should be available after check"
+    client = redis.Redis(
+        host=TEST_REDIS_HOST,
+        port=TEST_REDIS_PORT,
+        db=TEST_REDIS_DB,
+        decode_responses=False,
+    )
+
+    # Clean up test database before test
+    await client.flushdb()
+
+    yield client
+
+    # Clean up test database after test
+    await client.flushdb()
+    await client.aclose()
+
+
+@pytest_asyncio.fixture
+async def fake_redis_client():
+    """Provide fake Redis client for unit tests."""
+    if not REDIS_AVAILABLE or fakeredis is None:
+        pytest.skip("fakeredis not available")
+
+    assert fakeredis is not None, "fakeredis should be available after check"
+    client = fakeredis.aioredis.FakeRedis(decode_responses=False)
+    yield client
+    await client.flushall()
+    await client.aclose()

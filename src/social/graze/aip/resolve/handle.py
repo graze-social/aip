@@ -3,6 +3,7 @@
 Resolves AT Protocol handles to DIDs using DNS TXT records and HTTPS well-known endpoints.
 Supports both did:plc and did:web DID methods for complete subject resolution.
 """
+
 import asyncio
 from enum import IntEnum
 from aiohttp import ClientSession
@@ -14,9 +15,10 @@ import sentry_sdk
 
 class SubjectType(IntEnum):
     """AT Protocol subject type enumeration.
-    
+
     Identifies whether a subject is a DID or handle requiring resolution.
     """
+
     did_method_plc = 1
     did_method_web = 2
     hostname = 3
@@ -24,18 +26,20 @@ class SubjectType(IntEnum):
 
 class ParsedSubject(BaseModel):
     """Parsed AT Protocol subject input.
-    
+
     Contains the classified subject type and normalized subject string.
     """
+
     subject_type: SubjectType
     subject: str
 
 
 class ResolvedSubject(BaseModel):
     """Resolved AT Protocol subject with all identifiers.
-    
+
     Contains DID, handle, and PDS endpoint for a fully resolved subject.
     """
+
     did: str
     handle: str
     pds: str
@@ -43,12 +47,12 @@ class ResolvedSubject(BaseModel):
 
 async def resolve_handle_dns(handle: str) -> Optional[str]:
     """Resolve AT Protocol handle to DID using DNS TXT record.
-    
+
     Queries _atproto.{handle} TXT record and extracts DID from did= prefix.
-    
+
     Args:
         handle: AT Protocol handle to resolve
-        
+
     Returns:
         DID string if found, None if resolution fails
     """
@@ -67,13 +71,13 @@ async def resolve_handle_dns(handle: str) -> Optional[str]:
 
 async def resolve_handle_http(session: ClientSession, handle: str) -> Optional[str]:
     """Resolve AT Protocol handle to DID using HTTPS well-known endpoint.
-    
+
     Fetches DID from https://{handle}/.well-known/atproto-did endpoint.
-    
+
     Args:
         session: HTTP client session
         handle: AT Protocol handle to resolve
-        
+
     Returns:
         DID string if found, None if resolution fails
     """
@@ -92,13 +96,13 @@ async def resolve_handle_http(session: ClientSession, handle: str) -> Optional[s
 
 async def resolve_handle(session: ClientSession, handle: str) -> Optional[str]:
     """Resolve AT Protocol handle to DID using DNS and HTTPS concurrently.
-    
+
     Attempts both DNS TXT and HTTPS well-known resolution, preferring DNS.
-    
+
     Args:
         session: HTTP client session
         handle: AT Protocol handle to resolve
-        
+
     Returns:
         DID string if found via either method, None if both fail
     """
@@ -114,10 +118,10 @@ async def resolve_handle(session: ClientSession, handle: str) -> Optional[str]:
 
 def handle_predicate(value: str) -> bool:
     """Check if value is an AT Protocol handle reference.
-    
+
     Args:
         value: String to check
-        
+
     Returns:
         True if value starts with at:// prefix
     """
@@ -126,10 +130,10 @@ def handle_predicate(value: str) -> bool:
 
 def pds_predicate(value: Dict[str, Any]) -> bool:
     """Check if service entry is an AT Protocol PDS.
-    
+
     Args:
         value: Service dictionary from DID document
-        
+
     Returns:
         True if service is AtprotoPersonalDataServer with endpoint
     """
@@ -144,14 +148,14 @@ async def resolve_did_method_plc(
     plc_directory: str, session: ClientSession, did: str
 ) -> Optional[ResolvedSubject]:
     """Resolve did:plc DID to complete subject information.
-    
+
     Fetches DID document from PLC directory and extracts handle and PDS.
-    
+
     Args:
         plc_directory: PLC directory hostname
         session: HTTP client session
         did: did:plc DID to resolve
-        
+
     Returns:
         ResolvedSubject if successful, None if resolution fails
     """
@@ -176,13 +180,13 @@ async def resolve_did_method_web(
     session: ClientSession, did: str
 ) -> Optional[ResolvedSubject]:
     """Resolve did:web DID to complete subject information.
-    
+
     Constructs did.json URL from DID and extracts handle and PDS.
-    
+
     Args:
         session: HTTP client session
         did: did:web DID to resolve
-        
+
     Returns:
         ResolvedSubject if successful, None if resolution fails
     """
@@ -217,14 +221,14 @@ async def resolve_did(
     session: ClientSession, plc_hostname: str, did: str
 ) -> Optional[ResolvedSubject]:
     """Resolve DID to complete subject information.
-    
+
     Routes to appropriate resolver based on DID method (plc or web).
-    
+
     Args:
         session: HTTP client session
         plc_hostname: PLC directory hostname for did:plc resolution
         did: DID to resolve
-        
+
     Returns:
         ResolvedSubject if successful, None if unsupported or failed
     """
@@ -239,14 +243,14 @@ async def resolve_subject(
     session: ClientSession, plc_hostname: str, subject: str
 ) -> Optional[ResolvedSubject]:
     """Resolve AT Protocol subject (handle or DID) to complete information.
-    
+
     Parses input, resolves handle to DID if needed, then resolves DID.
-    
+
     Args:
         session: HTTP client session
         plc_hostname: PLC directory hostname
         subject: Handle or DID to resolve
-        
+
     Returns:
         ResolvedSubject if successful, None if resolution fails
     """
@@ -270,12 +274,12 @@ async def resolve_subject(
 
 def parse_input(subject: str) -> Optional[ParsedSubject]:
     """Parse and classify AT Protocol subject input.
-    
+
     Normalizes input by removing prefixes and classifies as DID or handle.
-    
+
     Args:
         subject: Raw subject string (handle, DID, or prefixed)
-        
+
     Returns:
         ParsedSubject with type and normalized string
     """

@@ -180,7 +180,7 @@ class TestChainResponse:
 
         assert chain_response.status == 200
         assert chain_response.body == {"key": "value"}
-        mock_response.json.assert_called_once() # type: ignore
+        mock_response.json.assert_called_once()  # type: ignore
 
     @pytest.mark.asyncio
     async def test_from_aiohttp_response_text(self):
@@ -193,7 +193,7 @@ class TestChainResponse:
 
         assert chain_response.status == 200
         assert chain_response.body == "Hello, World!"
-        mock_response.text.assert_called_once() # type: ignore
+        mock_response.text.assert_called_once()  # type: ignore
 
     @pytest.mark.asyncio
     async def test_from_aiohttp_response_binary(self):
@@ -206,7 +206,7 @@ class TestChainResponse:
 
         assert chain_response.status == 200
         assert chain_response.body == b"binary data"
-        mock_response.read.assert_called_once() # type: ignore
+        mock_response.read.assert_called_once()  # type: ignore
 
     def test_body_contains_string(self):
         """Test body_contains with string body."""
@@ -332,7 +332,7 @@ class TestRequestMiddlewareBase:
     def test_abstract_class_cannot_be_instantiated(self):
         """Test that RequestMiddlewareBase cannot be instantiated directly."""
         with pytest.raises(TypeError):
-            RequestMiddlewareBase() # type: ignore
+            RequestMiddlewareBase()  # type: ignore
 
     def test_handle_gen_returns_callable(self):
         """Test that handle_gen returns a proper callback function."""
@@ -564,7 +564,7 @@ class TestGenerateClaimAssertionMiddleware:
         mock_next.assert_called_once_with(request)
 
         # Verify JWT was added to form data
-        form_data = request.kwargs["data"] # type: ignore
+        form_data = request.kwargs["data"]  # type: ignore
         field_names = [field[0]["name"] for field in form_data._fields]
         assert "client_assertion" in field_names
 
@@ -586,8 +586,8 @@ class TestGenerateClaimAssertionMiddleware:
             await middleware.handle(mock_next, request)
 
         # Verify FormData was created and JWT added
-        assert "data" in request.kwargs # type: ignore
-        form_data = request.kwargs["data"] # type: ignore
+        assert "data" in request.kwargs  # type: ignore
+        form_data = request.kwargs["data"]  # type: ignore
         assert isinstance(form_data, FormData)
 
     @pytest.mark.asyncio
@@ -608,7 +608,7 @@ class TestGenerateClaimAssertionMiddleware:
             await middleware.handle(mock_next, request)
 
         # Extract the JWT from form data
-        form_data = request.kwargs["data"] # type: ignore
+        form_data = request.kwargs["data"]  # type: ignore
         jwt_field = None
         for field in form_data._fields:
             if field[0]["name"] == "client_assertion":
@@ -663,7 +663,7 @@ class TestGenerateDpopMiddleware:
         mock_next.assert_called_once_with(request)
 
         # Verify DPoP header was added
-        assert "DPoP" in request.headers # type: ignore
+        assert "DPoP" in request.headers  # type: ignore
 
     @pytest.mark.asyncio
     async def test_generate_dpop_creates_headers_dict(self):
@@ -855,7 +855,7 @@ class TestEndOfLineChainMiddleware:
         )
 
         # Verify result structure
-        client_response, chain_response = result # type: ignore
+        client_response, chain_response = result  # type: ignore
         assert client_response == mock_response
         assert isinstance(chain_response, ChainResponse)
         assert chain_response.status == 200
@@ -875,7 +875,7 @@ class TestEndOfLineChainMiddleware:
 
         await middleware.handle(request)
 
-        mock_response.raise_for_status.assert_called_once() # type: ignore
+        mock_response.raise_for_status.assert_called_once()  # type: ignore
 
     @pytest.mark.asyncio
     async def test_end_of_line_no_raise_for_status(self):
@@ -892,7 +892,7 @@ class TestEndOfLineChainMiddleware:
 
         await middleware.handle(request)
 
-        mock_response.raise_for_status.assert_not_called() # type: ignore
+        mock_response.raise_for_status.assert_not_called()  # type: ignore
 
     @pytest.mark.asyncio
     async def test_end_of_line_empty_trace_context(self):
@@ -1333,7 +1333,7 @@ class TestIntegrationScenarios:
                     "https://auth.example.com/token", data=FormData()
                 ) as (client_resp, chain_resp):
                     assert chain_resp.status == 200
-                    assert chain_resp.body["access_token"] == "token" # type: ignore
+                    assert chain_resp.body["access_token"] == "token"  # type: ignore
 
         # Verify metrics were collected
         statsd_client.timer.assert_called_once()
@@ -1478,8 +1478,8 @@ class TestSecurityAndEdgeCases:
         copy = ChainRequest.from_chain_request(original)
 
         # Modify original's mutable fields
-        original.headers["New-Header"] = "value" # type: ignore
-        original.kwargs["data"].append("item2") # type: ignore
+        original.headers["New-Header"] = "value"  # type: ignore
+        original.kwargs["data"].append("item2")  # type: ignore
 
         # Copy should be affected since we share references (current behavior)
         # This test documents the current behavior - if immutability is needed,
@@ -1511,7 +1511,7 @@ class TestSecurityAndEdgeCases:
                 await middleware.handle(mock_next, request)
 
             # Extract JTI from form data
-            form_data = request.kwargs["data"] # type: ignore
+            form_data = request.kwargs["data"]  # type: ignore
             for field in form_data._fields:
                 if field[0]["name"] == "client_assertion":
                     jwt_token = field[2]  # Value is the third element in the tuple
