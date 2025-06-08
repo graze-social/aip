@@ -12,7 +12,7 @@ The implementation follows these OAuth 2.0 standards and specifications:
 - OAuth 2.0 Pushed Authorization Requests (PAR) (RFC 9126)
 
 The OAuth flow is implemented in three stages:
-1. Initialization (`oauth_init`): Resolve user identity, prepare PKCE challenge, 
+1. Initialization (`oauth_init`): Resolve user identity, prepare PKCE challenge,
    create a PAR request, and redirect to authorization server
 2. Completion (`oauth_complete`): Exchange authorization code for tokens,
    store tokens, and return a signed auth token
@@ -29,7 +29,6 @@ from datetime import datetime, timezone, timedelta
 import hashlib
 import secrets
 from typing import Optional, Tuple
-from aio_statsd import TelegrafStatsdClient
 from aiohttp import ClientSession, FormData
 from jwcrypto import jwt, jwk
 from ulid import ULID
@@ -41,12 +40,22 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     AsyncSession,
 )
+import logging
+import sentry_sdk
+import asyncio
+from aiohttp import ClientResponse
 from social.graze.aip.app.config import Settings, OAUTH_REFRESH_QUEUE
+from social.graze.aip.app.metrics import MetricsClient
 from social.graze.aip.atproto.chain import (
     ChainMiddlewareClient,
     GenerateClaimAssertionMiddleware,
     GenerateDpopMiddleware,
     StatsdMiddleware,
+)
+from social.graze.aip.atproto.jwt import (
+    generate_dpop_key,
+    create_dpop_header,
+    create_dpop_claims,
 )
 from social.graze.aip.atproto.pds import (
     oauth_authorization_server,
@@ -56,19 +65,20 @@ from social.graze.aip.model.handles import Handle, upsert_handle_stmt
 from social.graze.aip.model.oauth import OAuthRequest, OAuthSession
 from social.graze.aip.resolve.handle import resolve_subject
 
+
 def generate_pkce_verifier() -> Tuple[str, str]:
     """
     Generate PKCE (Proof Key for Code Exchange) verifier and challenge.
-    
+
     This implements the PKCE extension to OAuth 2.0 (RFC 7636) to prevent
     authorization code interception attacks. It creates a cryptographically
     random verifier and its corresponding S256 challenge.
-    
+
     Returns:
         Tuple[str, str]: A tuple containing (pkce_verifier, pkce_challenge)
         - pkce_verifier: The secret verifier that will be sent in the token request
         - pkce_challenge: The challenge derived from the verifier, sent in the authorization request
-        
+
     Security considerations:
         - The verifier uses recommended 80 bytes of entropy (RFC 7636 section 4.1)
         - The challenge uses SHA-256 for the code challenge method
@@ -83,7 +93,7 @@ def generate_pkce_verifier() -> Tuple[str, str]:
 
 async def oauth_init(
     settings: Settings,
-    statsd_client: TelegrafStatsdClient,
+    metrics_client: MetricsClient,
     http_session: ClientSession,
     database_session_maker: async_sessionmaker[AsyncSession],
     redis_session: redis.Redis,
@@ -92,7 +102,7 @@ async def oauth_init(
 ):
     """
     Initialize OAuth flow with AT Protocol.
-    
+
     This function starts the OAuth authorization code flow:
     1. Resolves the user's handle or DID to canonical form
     2. Discovers the PDS (Personal Data Server) and authorization endpoints
@@ -100,21 +110,21 @@ async def oauth_init(
     4. Generates PKCE verification codes
     5. Stores request data for later verification
     6. Returns a redirect URL to the authorization server
-    
+
     Args:
         settings: Application settings
-        statsd_client: Metrics client for tracking requests
+        metrics_client: Metrics client for tracking requests
         http_session: HTTP session for making requests
         database_session_maker: Database session factory
         subject: User's handle or DID
         destination: Optional redirect URL after authentication
-        
+
     Returns:
         str: URL to redirect the user to for authentication
-        
+
     Raises:
         Exception: Various exceptions for missing configuration or failed requests
-        
+
     Flow:
         1. Key retrieval and validation
         2. Subject resolution
@@ -175,8 +185,7 @@ async def oauth_init(
         raise Exception("No PAR URL found")
 
     # Generate DPoP key for token binding
-    dpop_key = jwk.JWK.generate(kty="EC", crv="P-256", kid=str(ULID()), alg="ES256")
-    dpop_key_public_key = dpop_key.export_public(as_dict=True)
+    dpop_key, dpop_key_public_key = generate_dpop_key()
 
     # Prepare client identifier and callback URL
     client_id = (
@@ -196,18 +205,8 @@ async def oauth_init(
     }
 
     # Prepare DPoP proof
-    dpop_assertation_header = {
-        "alg": "ES256",
-        "jwk": dpop_key_public_key,
-        "typ": "dpop+jwt",
-    }
-    dpop_assertation_claims = {
-        "htm": "POST",
-        "htu": par_url,
-        "iat": int(now.timestamp()),
-        "exp": int(now.timestamp()) + 30,
-        "nonce": "tmp",
-    }
+    dpop_assertation_header = create_dpop_header(dpop_key_public_key)
+    dpop_assertation_claims = create_dpop_claims("POST", par_url, now, 30, "tmp")
 
     # Prepare PAR request data
     data = FormData(
@@ -226,7 +225,7 @@ async def oauth_init(
 
     # Set up middleware chain for request authentication and metrics
     chain_middleware = [
-        StatsdMiddleware(statsd_client),
+        StatsdMiddleware(metrics_client),
         GenerateDpopMiddleware(
             dpop_key,
             dpop_assertation_header,
@@ -241,7 +240,7 @@ async def oauth_init(
     chain_client = ChainMiddlewareClient(
         client_session=http_session, raise_for_status=False, middleware=chain_middleware
     )
-    
+
     # Make PAR request
     async with chain_client.post(par_url, data=data) as (
         client_response,
@@ -264,7 +263,7 @@ async def oauth_init(
     login_lock_key = f"login:{resolved_handle.did}"
     try:
         lock_acquired = await redis_session.set(login_lock_key, "1", nx=True, ex=120)
-        
+
         if not lock_acquired:
             raise Exception("Another login attempt for this user is in progress")
 
@@ -315,7 +314,7 @@ async def oauth_init(
 async def oauth_complete(
     settings: Settings,
     http_session: ClientSession,
-    statsd_client: TelegrafStatsdClient,
+    metrics_client: MetricsClient,
     database_session_maker: async_sessionmaker[AsyncSession],
     redis_session: redis.Redis,
     state: Optional[str],
@@ -324,7 +323,7 @@ async def oauth_complete(
 ) -> Tuple[str, str]:
     """
     Complete OAuth flow by exchanging authorization code for tokens.
-    
+
     This function completes the OAuth authorization code flow:
     1. Validates the callback parameters (state, issuer, code)
     2. Retrieves the original OAuth request
@@ -332,26 +331,26 @@ async def oauth_complete(
     4. Stores tokens in database and Redis cache
     5. Creates a service auth token for the client
     6. Schedules token refresh
-    
+
     Args:
         settings: Application settings
         http_session: HTTP session for making requests
-        statsd_client: Metrics client for tracking requests
+        metrics_client: Metrics client for tracking requests
         database_session_maker: Database session factory
         redis_session: Redis client for token caching
         state: OAuth state parameter from callback
         issuer: Issuer identifier from callback
         code: Authorization code from callback
-        
+
     Returns:
         Tuple[str, str]: A tuple containing (serialized_auth_token, destination)
         - serialized_auth_token: JWT token for client authentication
         - destination: Redirect URL for the client
-        
+
     Raises:
         Exception: Various exceptions for missing parameters, configuration issues,
                   or failed requests
-                  
+
     Flow:
         1. Parameter validation
         2. OAuth request retrieval
@@ -450,18 +449,10 @@ async def oauth_complete(
         }
 
         # Prepare DPoP proof
-        dpop_assertation_header = {
-            "alg": "ES256",
-            "jwk": dpop_key_public_key,
-            "typ": "dpop+jwt",
-        }
-        dpop_assertation_claims = {
-            "htm": "POST",
-            "htu": token_endpoint,
-            "iat": int(now.timestamp()),
-            "exp": int(now.timestamp()) + 30,
-            "nonce": "tmp",
-        }
+        dpop_assertation_header = create_dpop_header(dpop_key_public_key)
+        dpop_assertation_claims = create_dpop_claims(
+            "POST", token_endpoint, now, 30, "tmp"
+        )
 
         # Prepare token request data with PKCE verifier
         data = FormData(
@@ -477,7 +468,7 @@ async def oauth_complete(
 
         # Set up middleware chain for request authentication and metrics
         chain_middleware = [
-            StatsdMiddleware(statsd_client),
+            StatsdMiddleware(metrics_client),
             GenerateDpopMiddleware(
                 dpop_key,
                 dpop_assertation_header,
@@ -494,7 +485,7 @@ async def oauth_complete(
             raise_for_status=False,
             middleware=chain_middleware,
         )
-        
+
         # Make token request
         async with chain_client.post(token_endpoint, data=data) as (
             client_response,
@@ -540,7 +531,9 @@ async def oauth_complete(
             await database_session.commit()
 
         # Cache the access token in redis with session-specific key to avoid collisions
-        oauth_session_key = f"auth_session:oauth:{str(oauth_request.guid)}:{session_group}"
+        oauth_session_key = (
+            f"auth_session:oauth:{str(oauth_request.guid)}:{session_group}"
+        )
         await redis_session.set(oauth_session_key, access_token, ex=(expires_in - 1))
 
         # Set a queue entry to refresh the token. We don't want to wait until the token is expired to refresh it, so
@@ -568,10 +561,7 @@ async def oauth_complete(
     return str(serialized_auth_token), str(oauth_request.destination)
 
 
-import json
-import logging
-
-async def introspect_aiohttp_response(resp: "aiohttp.ClientResponse") -> dict:
+async def introspect_aiohttp_response(resp: ClientResponse) -> dict:
     info = {
         "url": str(resp.url),
         "status": resp.status,
@@ -591,6 +581,7 @@ async def introspect_aiohttp_response(resp: "aiohttp.ClientResponse") -> dict:
             info["body_read_error"] = True
     return info
 
+
 def introspect_chain_response(chain_resp) -> dict:
     info = {
         "status": getattr(chain_resp, "status", None),
@@ -599,10 +590,13 @@ def introspect_chain_response(chain_resp) -> dict:
     }
     return info
 
-import sentry_sdk
-import asyncio
 
-async def log_responses(client_resp, chain_resp, token_response=None, message="OAuth token refresh response inspection"):
+async def log_responses(
+    client_resp,
+    chain_resp,
+    token_response=None,
+    message="OAuth token refresh response inspection",
+):
     client_info = await introspect_aiohttp_response(client_resp)
     chain_info = introspect_chain_response(chain_resp)
 
@@ -617,36 +611,37 @@ async def log_responses(client_resp, chain_resp, token_response=None, message="O
         scope.set_extra("chain_response", chain_info)
         sentry_sdk.capture_message(message)
 
+
 async def oauth_refresh(
     settings: Settings,
     http_session: ClientSession,
-    statsd_client: TelegrafStatsdClient,
+    metrics_client: MetricsClient,
     database_session: AsyncSession,
     redis_session: redis.Redis,
     current_oauth_session: OAuthSession,
 ):
     """
     Refresh OAuth tokens before they expire.
-    
+
     This function refreshes OAuth access and refresh tokens:
     1. Uses the current refresh token to obtain new tokens
     2. Updates tokens in database and Redis cache
     3. Schedules the next refresh
-    
+
     This function can be called manually or by a background task that
     processes the refresh queue.
-    
+
     Args:
         settings: Application settings
         http_session: HTTP session for making requests
-        statsd_client: Metrics client for tracking requests
+        metrics_client: Metrics client for tracking requests
         database_session: Database session
         redis_session: Redis client for token caching
         current_oauth_session: Current OAuth session with tokens
-        
+
     Raises:
         Exception: Various exceptions for missing configuration or failed requests
-        
+
     Flow:
         1. Key validation
         2. Endpoint discovery
@@ -724,18 +719,8 @@ async def oauth_refresh(
     }
 
     # Prepare DPoP proof
-    dpop_assertation_header = {
-        "alg": "ES256",
-        "jwk": dpop_key_public_key,
-        "typ": "dpop+jwt",
-    }
-    dpop_assertation_claims = {
-        "htm": "POST",
-        "htu": token_endpoint,
-        "iat": int(now.timestamp()),
-        "exp": int(now.timestamp()) + 30,
-        "nonce": "tmp",
-    }
+    dpop_assertation_header = create_dpop_header(dpop_key_public_key)
+    dpop_assertation_claims = create_dpop_claims("POST", token_endpoint, now, 30, "tmp")
 
     # Prepare refresh token request
     data = FormData(
@@ -750,7 +735,7 @@ async def oauth_refresh(
 
     # Set up middleware chain for request authentication and metrics
     chain_middleware = [
-        StatsdMiddleware(statsd_client),
+        StatsdMiddleware(metrics_client),
         GenerateDpopMiddleware(
             dpop_key,
             dpop_assertation_header,
@@ -765,7 +750,7 @@ async def oauth_refresh(
     chain_client = ChainMiddlewareClient(
         client_session=http_session, raise_for_status=False, middleware=chain_middleware
     )
-    
+
     # Make refresh token request
     async with chain_client.post(token_endpoint, data=data) as (
         client_response,
@@ -777,7 +762,12 @@ async def oauth_refresh(
 
         if isinstance(chain_response.body, dict):
             token_response = chain_response.body
-            await log_responses(client_response, chain_response, token_response, "Successfully set response!")
+            await log_responses(
+                client_response,
+                chain_response,
+                token_response,
+                "Successfully set response!",
+            )
         else:
             await log_responses(client_response, chain_response)
             raise ValueError("Invalid token response")
@@ -803,7 +793,8 @@ async def oauth_refresh(
                     update(OAuthSession)
                     .where(
                         OAuthSession.guid == current_oauth_session.guid,
-                        OAuthSession.session_group == current_oauth_session.session_group,
+                        OAuthSession.session_group
+                        == current_oauth_session.session_group,
                     )
                     .values(
                         access_token=access_token,
@@ -814,14 +805,18 @@ async def oauth_refresh(
                 await database_session.execute(update_oauth_session_stmt)
                 await database_session.commit()
                 break  # Success, exit retry loop
-                
+
         except (OperationalError, IntegrityError) as e:
             # Check if this is a deadlock or lock timeout error
             error_str = str(e).lower()
-            if "deadlock" in error_str or "lock wait timeout" in error_str or "could not obtain lock" in error_str:
+            if (
+                "deadlock" in error_str
+                or "lock wait timeout" in error_str
+                or "could not obtain lock" in error_str
+            ):
                 if retry_attempt < max_retries - 1:
                     # Calculate exponential backoff delay
-                    delay = base_delay * (2 ** retry_attempt)
+                    delay = base_delay * (2**retry_attempt)
                     await asyncio.sleep(delay)
                     continue
                 else:

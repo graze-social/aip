@@ -7,7 +7,6 @@ from time import time
 from typing import (
     Optional,
 )
-from aio_statsd import TelegrafStatsdClient
 import jinja2
 from aiohttp import web
 import aiohttp_jinja2
@@ -32,9 +31,10 @@ from social.graze.aip.app.config import (
     SettingsAppKey,
     AppPasswordRefreshTaskAppKey,
     OAuthRefreshTaskAppKey,
-    TelegrafStatsdClientAppKey,
+    MetricsClientAppKey,
     TickHealthTaskAppKey,
 )
+from social.graze.aip.app.metrics import create_metrics_client
 from social.graze.aip.app.cors import get_cors_headers
 from social.graze.aip.app.handlers.app_password import handle_internal_app_password
 from social.graze.aip.app.handlers.credentials import handle_internal_credentials
@@ -115,11 +115,24 @@ async def background_tasks(app):
         connection_pool=redis.ConnectionPool.from_url(str(settings.redis_dsn))
     )
 
-    statsd_client = TelegrafStatsdClient(
-        host=settings.statsd_host, port=settings.statsd_port, debug=settings.debug
+    # Create metrics client using factory function based on configured backend
+    metrics_client = create_metrics_client(
+        backend=settings.metrics_backend,
+        service_name=settings.otel_service_name,
+        service_version=settings.otel_service_version,
+        host=settings.metrics_host,
+        port=settings.metrics_port,
+        otel_endpoint=settings.otel_exporter_endpoint,
+        debug=settings.debug,
     )
-    await statsd_client.connect()
-    app[TelegrafStatsdClientAppKey] = statsd_client
+    
+    # For Telegraf backend, we need to connect the underlying client
+    if settings.metrics_backend == "telegraf":
+        from social.graze.aip.app.metrics import TelegrafCompatibilityClient
+        if isinstance(metrics_client, TelegrafCompatibilityClient):
+            await metrics_client.client.connect()
+    
+    app[MetricsClientAppKey] = metrics_client
 
     logger.info("Startup complete")
 
@@ -149,7 +162,7 @@ async def background_tasks(app):
     await app[DatabaseAppKey].dispose()
     await app[SessionAppKey].close()
     await app[RedisPoolAppKey].aclose()
-    await app[TelegrafStatsdClientAppKey].close()
+    await app[MetricsClientAppKey].close()
 
 
 @web.middleware
@@ -174,6 +187,7 @@ async def cors_middleware(request: web.Request, handler):
 
     return response
 
+
 @web.middleware
 async def sentry_middleware(request: web.Request, handler):
     request_method: str = request.method
@@ -188,9 +202,16 @@ async def sentry_middleware(request: web.Request, handler):
 
 
 @web.middleware
-async def statsd_middleware(request: web.Request, handler):
+async def metrics_middleware(request: web.Request, handler):
+    """
+    Middleware for collecting HTTP request metrics using the metrics abstraction layer.
+    
+    This middleware replaces the original statsd_middleware and supports multiple
+    metrics backends through the MetricsClient interface. It collects timing and
+    count metrics for all HTTP requests.
+    """
     try:
-        statsd_client = request.app[TelegrafStatsdClientAppKey]
+        metrics_client = request.app[MetricsClientAppKey]
         request_method: str = request.method
         request_path = request.path
 
@@ -201,7 +222,7 @@ async def statsd_middleware(request: web.Request, handler):
         response_status_code = response.status
         return response
     except Exception as e:
-        statsd_client.increment(
+        metrics_client.increment(
             "aip.server.request.exception",
             1,
             tag_dict={
@@ -213,12 +234,12 @@ async def statsd_middleware(request: web.Request, handler):
         raise e
     finally:
         try:
-            statsd_client.timer(
+            metrics_client.timer(
                 "aip.server.request.time",
                 time() - start_time,
                 tag_dict={"path": request_path, "method": request_method},
             )
-            statsd_client.increment(
+            metrics_client.increment(
                 "aip.server.request.count",
                 1,
                 tag_dict={
@@ -228,14 +249,14 @@ async def statsd_middleware(request: web.Request, handler):
                 },
             )
         except Exception as e:
-            print("No statsd!!!")
+            logger.warning(f"Error recording metrics: {e}")
 
 
 async def shutdown(app):
     await app[DatabaseAppKey].dispose()
     await app[SessionAppKey].close()
     await app[RedisPoolAppKey].aclose()
-    await app[TelegrafStatsdClientAppKey].close()
+    await app[MetricsClientAppKey].close()
 
 
 async def start_web_server(settings: Optional[Settings] = None):
@@ -250,7 +271,7 @@ async def start_web_server(settings: Optional[Settings] = None):
         )
 
     app = web.Application(
-        middlewares=[cors_middleware, statsd_middleware, sentry_middleware]
+        middlewares=[cors_middleware, metrics_middleware, sentry_middleware]
     )
 
     app[SettingsAppKey] = settings

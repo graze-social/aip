@@ -2,7 +2,7 @@
 AIP Application Layer
 
 This package implements the web application layer for the AIP service, handling HTTP requests
-and responses using the aiohttp framework. It provides handlers for OAuth flows, app password 
+and responses using the aiohttp framework. It provides handlers for OAuth flows, app password
 authentication, and internal API endpoints.
 
 Key Components:

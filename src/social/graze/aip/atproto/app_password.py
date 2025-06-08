@@ -1,3 +1,9 @@
+"""AT Protocol app password session management.
+
+Handles creation, refresh, and lifecycle management of AT Protocol app password sessions.
+Automatically refreshes expired tokens and schedules background refresh jobs.
+"""
+
 from datetime import datetime, timezone, timedelta
 import logging
 from typing import Any, Dict, Optional
@@ -24,6 +30,23 @@ async def populate_session(
     subject_guid: str,
     settings: Optional[Settings] = None,
 ) -> None:
+    """Refresh or create AT Protocol app password session for a subject.
+
+    Attempts to refresh an existing session using the refresh token. If refresh fails
+    or no session exists, creates a new session using the app password. Schedules
+    next refresh in Redis based on token expiry.
+
+    Args:
+        http_session: HTTP client for AT Protocol API calls
+        database_session_maker: SQLAlchemy async session factory
+        redis_session: Redis client for refresh scheduling
+        subject_guid: GUID of the subject to populate session for
+        settings: Optional app settings for token expiry configuration
+
+    Raises:
+        ValueError: If handle or app password not found for subject_guid,
+                   or if DID mismatch occurs during session creation
+    """
     now = datetime.now(timezone.utc)
     async with database_session_maker() as database_session:
         async with database_session.begin():
@@ -59,9 +82,13 @@ async def populate_session(
             access_token: str | None = None
 
             # Use settings if provided, otherwise use defaults
-            access_token_expiry = settings.app_password_access_token_expiry if settings else 720
-            refresh_token_expiry = settings.app_password_refresh_token_expiry if settings else 7776000
-            
+            access_token_expiry = (
+                settings.app_password_access_token_expiry if settings else 720
+            )
+            refresh_token_expiry = (
+                settings.app_password_refresh_token_expiry if settings else 7776000
+            )
+
             # TODO: Pull this from the access token JWT claims payload
             access_token_expires_at = now + timedelta(0, access_token_expiry)
 
@@ -124,7 +151,9 @@ async def populate_session(
                     )
                     await database_session.execute(update_session_stmt)
 
-                    refresh_ratio = settings.token_refresh_before_expiry_ratio if settings else 0.8
+                    refresh_ratio = (
+                        settings.token_refresh_before_expiry_ratio if settings else 0.8
+                    )
                     expires_in_mod = access_token_expiry * refresh_ratio
                     refresh_at = now + timedelta(0, expires_in_mod)
                     await redis_session.zadd(
@@ -196,7 +225,9 @@ async def populate_session(
                     )
                     await database_session.execute(update_session_stmt)
 
-                    refresh_ratio = settings.token_refresh_before_expiry_ratio if settings else 0.8
+                    refresh_ratio = (
+                        settings.token_refresh_before_expiry_ratio if settings else 0.8
+                    )
                     expires_in_mod = access_token_expiry * refresh_ratio
                     refresh_at = now + timedelta(0, expires_in_mod)
                     await redis_session.zadd(

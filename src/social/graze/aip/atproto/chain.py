@@ -1,7 +1,13 @@
+"""Middleware chain infrastructure for AT Protocol HTTP requests.
+
+Provides a flexible middleware chain pattern for AT Protocol requests with support
+for OAuth 2.0 client assertions, DPoP (Demonstration of Proof-of-Possession),
+StatsD telemetry, and request/response transformation.
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import json
-import re
 import secrets
 from time import time
 from types import TracebackType
@@ -18,14 +24,16 @@ from typing import (
     Dict,
 )
 import logging
-from aio_statsd import TelegrafStatsdClient
 from aiohttp import web, ClientResponse, ClientSession, FormData, hdrs
 from aiohttp.typedefs import StrOrURL
 from multidict import CIMultiDictProxy
 from jwcrypto import jwt, jwk
 import sentry_sdk
 
+from social.graze.aip.app.metrics import MetricsClient
+
 RequestFunc = Callable[..., Awaitable[ClientResponse]]
+"""Type alias for async HTTP request functions."""
 
 logger = logging.getLogger(__name__)
 
@@ -51,15 +59,17 @@ _LoggerType = Union[_LoggerStub, logging.Logger]
 
 @dataclass
 class ChainRequest:
+    """Encapsulates HTTP request data for middleware chain processing."""
+
     method: str
     url: StrOrURL
     headers: dict[str, Any] | None = None
     trace_request_ctx: dict[str, Any] | None = None
     kwargs: dict[str, Any] | None = None
 
-    # TODO: Fix bug where IDE doesn't like `def from_chain_request(request: Self) -> Self`
     @staticmethod
     def from_chain_request(request: "ChainRequest") -> "ChainRequest":
+        """Create a copy of an existing ChainRequest."""
         return ChainRequest(
             method=request.method,
             url=request.url,
@@ -71,14 +81,16 @@ class ChainRequest:
 
 @dataclass
 class ChainResponse:
+    """Encapsulates HTTP response data from middleware chain processing."""
+
     status: int
     headers: CIMultiDictProxy[str]
     body: str | bytes | dict[str, Any] | None = None
     # exception: BaseException | None = None
 
-    # TODO: Fix bug where IDE doesn't like `-> Self`
     @staticmethod
     async def from_aiohttp_response(response: ClientResponse) -> "ChainResponse":
+        """Convert aiohttp ClientResponse to ChainResponse with proper content handling."""
         status = response.status
         headers = response.headers
 
@@ -98,6 +110,7 @@ class ChainResponse:
             )
 
     def body_contains(self, text: str) -> bool:
+        """Check if response body contains specified text."""
         if self.body is None:
             return False
 
@@ -113,6 +126,7 @@ class ChainResponse:
         return False
 
     def body_matches_kv(self, key: str, value: Any) -> bool:
+        """Check if response body dict contains specific key-value pair."""
         if self.body is None:
             return False
 
@@ -121,6 +135,7 @@ class ChainResponse:
         )
 
     def to_web_response(self) -> web.Response:
+        """Convert ChainResponse to aiohttp web.Response."""
         rargs = {
             "status": self.status,
             "headers": {"Content-Type": self.headers.get(hdrs.CONTENT_TYPE, "")},
@@ -138,20 +153,38 @@ NextChainResponseCallbackType = (
     Tuple[ClientResponse, ChainResponse]
     | Tuple[ClientResponse, ChainResponse, ChainRequest]
 )
+"""Response type from middleware chain callbacks.
+
+Can optionally include a new ChainRequest for retries.
+"""
 
 NextChainCallbackType = Callable[
     [ChainRequest], Awaitable[NextChainResponseCallbackType]
 ]
+"""Type alias for middleware chain callback functions."""
 
 
 class RequestMiddlewareBase(ABC):
+    """Abstract base class for middleware chain components."""
+
     @abstractmethod
     async def handle(
         self, next: NextChainCallbackType, request: ChainRequest
     ) -> NextChainResponseCallbackType:
+        """Process request through middleware chain.
+
+        Args:
+            next: Next middleware callback in chain
+            request: Request to process
+
+        Returns:
+            Response tuple, optionally with retry request
+        """
         pass
 
     def handle_gen(self, next: NextChainCallbackType) -> NextChainCallbackType:
+        """Generate middleware callback for chain composition."""
+
         async def next_invoke(request: ChainRequest) -> NextChainResponseCallbackType:
             return await self.handle(next, request)
 
@@ -159,13 +192,20 @@ class RequestMiddlewareBase(ABC):
 
 
 class StatsdMiddleware(RequestMiddlewareBase):
+    """Middleware for collecting request timing and count metrics via metrics abstraction layer.
+    
+    This middleware supports multiple metrics backends (OTEL, Telegraf, NoOp) through
+    the MetricsClient interface, providing vendor-agnostic telemetry collection for
+    HTTP client requests in the middleware chain.
+    """
+
     def __init__(
         self,
-        statsd_client: TelegrafStatsdClient,
+        metrics_client: MetricsClient,
     ) -> None:
+        """Initialize with metrics client for telemetry collection."""
         super().__init__()
-        self._statsd_client = statsd_client
-        self._regex = re.compile(r"\W+")
+        self._metrics_client = metrics_client
 
     async def handle(
         self, next: NextChainCallbackType, request: ChainRequest
@@ -177,26 +217,25 @@ class StatsdMiddleware(RequestMiddlewareBase):
             sentry_sdk.capture_exception(e)
             raise e
         finally:
-            # TODO: Don't record URL. Cardinality is too high here and will cause issues.
-            self._statsd_client.timer(
+            self._metrics_client.timer(
                 "aip.client.request.time",
                 time() - start_time,
                 tag_dict={
-                    "url": self._regex.sub("", str(request.url)),
                     "method": request.method.lower(),
                 },
             )
-            self._statsd_client.increment(
+            self._metrics_client.increment(
                 "aip.client.request.count",
                 1,
                 tag_dict={
-                    "url": self._regex.sub("", str(request.url)),
                     "method": request.method.lower(),
                 },
             )
 
 
 class DebugMiddleware(RequestMiddlewareBase):
+    """Middleware for debug logging of requests and responses."""
+
     async def handle(
         self, next: NextChainCallbackType, request: ChainRequest
     ) -> NextChainResponseCallbackType:
@@ -211,12 +250,15 @@ class DebugMiddleware(RequestMiddlewareBase):
 
 
 class GenerateClaimAssertionMiddleware(RequestMiddlewareBase):
+    """Middleware for generating OAuth 2.0 client assertion JWTs."""
+
     def __init__(
         self,
         signing_key: jwk.JWK,
         client_assertion_header: Dict[str, Any],
         client_assertion_claims: Dict[str, Any],
     ) -> None:
+        """Initialize with JWT signing key and assertion parameters."""
         super().__init__()
         self._signing_key = signing_key
         self._client_assertion_header = client_assertion_header
@@ -252,12 +294,18 @@ class GenerateClaimAssertionMiddleware(RequestMiddlewareBase):
 
 
 class GenerateDpopMiddleware(RequestMiddlewareBase):
+    """Middleware for generating DPoP (Demonstration of Proof-of-Possession) headers.
+
+    Handles DPoP nonce challenges for enhanced OAuth 2.0 security.
+    """
+
     def __init__(
         self,
         dpop_key: jwk.JWK,
         dop_assertion_header: Dict[str, Any],
         dop_assertion_claims: Dict[str, Any],
     ) -> None:
+        """Initialize with DPoP key and assertion parameters."""
         super().__init__()
         self._dpop_key = dpop_key
         self._dpop_assertion_header = dop_assertion_header
@@ -306,18 +354,22 @@ class GenerateDpopMiddleware(RequestMiddlewareBase):
 
 
 class EndOfLineChainMiddleware:
+    """Terminal middleware that executes the actual HTTP request."""
+
     def __init__(
         self,
         request_func: RequestFunc,
         logger: _LoggerType,
         raise_for_status: bool = False,
     ) -> None:
+        """Initialize with request function and error handling options."""
         super().__init__()
         self._request_func = request_func
         self._raise_for_status = raise_for_status
         self._logger = logger
 
     async def handle(self, request: ChainRequest) -> NextChainResponseCallbackType:
+        """Execute HTTP request and convert response to ChainResponse."""
         response: ClientResponse = await self._request_func(
             request.method.lower(),
             request.url,
@@ -335,6 +387,8 @@ class EndOfLineChainMiddleware:
 
 
 class ChainMiddlewareContext:
+    """Context manager for executing middleware chain with retry logic."""
+
     def __init__(
         self,
         chain_callback: NextChainCallbackType,
@@ -343,6 +397,7 @@ class ChainMiddlewareContext:
         raise_for_status: bool = False,
         attempt_max: int = 3,
     ) -> None:
+        """Initialize context with chain callback and retry parameters."""
         self._chain_callback = chain_callback
         self._chain_request = chain_request
         self._logger = logger
@@ -372,7 +427,7 @@ class ChainMiddlewareContext:
                 new_request = response[2]
 
             self._chain_response = chain_response
-            self._client_response = client_response
+            self.client_response = client_response
 
             if new_request is None:
                 return client_response, chain_response
@@ -399,6 +454,12 @@ class ChainMiddlewareContext:
 
 
 class ChainMiddlewareClient:
+    """HTTP client with configurable middleware chain for AT Protocol requests.
+
+    Provides HTTP methods with middleware processing for OAuth 2.0, DPoP,
+    telemetry, and request transformation.
+    """
+
     def __init__(
         self,
         client_session: ClientSession | None = None,
@@ -408,6 +469,7 @@ class ChainMiddlewareClient:
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        """Initialize client with optional middleware chain and session."""
         if client_session is not None:
             client = client_session
             closed = None
@@ -430,6 +492,7 @@ class ChainMiddlewareClient:
         raise_for_status: bool | None = None,
         **kwargs: Any,
     ) -> ChainMiddlewareContext:
+        """Make HTTP request with specified method through middleware chain."""
         return self._make_request(
             method=method,
             url=url,
@@ -521,6 +584,7 @@ class ChainMiddlewareClient:
         )
 
     async def close(self) -> None:
+        """Close underlying HTTP session."""
         await self._client.close()
         self._closed = True
 

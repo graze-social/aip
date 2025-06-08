@@ -6,7 +6,6 @@ from typing import (
     Optional,
     Dict,
 )
-from aio_statsd import TelegrafStatsdClient
 from aiohttp import web
 from jwcrypto import jwt
 from sqlalchemy import select
@@ -18,6 +17,7 @@ import sentry_sdk
 from social.graze.aip.app.config import (
     SettingsAppKey,
 )
+from social.graze.aip.app.metrics import MetricsClient
 from social.graze.aip.model.app_password import AppPasswordSession
 from social.graze.aip.model.handles import Handle
 from social.graze.aip.model.oauth import OAuthSession, Permission
@@ -29,24 +29,25 @@ logger = logging.getLogger(__name__)
 class AuthToken:
     """
     Represents an authenticated token with user identity and session information.
-    
+
     This class contains both the authenticating user's information (guid, subject, handle)
     and the context for the current request (which may be different if using permissions
     to act on behalf of another user).
-    
+
     Attributes:
         guid: The guid of the authenticating user
         subject: The DID of the authenticating user
         handle: The handle of the authenticating user
-        
+
         context_service: The service URL for the context of the request
         context_guid: The guid for the context of the request
         context_subject: The DID for the context of the request
         context_pds: The PDS URL for the context of the request
-        
+
         oauth_session: The OAuth session if authenticated via OAuth
         app_password_session: The App Password session if authenticated via App Password
     """
+
     guid: str
     subject: str
     handle: str
@@ -63,7 +64,7 @@ class AuthToken:
 class AuthenticationException(Exception):
     """
     Exception raised for authentication failures.
-    
+
     This exception class provides static methods for creating specific
     authentication failure instances with appropriate error messages.
     """
@@ -83,30 +84,22 @@ class AuthenticationException(Exception):
     @staticmethod
     def session_not_found() -> "AuthenticationException":
         """No valid session was found for the authenticated user."""
-        return AuthenticationException(
-            "error-auth-helper-1002 No valid session found"
-        )
+        return AuthenticationException("error-auth-helper-1002 No valid session found")
 
     @staticmethod
     def session_expired() -> "AuthenticationException":
         """The session has expired and is no longer valid."""
-        return AuthenticationException(
-            "error-auth-helper-1003 Session has expired"
-        )
+        return AuthenticationException("error-auth-helper-1003 Session has expired")
 
     @staticmethod
     def handle_not_found() -> "AuthenticationException":
         """No handle record was found for the authenticated user."""
-        return AuthenticationException(
-            "error-auth-helper-1004 Handle record not found"
-        )
+        return AuthenticationException("error-auth-helper-1004 Handle record not found")
 
     @staticmethod
     def permission_denied() -> "AuthenticationException":
         """User does not have permission to perform the requested action."""
-        return AuthenticationException(
-            "error-auth-helper-1005 Permission denied"
-        )
+        return AuthenticationException("error-auth-helper-1005 Permission denied")
 
     @staticmethod
     def unexpected(msg: str = "") -> "AuthenticationException":
@@ -118,30 +111,30 @@ class AuthenticationException(Exception):
 
 async def auth_token_helper(
     database_session: AsyncSession,
-    statsd_client: TelegrafStatsdClient,
+    metrics_client: MetricsClient,
     request: web.Request,
     allow_permissions: bool = True,
 ) -> Optional[AuthToken]:
     """
     Authenticate a request and return an AuthToken with user and context information.
-    
+
     This helper enforces the following policies:
     * All API calls must be authenticated and require an `Authorization` header with a bearer token.
     * The `X-Subject` header can optionally specify the subject of the request. The value must be a known guid.
     * The `X-Service` header can optionally specify the hostname of the service providing the invoked XRPC method.
-    
+
     The function validates the JWT token, retrieves the associated session information, and checks permissions
     if the request is acting on behalf of another user.
-    
+
     Args:
         database_session: SQLAlchemy async session for database queries
-        statsd_client: Statsd client for metrics
+        metrics_client: Metrics client for telemetry collection
         request: The HTTP request to authenticate
         allow_permissions: Whether to allow acting on behalf of another user via permissions
-    
+
     Returns:
         An AuthToken object if authentication succeeds, None otherwise
-        
+
     Raises:
         AuthenticationException: If there's a specific authentication failure that should be reported
     """
@@ -164,7 +157,7 @@ async def auth_token_helper(
         validated_auth_token = jwt.JWT(
             jwt=serialized_auth_token, key=settings.json_web_keys, algs=["ES256"]
         )
-        
+
         # Parse and validate claims
         auth_token_claims: Dict[str, str] = json.loads(validated_auth_token.claims)
 
@@ -181,18 +174,20 @@ async def auth_token_helper(
         async with database_session.begin():
 
             # 1. Get the OAuthSession from the database and validate it
-            oauth_session_stmt = select(OAuthSession).where(
-                OAuthSession.guid == auth_token_subject,
+            oauth_session_stmt = (
+                select(OAuthSession)
+                .where(
+                    OAuthSession.guid == auth_token_subject,
+                    # Sessions are not limited to the same session group because we
+                    # don't actually care about which session we end up getting. The
+                    # only requirement is that it's valid.
+                    # OAuthSession.session_group == auth_token_session_group,
+                    OAuthSession.access_token_expires_at > now,
+                    OAuthSession.hard_expires_at > now,
+                )
+                .order_by(OAuthSession.created_at.desc())
+            )
 
-                # Sessions are not limited to the same session group because we
-                # don't actually care about which session we end up getting. The
-                # only requirement is that it's valid.
-                # OAuthSession.session_group == auth_token_session_group,
-
-                OAuthSession.access_token_expires_at > now,
-                OAuthSession.hard_expires_at > now
-            ).order_by(OAuthSession.created_at.desc())
-            
             oauth_session: Optional[OAuthSession] = (
                 await database_session.scalars(oauth_session_stmt)
             ).first()
@@ -204,9 +199,11 @@ async def auth_token_helper(
             oauth_session_handle_stmt = select(Handle).where(
                 Handle.guid == auth_token_subject
             )
-            oauth_session_handle_result = await database_session.scalars(oauth_session_handle_stmt)
+            oauth_session_handle_result = await database_session.scalars(
+                oauth_session_handle_stmt
+            )
             oauth_session_handle = oauth_session_handle_result.first()
-            
+
             if oauth_session_handle is None:
                 raise AuthenticationException.handle_not_found()
 
@@ -266,7 +263,7 @@ async def auth_token_helper(
             )
             subject_handle_result = await database_session.scalars(subject_handle_stmt)
             subject_handle = subject_handle_result.first()
-            
+
             if subject_handle is None:
                 raise AuthenticationException.handle_not_found()
 
@@ -279,12 +276,16 @@ async def auth_token_helper(
             ).first()
 
             # Get a valid OAuth session for the target subject
-            target_oauth_session_stmt = select(OAuthSession).where(
-                OAuthSession.guid == subject_handle.guid,
-                OAuthSession.access_token_expires_at > now,
-                OAuthSession.hard_expires_at > now
-            ).order_by(OAuthSession.created_at.desc())
-            
+            target_oauth_session_stmt = (
+                select(OAuthSession)
+                .where(
+                    OAuthSession.guid == subject_handle.guid,
+                    OAuthSession.access_token_expires_at > now,
+                    OAuthSession.hard_expires_at > now,
+                )
+                .order_by(OAuthSession.created_at.desc())
+            )
+
             target_oauth_session: Optional[OAuthSession] = (
                 await database_session.scalars(target_oauth_session_stmt)
             ).first()
@@ -310,7 +311,7 @@ async def auth_token_helper(
         raise
     except Exception as e:
         sentry_sdk.capture_exception(e)
-        statsd_client.increment(
+        metrics_client.increment(
             "aip.auth.exception",
             1,
             tag_dict={"exception": type(e).__name__},

@@ -26,7 +26,6 @@ import os
 import asyncio
 from typing import Annotated, Final, List, Optional
 import logging
-from aio_statsd import TelegrafStatsdClient
 from jwcrypto import jwk
 from pydantic import (
     AliasChoices,
@@ -48,6 +47,7 @@ from aiohttp import ClientSession
 from redis import asyncio as redis
 
 from social.graze.aip.model.health import HealthGauge
+from social.graze.aip.app.metrics import MetricsClient
 
 
 logger = logging.getLogger(__name__)
@@ -56,11 +56,11 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     """
     Application settings for the AIP service.
-    
+
     This class uses Pydantic's BaseSettings to automatically load values from environment
     variables, with sensible defaults for development environments. It handles validation,
     type conversion, and provides centralized configuration management.
-    
+
     Settings are organized into the following categories:
     - Environment and debugging
     - Network and service identification
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     - Background task configuration
     - Monitoring and observability
     - UI customization
-    
+
     Environment variables are automatically mapped to settings fields, with aliases
     provided for backward compatibility. For example, the database connection string
     can be set with either PG_DSN or DATABASE_URL environment variables.
@@ -81,8 +81,10 @@ class Settings(BaseSettings):
     Enable debug mode for verbose logging and development features.
     Set with DEBUG=true environment variable.
     """
-    
-    allowed_domains: str = "https://www.graze.social, https://sky-feeder-git-astro-graze.vercel.app"
+
+    allowed_domains: str = (
+        "https://www.graze.social, https://sky-feeder-git-astro-graze.vercel.app"
+    )
     """
     Comma-separated list of domains allowed for CORS.
     Set with ALLOWED_DOMAINS environment variable.
@@ -182,7 +184,7 @@ class Settings(BaseSettings):
     Redis queue name for App Password refresh tasks.
     Set with REFRESH_QUEUE_APP_PASSWORD environment variable.
     """
-    
+
     # Token expiration settings
     app_password_access_token_expiry: int = 720  # 12 minutes
     """
@@ -190,14 +192,14 @@ class Settings(BaseSettings):
     Set with APP_PASSWORD_ACCESS_TOKEN_EXPIRY environment variable.
     Default: 720 (12 minutes)
     """
-    
+
     app_password_refresh_token_expiry: int = 7776000  # 90 days
     """
     Expiration time in seconds for app password refresh tokens.
     Set with APP_PASSWORD_REFRESH_TOKEN_EXPIRY environment variable.
     Default: 7776000 (90 days)
     """
-    
+
     token_refresh_before_expiry_ratio: float = 0.8
     """
     Ratio of token lifetime to wait before refreshing.
@@ -205,14 +207,14 @@ class Settings(BaseSettings):
     Set with TOKEN_REFRESH_BEFORE_EXPIRY_RATIO environment variable.
     Default: 0.8
     """
-    
+
     oauth_refresh_max_retries: int = 3
     """
     Maximum number of retry attempts for failed OAuth refresh operations.
     Set with OAUTH_REFRESH_MAX_RETRIES environment variable.
     Default: 3
     """
-    
+
     oauth_refresh_retry_base_delay: int = 300
     """
     Base delay in seconds for OAuth refresh retry attempts (exponential backoff).
@@ -228,43 +230,98 @@ class Settings(BaseSettings):
     """
 
     # Monitoring and observability settings
-    statsd_host: str = Field(alias="TELEGRAF_HOST", default="telegraf")
+    metrics_backend: str = Field(default="telegraf")
     """
-    StatsD/Telegraf host for metrics collection.
-    Set with TELEGRAF_HOST environment variable.
+    Metrics backend to use: 'otel' (OpenTelemetry), 'telegraf' (StatsD), or 'none' (disabled).
+    Set with METRICS_BACKEND environment variable.
+    Default: telegraf (for backward compatibility)
     """
-    
-    statsd_port: int = Field(alias="TELEGRAF_PORT", default=8125)
+
+    metrics_host: str = Field(
+        validation_alias=AliasChoices("metrics_host", "METRICS_HOST", "telegraf_host", "TELEGRAF_HOST"),
+        default="telegraf"
+    )
     """
-    StatsD/Telegraf port for metrics collection.
-    Set with TELEGRAF_PORT environment variable.
+    Metrics host for StatsD/Telegraf backend.
+    Set with METRICS_HOST or TELEGRAF_HOST environment variable.
+    Default: telegraf
     """
-    
-    statsd_prefix: str = "aip"
+
+    metrics_port: int = Field(
+        validation_alias=AliasChoices("metrics_port", "METRICS_PORT", "telegraf_port", "TELEGRAF_PORT"),
+        default=8125
+    )
     """
-    Prefix for all StatsD metrics from this service.
-    Set with STATSD_PREFIX environment variable.
+    Metrics port for StatsD/Telegraf backend.
+    Set with METRICS_PORT or TELEGRAF_PORT environment variable.
+    Default: 8125
+    """
+
+    metrics_prefix: str = Field(
+        validation_alias=AliasChoices("metrics_prefix", "METRICS_PREFIX", "statsd_prefix", "STATSD_PREFIX"),
+        default="aip"
+    )
+    """
+    Prefix for all metrics from this service.
+    Set with METRICS_PREFIX or STATSD_PREFIX environment variable.
+    Default: aip
+    """
+
+    # OpenTelemetry-specific settings
+    otel_exporter_endpoint: Optional[str] = None
+    """
+    OpenTelemetry OTLP gRPC endpoint for metrics export.
+    Set with OTEL_EXPORTER_ENDPOINT environment variable.
+    Example: http://localhost:4317
+    """
+
+    otel_service_name: str = "aip"
+    """
+    Service name for OpenTelemetry resource attribution.
+    Set with OTEL_SERVICE_NAME environment variable.
+    Default: aip
+    """
+
+    otel_service_version: str = "1.0.0"
+    """
+    Service version for OpenTelemetry resource attribution.
+    Set with OTEL_SERVICE_VERSION environment variable.
+    Default: 1.0.0
+    """
+
+    otel_export_interval_seconds: int = 30
+    """
+    How often to export metrics to OTEL backend (in seconds).
+    Set with OTEL_EXPORT_INTERVAL_SECONDS environment variable.
+    Default: 30
+    """
+
+    otel_enable_prometheus: bool = False
+    """
+    Whether to enable Prometheus metrics endpoint for OTEL backend.
+    Set with OTEL_ENABLE_PROMETHEUS environment variable.
+    Default: false
     """
 
     # UI customization settings for login page
     svg_logo: str = "https://www.graze.social/logo.svg"
     """URL for the logo displayed on the login page"""
-    
+
     brand_name: str = "Graze"
     """Brand name displayed on the login page"""
-    
+
     destination: str = "https://graze.social/app/auth/callback"
     """Default destination URL after authentication"""
-    
+
     background_from: str = "#0588f0"
     """Starting gradient color for login page background"""
-    
+
     background_to: str = "#5eb1ef"
     """Ending gradient color for login page background"""
-    
+
     text_color: str = "#FFFFFF"
     """Text color for login page"""
-    
+
     form_color: str = "#FFFFFF"
     """Form background color for login page"""
 
@@ -273,17 +330,17 @@ class Settings(BaseSettings):
     def decode_json_web_keys(cls, v) -> jwk.JWKSet:
         """
         Validate and process the json_web_keys setting.
-        
+
         This validator accepts either:
         - An existing JWKSet object (for programmatic configuration)
         - A file path to a JSON file containing a JWK Set
-        
+
         Args:
             v: The input value to validate
-            
+
         Returns:
             jwk.JWKSet: A valid JWKSet object
-            
+
         Raises:
             ValueError: If the input is neither a JWKSet nor a valid file path
         """
@@ -302,17 +359,17 @@ class Settings(BaseSettings):
     def decode_encryption_key(cls, v) -> Fernet:
         """
         Validate and process the encryption_key setting.
-        
+
         This validator accepts either:
         - An existing Fernet object (for programmatic configuration)
         - A base64-encoded string containing a Fernet key
-        
+
         Args:
             v: The input value to validate
-            
+
         Returns:
             Fernet: A valid Fernet encryption object
-            
+
         Raises:
             ValueError: If the input is neither a Fernet object nor a valid base64 key
         """
@@ -380,7 +437,5 @@ AppPasswordRefreshTaskAppKey: Final = web.AppKey(
 TickHealthTaskAppKey: Final = web.AppKey("tick_health_task", asyncio.Task[None])
 """AppKey for the background task that monitors service health"""
 
-TelegrafStatsdClientAppKey: Final = web.AppKey(
-    "telegraf_statsd_client", TelegrafStatsdClient
-)
-"""AppKey for the Telegraf/StatsD metrics client"""
+MetricsClientAppKey: Final = web.AppKey("metrics_client", MetricsClient)
+"""AppKey for the metrics client (supports multiple backends: OTEL, Telegraf, NoOp)"""
