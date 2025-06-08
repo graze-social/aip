@@ -439,3 +439,6 @@ TickHealthTaskAppKey: Final = web.AppKey("tick_health_task", asyncio.Task[None])
 
 MetricsClientAppKey: Final = web.AppKey("metrics_client", MetricsClient)
 """AppKey for the metrics client (supports multiple backends: OTEL, Telegraf, NoOp)"""
+
+TelegrafStatsdClientAppKey: Final = MetricsClientAppKey
+"""AppKey for backward compatibility - alias to MetricsClientAppKey"""
