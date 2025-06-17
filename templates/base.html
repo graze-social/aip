@@ -1,90 +1,32 @@
-<!DOCTYPE html>
-<html>
-
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
-    <title>{% block title %}Graze Social AIP{% endblock %}</title>
-    <meta name="description" content="Authentication, Identity, and Permissions Server" />
-    <link rel="stylesheet" href="/static/login.css">
-    <style>
-        :root {
-            --background-from: {{ background_from|default('#0588f0') }};
-            --background-to: {{ background_to|default('#5eb1ef') }};
-            --text-color: {{ text_color|default('#FFFFFF') }};
-            --form-color: {{ form_color|default('#FFFFFF') }};
-        }
-
-        body {
-            background: linear-gradient(to top left, var(--background-from), var(--background-to));
-            color: var(--text-color);
-            display: flex;
-            justify-content: center;
-            height: 100vh;
-            font-family: Arial, sans-serif;
-        }
-
-        .login-container {
-            text-align: center;
-            border-radius: 10px;
-            padding: 2rem;
-            margin-top: 80px;
-            width: 100%;
-            max-width: 500px;
-        }
-
-        .logo img {
-            width: 192px;
-            height: 192px;
-        }
-
-        h1 {
-            line-height: 1rem;
-            font-size: 4rem;
-            font-weight: bold;
-        }
-
-        .login-form {
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-            margin-top: 1rem;
-            align-items: center;
-        }
-
-        .login-form input {
-            font-size: 1.5rem;
-            background-color: var(--form-color);
-            padding: 15px;
-            border: none;
-            border-radius: 8px;
-            width: 80%;
-            text-align: center;
-        }
-
-        .login-form button {
-            font-size: 1.5rem;
-            background-color: var(--text-color);
-            color: var(--background-from);
-            border: none;
-            padding: 15px 30px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-            width: 60%;
-            text-align: center;
-        }
-
-        .login-form button:hover {
-            opacity: 0.9;
-        }
-    </style>
-
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ title }}{% endblock %}</title>
+    <meta name="description" content="AIP - ATProtocol Identity Provider for managing OAuth and app-passwords">
+    <link rel="stylesheet" href="/static/pico.css">
+    <link rel="stylesheet" href="/static/pico.colors.css">
+    {% block head %}{% endblock %}
 </head>
-
 <body>
-    {% block content %}{% endblock %}
+    <nav>
+        <ul>
+            <li><strong>AIP</strong></li>
+        </ul>
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/identity">Identity</a></li>
+        </ul>
+    </nav>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="container">
+        <small>
+            AIP v{{ version }} - ATProtocol Identity Provider
+        </small>
+    </footer>
 </body>
-
 </html>

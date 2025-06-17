@@ -1,0 +1,9 @@
+/* TEAM */
+Developer: AIP Contributors
+Site: https://tangled.sh/@smokesignal.events/aip-rs
+ATProtocol: aip.atproto.community
+
+/* SITE */
+Language: English
+Standards: HTML5, CSS3
+Software: Rust, Axum, ATProtocol

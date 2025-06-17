@@ -1,14 +1,37 @@
 {% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
 {% block content %}
 <header>
-    <hgroup>
-        <h1>AIP</h1>
-        <p>The Graze Social Authentication, Identity, and Permissions Server</p>
-    </hgroup>
+    <h1>Welcome to AIP</h1>
+    <p>ATProtocol Identity Provider - Manage your OAuth and app-passwords</p>
 </header>
-<main>
-    <section>
-        <p><a href="/auth/atproto">New Login</a></p>
-    </section>
-</main>
+
+<section>
+    <h2>About AIP</h2>
+    <p>
+        AIP is a web application that manages ATProtocol access tokens using OAuth and app-passwords. 
+        It provides a secure and convenient way to authenticate and authorize applications that interact 
+        with the ATProtocol ecosystem.
+    </p>
+</section>
+
+<section>
+    <h2>Features</h2>
+    <ul>
+        <li>OAuth authentication flow support</li>
+        <li>App-password management</li>
+        <li>ATProtocol identity resolution</li>
+        <li>Secure token management</li>
+    </ul>
+</section>
+
+<section>
+    <h2>Getting Started</h2>
+    <p>
+        To get started with AIP, navigate to the <a href="/identity">Identity</a> page to manage your 
+        ATProtocol identities and authentication methods.
+    </p>
+</section>
 {% endblock %}
