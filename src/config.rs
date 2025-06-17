@@ -63,8 +63,8 @@ impl Config {
         let certificate_bundles: CertificateBundles =
             optional_env("CERTIFICATE_BUNDLES").try_into()?;
         let default_user_agent = format!(
-            "aip/{} (+https://tangled.sh/@smokesignal.events/aip-rs)",
-            env!("CARGO_PKG_VERSION")
+            "aip/{} (+https://github.com/graze-social/aip)",
+            version()?
         );
         let dns_nameservers: DnsNameservers = optional_env("DNS_NAMESERVERS").try_into()?;
         let dpop_nonce_seed = require_env("DPOP_NONCE_SEED")?;

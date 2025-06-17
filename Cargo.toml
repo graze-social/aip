@@ -7,6 +7,10 @@ edition = "2021"
 name = "aip"
 path = "src/bin/aip.rs"
 
+[[bin]]
+name = "aip-client-management"
+path = "src/bin/aip-client-management.rs"
+
 [lib]
 name = "aip"
 path = "src/lib.rs"
@@ -24,7 +28,7 @@ minijinja-autoreload = { version = "2.7", optional = true }
 minijinja-embed = { version = "2.7", optional = true }
 rust-embed = { version = "8.5", optional = true }
 
-sqlx = { version = "0.8", features = ["runtime-tokio", "chrono", "json"], optional = true }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "chrono", "json"], optional = true }
 redis = { version = "0.27", optional = true }
 deadpool = { version = "0.12", optional = true }
 deadpool-redis = { version = "0.18", optional = true }
@@ -36,6 +40,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+clap = { version = "4.4", features = ["derive"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.5", features = ["fs", "cors"] }
 reqwest = { version = "0.12", features = ["json"] }
