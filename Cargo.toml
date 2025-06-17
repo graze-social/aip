@@ -7,7 +7,6 @@ edition = "2021"
 name = "aip"
 path = "src/bin/aip.rs"
 
-
 [lib]
 name = "aip"
 path = "src/lib.rs"
@@ -52,16 +51,10 @@ ulid = { version = "1.1", features = ["serde"] }
 url = "2.5"
 sha2 = "0.10"
 rand = "0.8"
-hex = "0.4"
 time = { version = "0.3", features = ["serde"] }
-hickory-resolver = "0.25"
 chrono = { version = "0.4", features = ["serde"] }
-urlencoding = "2.1"
-html-escape = "0.2"
-base32 = "0.5"
 metrohash = "1.0.7"
 crockford = "1.2.1"
-axum-htmx = { version = "0.8.1", features = ["auto-vary"] }
 
 [dev-dependencies]
 axum-test = "15"
