@@ -17,7 +17,6 @@ atproto-client = { version = "0.7.0" }
 atproto-identity = { version = "0.7.0" }
 atproto-oauth = { version = "0.7.0" }
 atproto-oauth-axum = { version = "0.7.0" }
-atproto-record = { version = "0.7.0" }
 
 axum-template = { version = "3.0", features = ["minijinja"] }
 minijinja = { version = "2.7", features = ["builtins"] }
@@ -31,7 +30,6 @@ deadpool = { version = "0.12", optional = true }
 deadpool-redis = { version = "0.18", optional = true }
 anyhow = "1.0"
 thiserror = "1.0"
-clap = { version = "4.4", features = ["derive", "env"] }
 tokio = { version = "1.41", features = ["macros", "rt", "rt-multi-thread", "fs", "signal", "sync"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
