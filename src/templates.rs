@@ -23,14 +23,21 @@ pub fn build_env(http_external: String, version: String) -> Environment<'static>
 
 #[cfg(feature = "reload")]
 mod reload_env {
-    use std::path::PathBuf;
+    use std::{env, path::PathBuf};
 
     use minijinja::{path_loader, Environment};
     use minijinja_autoreload::AutoReloader;
 
     pub fn build_env() -> AutoReloader {
         AutoReloader::new(move |notifier| {
-            let template_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates");
+            let template_path = if let Ok(value) = env::var("HTTP_TEMPLATE_PATH") {
+                value.to_string()
+            } else {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("templates")
+                    .display()
+                    .to_string()
+            };
             let mut env = Environment::new();
             env.set_trim_blocks(true);
             env.set_lstrip_blocks(true);
@@ -44,6 +51,7 @@ mod reload_env {
 
 #[cfg(feature = "embed")]
 mod embed_env {
+    use std::path::PathBuf;
     use minijinja::Environment;
 
     pub fn build_env(http_external: String, version: String) -> Environment<'static> {

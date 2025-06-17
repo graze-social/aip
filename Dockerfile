@@ -16,6 +16,8 @@ COPY Cargo.toml Cargo.lock build.rs ./
 ARG FEATURES=embed,postgres
 ARG TEMPLATES=./templates
 ARG STATIC=./static
+ARG GIT_HASH=0
+ENV GIT_HASH=$GIT_HASH
 
 # Copy actual source code and assets
 COPY src ./src

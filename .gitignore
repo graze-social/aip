@@ -2,3 +2,4 @@ target/
 .env.test
 .env.dev
 .vscode
+sites/
