@@ -53,6 +53,7 @@ pub struct Config {
     pub storage_backend: String,
     pub database_url: Option<String>,
     pub redis_url: Option<String>,
+    pub enable_client_api: bool,
 }
 
 impl Config {
@@ -62,10 +63,8 @@ impl Config {
             optional_env("ATPROTO_OAUTH_SIGNING_KEYS").try_into()?;
         let certificate_bundles: CertificateBundles =
             optional_env("CERTIFICATE_BUNDLES").try_into()?;
-        let default_user_agent = format!(
-            "aip/{} (+https://github.com/graze-social/aip)",
-            version()?
-        );
+        let default_user_agent =
+            format!("aip/{} (+https://github.com/graze-social/aip)", version()?);
         let dns_nameservers: DnsNameservers = optional_env("DNS_NAMESERVERS").try_into()?;
         let dpop_nonce_seed = require_env("DPOP_NONCE_SEED")?;
         let external_base = require_env("EXTERNAL_BASE")?;
@@ -87,6 +86,9 @@ impl Config {
         let database_url = optional_env("DATABASE_URL");
         let redis_url = optional_env("REDIS_URL");
         let user_agent = default_env("USER_AGENT", &default_user_agent);
+        let enable_client_api = optional_env("ENABLE_CLIENT_API")
+            .map(|v| v == "true")
+            .unwrap_or(false);
 
         Ok(Self {
             version: version()?,
@@ -106,6 +108,7 @@ impl Config {
             storage_backend,
             database_url,
             redis_url,
+            enable_client_api,
         })
     }
 }

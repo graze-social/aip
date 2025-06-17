@@ -503,7 +503,10 @@ async fn main() {
 /// Register a new OAuth client
 async fn register_client(cli: &Cli, args: &RegisterArgs) -> Result<(), AppError> {
     if cli.verbose {
-        eprintln!("Registering new OAuth client with AIP server: {}", cli.base_url);
+        eprintln!(
+            "Registering new OAuth client with AIP server: {}",
+            cli.base_url
+        );
     }
 
     // Parse metadata if provided
@@ -538,18 +541,17 @@ async fn register_client(cli: &Cli, args: &RegisterArgs) -> Result<(), AppError>
     };
 
     if cli.verbose {
-        eprintln!("Registration request: {}", serde_json::to_string_pretty(&request)?);
+        eprintln!(
+            "Registration request: {}",
+            serde_json::to_string_pretty(&request)?
+        );
     }
 
     // Make HTTP request
     let client = Client::new();
     let url = format!("{}/oauth/clients/register", cli.base_url);
-    
-    let response = client
-        .post(&url)
-        .json(&request)
-        .send()
-        .await?;
+
+    let response = client.post(&url).json(&request).send().await?;
 
     if cli.verbose {
         eprintln!("Response status: {}", response.status());
@@ -579,7 +581,7 @@ async fn get_client(cli: &Cli, args: &GetArgs) -> Result<(), AppError> {
 
     let client = Client::new();
     let url = format!("{}/oauth/clients/{}", cli.base_url, args.client_id);
-    
+
     let response = client
         .get(&url)
         .bearer_auth(&args.registration_token)
@@ -596,17 +598,13 @@ async fn get_client(cli: &Cli, args: &GetArgs) -> Result<(), AppError> {
             output_response(&cli.format, &client_info)?;
             Ok(())
         }
-        StatusCode::UNAUTHORIZED => {
-            Err(AppError::Authentication(
-                "Invalid registration token or client ID".to_string(),
-            ))
-        }
-        StatusCode::NOT_FOUND => {
-            Err(AppError::ClientManagement(format!(
-                "Client '{}' not found",
-                args.client_id
-            )))
-        }
+        StatusCode::UNAUTHORIZED => Err(AppError::Authentication(
+            "Invalid registration token or client ID".to_string(),
+        )),
+        StatusCode::NOT_FOUND => Err(AppError::ClientManagement(format!(
+            "Client '{}' not found",
+            args.client_id
+        ))),
         status => {
             let error_text = response.text().await?;
             Err(AppError::ClientManagement(format!(
@@ -655,12 +653,15 @@ async fn update_client(cli: &Cli, args: &UpdateArgs) -> Result<(), AppError> {
     };
 
     if cli.verbose {
-        eprintln!("Update request: {}", serde_json::to_string_pretty(&request)?);
+        eprintln!(
+            "Update request: {}",
+            serde_json::to_string_pretty(&request)?
+        );
     }
 
     let client = Client::new();
     let url = format!("{}/oauth/clients/{}", cli.base_url, args.client_id);
-    
+
     let response = client
         .put(&url)
         .bearer_auth(&args.registration_token)
@@ -678,17 +679,13 @@ async fn update_client(cli: &Cli, args: &UpdateArgs) -> Result<(), AppError> {
             output_response(&cli.format, &updated_client)?;
             Ok(())
         }
-        StatusCode::UNAUTHORIZED => {
-            Err(AppError::Authentication(
-                "Invalid registration token or client ID".to_string(),
-            ))
-        }
-        StatusCode::NOT_FOUND => {
-            Err(AppError::ClientManagement(format!(
-                "Client '{}' not found",
-                args.client_id
-            )))
-        }
+        StatusCode::UNAUTHORIZED => Err(AppError::Authentication(
+            "Invalid registration token or client ID".to_string(),
+        )),
+        StatusCode::NOT_FOUND => Err(AppError::ClientManagement(format!(
+            "Client '{}' not found",
+            args.client_id
+        ))),
         status => {
             let error_text = response.text().await?;
             Err(AppError::ClientManagement(format!(
@@ -702,12 +699,15 @@ async fn update_client(cli: &Cli, args: &UpdateArgs) -> Result<(), AppError> {
 /// Delete an existing client
 async fn delete_client(cli: &Cli, args: &DeleteArgs) -> Result<(), AppError> {
     if !args.yes {
-        println!("Are you sure you want to delete client '{}'? (y/N)", args.client_id);
+        println!(
+            "Are you sure you want to delete client '{}'? (y/N)",
+            args.client_id
+        );
         let mut input = String::new();
-        std::io::stdin().read_line(&mut input).map_err(|e| {
-            AppError::General(format!("Failed to read confirmation: {}", e))
-        })?;
-        
+        std::io::stdin()
+            .read_line(&mut input)
+            .map_err(|e| AppError::General(format!("Failed to read confirmation: {}", e)))?;
+
         let input = input.trim().to_lowercase();
         if input != "y" && input != "yes" {
             println!("Deletion cancelled.");
@@ -721,7 +721,7 @@ async fn delete_client(cli: &Cli, args: &DeleteArgs) -> Result<(), AppError> {
 
     let client = Client::new();
     let url = format!("{}/oauth/clients/{}", cli.base_url, args.client_id);
-    
+
     let response = client
         .delete(&url)
         .bearer_auth(&args.registration_token)
@@ -737,17 +737,13 @@ async fn delete_client(cli: &Cli, args: &DeleteArgs) -> Result<(), AppError> {
             println!("Client '{}' deleted successfully.", args.client_id);
             Ok(())
         }
-        StatusCode::UNAUTHORIZED => {
-            Err(AppError::Authentication(
-                "Invalid registration token or client ID".to_string(),
-            ))
-        }
-        StatusCode::NOT_FOUND => {
-            Err(AppError::ClientManagement(format!(
-                "Client '{}' not found",
-                args.client_id
-            )))
-        }
+        StatusCode::UNAUTHORIZED => Err(AppError::Authentication(
+            "Invalid registration token or client ID".to_string(),
+        )),
+        StatusCode::NOT_FOUND => Err(AppError::ClientManagement(format!(
+            "Client '{}' not found",
+            args.client_id
+        ))),
         status => {
             let error_text = response.text().await?;
             Err(AppError::ClientManagement(format!(
@@ -766,13 +762,13 @@ async fn list_clients(cli: &Cli, args: &ListArgs) -> Result<(), AppError> {
 
     let client = Client::new();
     let url = format!("{}/oauth/clients", cli.base_url);
-    
+
     let mut request = client.get(&url);
-    
+
     if let Some(token) = &args.auth_token {
         request = request.bearer_auth(token);
     }
-    
+
     let response = request.send().await?;
 
     if cli.verbose {
@@ -785,16 +781,12 @@ async fn list_clients(cli: &Cli, args: &ListArgs) -> Result<(), AppError> {
             output_response(&cli.format, &clients)?;
             Ok(())
         }
-        StatusCode::UNAUTHORIZED => {
-            Err(AppError::Authentication(
-                "Authentication required for listing clients".to_string(),
-            ))
-        }
-        StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED => {
-            Err(AppError::ClientManagement(
-                "Client listing not supported by this server".to_string(),
-            ))
-        }
+        StatusCode::UNAUTHORIZED => Err(AppError::Authentication(
+            "Authentication required for listing clients".to_string(),
+        )),
+        StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED => Err(AppError::ClientManagement(
+            "Client listing not supported by this server".to_string(),
+        )),
         status => {
             let error_text = response.text().await?;
             Err(AppError::ClientManagement(format!(
@@ -826,7 +818,7 @@ fn output_response<T: Serialize>(format: &OutputFormat, data: &T) -> Result<(), 
 /// Print data in table format (recursive for nested objects)
 fn print_table(value: &Value, indent: usize) {
     let prefix = "  ".repeat(indent);
-    
+
     match value {
         Value::Object(map) => {
             for (key, val) in map {

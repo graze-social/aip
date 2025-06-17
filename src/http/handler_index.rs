@@ -85,6 +85,7 @@ mod tests {
             storage_backend: "memory".to_string(),
             database_url: None,
             redis_url: None,
+            enable_client_api: false,
         });
 
         let atp_session_storage =

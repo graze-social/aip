@@ -139,6 +139,11 @@ ATPROTO_OAUTH_SIGNING_KEYS=did:key:z42tqXsadF3WKAPX1QRWtztWFyybuNLJ6g7Pzqsszsxac
 # Default: "atproto:atproto atproto:transition:generic atproto:transition:email"
 OAUTH_SUPPORTED_SCOPES=atproto:atproto atproto:transition:generic atproto:transition:email
 
+# Enable client management API endpoints
+# Set to "true" to enable dynamic client registration and management endpoints
+# Default: false (disabled)
+ENABLE_CLIENT_API=false
+
 # ----------------------------------------------------------------------------
 # TLS/SSL CONFIGURATION
 # ----------------------------------------------------------------------------
@@ -234,6 +239,39 @@ RUST_LOG=aip=info,warn
 |----------|---------|-------------|
 | `OAUTH_SIGNING_KEYS` | auto-generated | OAuth JWT signing keys |
 | `OAUTH_SUPPORTED_SCOPES` | `atproto:atproto atproto:transition:generic atproto:transition:email` | Supported OAuth scopes (space-separated) |
+| `ENABLE_CLIENT_API` | `false` | Enable client management API endpoints (`true`/`false`) |
+
+### Client Management API Configuration
+
+The client management API provides endpoints for dynamic client registration and management. These endpoints are disabled by default for security reasons.
+
+| Variable | Default | Description | Security Notes |
+|----------|---------|-------------|----------------|
+| `ENABLE_CLIENT_API` | `false` | Enable client management endpoints | Only enable when client management is required |
+
+#### Client Management Endpoints
+
+When `ENABLE_CLIENT_API=true`, the following endpoints become available:
+
+- `POST /oauth/clients/register` - Dynamic Client Registration (RFC 7591)
+- `GET /oauth/clients/{client_id}` - Retrieve client information  
+- `PUT /oauth/clients/{client_id}` - Update client configuration
+- `DELETE /oauth/clients/{client_id}` - Delete client registration
+
+#### Security Considerations
+
+- **Disable by default**: Only enable when dynamic client registration is required
+- **Access control**: Implement appropriate access controls and authentication
+- **Monitoring**: Monitor client registration activities for suspicious behavior
+- **Rate limiting**: Consider implementing rate limiting on registration endpoints
+
+```bash
+# Enable client management API (use with caution)
+ENABLE_CLIENT_API=true
+
+# Disable client management API (default, recommended for most deployments)
+ENABLE_CLIENT_API=false
+```
 
 ### TLS Configuration
 
@@ -583,6 +621,7 @@ spec:
 - [ ] TLS certificates are valid and monitored
 - [ ] Environment variables are not logged
 - [ ] Network access is restricted appropriately
+- [ ] `ENABLE_CLIENT_API` is only enabled when client management is required
 
 ### Performance Tuning
 

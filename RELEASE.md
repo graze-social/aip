@@ -39,6 +39,22 @@ Custom templates can be included in the build process by adding the directory co
 
 AIP can also serve the static assets it uses. See the `Dockerfile` for all of the supported build arguments.
 
+## Runtime Configuration
+
+### Client Management API
+
+AIP includes optional client management API endpoints that can be enabled or disabled at runtime:
+
+```bash
+# Enable client management API (provides dynamic client registration)
+ENABLE_CLIENT_API=true
+
+# Disable client management API (default, more secure)
+ENABLE_CLIENT_API=false
+```
+
+**Security Note**: The client management API is disabled by default. Only enable it when dynamic client registration and management capabilities are required for your deployment.
+
 ## Additional Build Arguments
 
 Refer to the project's `Dockerfile` for a comprehensive list of all supported build arguments and configuration options available during the container build process.

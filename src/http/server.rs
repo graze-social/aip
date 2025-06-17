@@ -39,23 +39,29 @@ pub fn build_router(ctx: AppState) -> Router {
         ));
 
     // Create OAuth routes for ATProtocol-backed authentication
-    let oauth_routes = Router::new()
+    let mut oauth_routes = Router::new()
         .route("/authorize", get(handle_oauth_authorize))
         .route("/token", post(handle_oauth_token))
         .route("/par", post(pushed_authorization_request_handler))
-        .route("/clients/register", post(app_register_client_handler))
-        .route(
-            "/clients/{client_id}",
-            get(app_get_client_handler)
-                .put(app_update_client_handler)
-                .delete(app_delete_client_handler),
-        )
         .route("/atp/callback", get(handle_atpoauth_callback))
-        .route("/atp/client-metadata", get(handle_atpoauth_client_metadata))
-        .layer(middleware::map_response_with_state(
-            ctx.clone(),
-            set_dpop_headers,
-        ));
+        .route("/atp/client-metadata", get(handle_atpoauth_client_metadata));
+
+    // Conditionally add client API endpoints
+    if ctx.config.enable_client_api {
+        oauth_routes = oauth_routes
+            .route("/clients/register", post(app_register_client_handler))
+            .route(
+                "/clients/{client_id}",
+                get(app_get_client_handler)
+                    .put(app_update_client_handler)
+                    .delete(app_delete_client_handler),
+            );
+    }
+
+    oauth_routes = oauth_routes.layer(middleware::map_response_with_state(
+        ctx.clone(),
+        set_dpop_headers,
+    ));
 
     // Create well-known discovery routes
     let well_known_routes = Router::new()
@@ -173,6 +179,7 @@ mod tests {
             storage_backend: "memory".to_string(),
             database_url: None,
             redis_url: None,
+            enable_client_api: false,
         });
 
         let atp_session_storage =

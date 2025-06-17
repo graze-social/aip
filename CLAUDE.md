@@ -17,6 +17,20 @@ Code pertaining to base OAuth features and functionality is organized in the `sr
 
 Code pertaining to ATProtocol OAuth features and functionality is organized in the `src/oauth/atprotocol/` package.
 
+### Client Management API
+
+AIP includes optional client management API endpoints for dynamic client registration and management. These endpoints can be enabled or disabled using the `ENABLE_CLIENT_API` environment variable:
+
+* When `ENABLE_CLIENT_API=true`, the following endpoints are available:
+  - `POST /oauth/clients/register` - Dynamic Client Registration (RFC 7591)
+  - `GET /oauth/clients/{client_id}` - Retrieve client information
+  - `PUT /oauth/clients/{client_id}` - Update client configuration
+  - `DELETE /oauth/clients/{client_id}` - Delete client registration
+
+* When `ENABLE_CLIENT_API` is not set or set to any value other than "true", these client management endpoints are disabled and will return 404 responses.
+
+The core OAuth endpoints (authorize, token, PAR) remain available regardless of this setting.
+
 ## Common Development Commands
 
 ### Build Commands

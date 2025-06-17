@@ -364,6 +364,7 @@ mod tests {
             storage_backend: "memory".to_string(),
             database_url: None,
             redis_url: None,
+            enable_client_api: false,
         };
 
         let auth_request =
@@ -427,6 +428,7 @@ mod tests {
             storage_backend: "memory".to_string(),
             database_url: None,
             redis_url: None,
+            enable_client_api: false,
         };
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);
@@ -486,6 +488,7 @@ mod tests {
             storage_backend: "memory".to_string(),
             database_url: None,
             redis_url: None,
+            enable_client_api: false,
         };
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);
