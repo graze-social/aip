@@ -68,7 +68,11 @@ async fn main() -> Result<()> {
         }
     });
 
+    tracing::info!(?version, "Starting AIP");
+
     let config = Config::new()?;
+
+    tracing::info!(config.enable_client_api, "Feature: Client Registration");
 
     // Build HTTP client with certificate bundles
     let mut client_builder = reqwest::Client::builder();
