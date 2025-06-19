@@ -27,6 +27,8 @@ ENV HTTP_TEMPLATE_PATH=/app/templates/
 
 # Build the actual application with embed feature only
 RUN cargo build --release --no-default-features --features ${FEATURES}
+# Add the sqlx cli for running migrations in containers
+RUN cargo install sqlx-cli --root /app/.cargo --no-default-features --features native-tls,postgres
 
 # Runtime stage using distroless
 FROM gcr.io/distroless/cc-debian12
@@ -47,6 +49,9 @@ COPY --from=builder /app/target/release/aip /app/aip
 
 # Copy static directory
 COPY --from=builder /app/static ./static
+
+# Copy sqlx binary
+COPY --from=builder /app/.cargo/bin/sqlx /app/bin/sqlx
 
 # Set environment variables
 ENV HTTP_STATIC_PATH=/app/static
