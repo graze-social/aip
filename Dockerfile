@@ -49,9 +49,11 @@ COPY --from=builder /app/target/release/aip /app/aip
 
 # Copy static directory
 COPY --from=builder /app/static ./static
-
+# Copy migrations directory
+COPY --from=builder /app/migrations ./migrations
 # Copy sqlx binary
 COPY --from=builder /app/.cargo/bin/sqlx /app/bin/sqlx
+
 
 # Set environment variables
 ENV HTTP_STATIC_PATH=/app/static
