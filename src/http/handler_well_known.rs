@@ -14,11 +14,10 @@ use super::context::AppState;
 pub async fn oauth_protected_resource_handler(State(state): State<AppState>) -> Json<Value> {
     let metadata = json!({
         "resource": state.config.external_base,
-        "authorization_servers": [format!("{}/oauth", state.config.external_base)],
+        "authorization_servers": [state.config.external_base],
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
         "scopes_supported": ["read", "write", "atproto"],
         "bearer_methods_supported": ["header", "body"],
-        "resource_documentation": format!("{}/docs", state.config.external_base),
         "dpop_signing_alg_values_supported": ["ES256"]
     });
 
