@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::Json as ResponseJson,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
     errors::ClientRegistrationError,

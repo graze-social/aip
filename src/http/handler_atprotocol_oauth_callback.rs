@@ -1,13 +1,13 @@
 //! Handles GET /oauth/atp/callback - Processes ATProtocol OAuth callback with authorization code
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
     response::Redirect,
-    Json,
 };
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::{context::AppState, utils_atprotocol_oauth::create_atp_backed_server};
 

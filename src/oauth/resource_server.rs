@@ -13,7 +13,7 @@ use axum::{
     response::Response,
 };
 use chrono::Utc;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{future::Future, pin::Pin, sync::Arc};
 
 /// OAuth Resource Server for protecting APIs
@@ -300,9 +300,8 @@ pub fn oauth_middleware_with_scopes(
 ) -> impl Fn(
     Request,
     Next,
-)
-    -> Pin<Box<dyn Future<Output = Result<Response, (StatusCode, axum::Json<Value>)>> + Send>>
-       + Clone {
+) -> Pin<Box<dyn Future<Output = Result<Response, (StatusCode, axum::Json<Value>)>> + Send>>
++ Clone {
     move |request: Request, next: Next| {
         let resource_server = resource_server.clone();
         let required_scopes = required_scopes.clone();

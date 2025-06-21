@@ -5,8 +5,8 @@ use crate::storage::traits::{KeyStore, Result};
 use async_trait::async_trait;
 use atproto_identity::key::KeyData;
 use chrono::Utc;
-use sqlx::postgres::{PgPool, PgRow};
 use sqlx::Row;
+use sqlx::postgres::{PgPool, PgRow};
 
 /// PostgreSQL implementation of key storage
 pub struct PostgresKeyStore {

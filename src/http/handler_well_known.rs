@@ -3,7 +3,7 @@
 use atproto_identity::key::to_public;
 use atproto_oauth::jwk::generate;
 use axum::{extract::State, http::StatusCode, response::Json};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::context::AppState;
 
@@ -88,7 +88,7 @@ pub async fn jwks_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::oauth::{resource_server::ResourceServer, DPoPNonceGenerator};
+    use crate::oauth::{DPoPNonceGenerator, resource_server::ResourceServer};
     use crate::storage::inmemory::MemoryOAuthStorage;
     use std::sync::Arc;
 
@@ -218,9 +218,11 @@ mod tests {
 
         // Verify PAR support configuration
         assert_eq!(metadata["require_pushed_authorization_requests"], false);
-        assert!(metadata
-            .get("pushed_authorization_request_endpoint")
-            .is_some());
+        assert!(
+            metadata
+                .get("pushed_authorization_request_endpoint")
+                .is_some()
+        );
 
         // Verify PAR endpoint URL format
         let par_endpoint = metadata["pushed_authorization_request_endpoint"]
@@ -257,7 +259,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_jwks_handler_with_key() {
-        use atproto_identity::key::{generate_key, KeyType};
+        use atproto_identity::key::{KeyType, generate_key};
 
         let app_state = create_test_app_state();
 

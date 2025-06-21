@@ -5,8 +5,8 @@ use crate::oauth::types::RefreshToken;
 use crate::storage::traits::{RefreshTokenStore, Result};
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::postgres::{PgPool, PgRow};
 use sqlx::Row;
+use sqlx::postgres::{PgPool, PgRow};
 
 /// PostgreSQL implementation of refresh token storage
 pub struct PostgresRefreshTokenStore {

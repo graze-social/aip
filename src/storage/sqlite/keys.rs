@@ -5,8 +5,8 @@ use crate::storage::traits::{KeyStore, Result};
 use async_trait::async_trait;
 use atproto_identity::key::KeyData;
 use chrono::Utc;
-use sqlx::sqlite::{SqlitePool, SqliteRow};
 use sqlx::Row;
+use sqlx::sqlite::{SqlitePool, SqliteRow};
 
 /// SQLite implementation of key storage
 pub struct SqliteKeyStore {

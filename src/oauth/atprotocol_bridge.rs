@@ -8,11 +8,11 @@ use crate::oauth::{
     auth_server::{AuthorizationServer, AuthorizeResponse},
     types::*,
 };
-use atproto_identity::key::{generate_key, identify_key, to_public, KeyType};
+use atproto_identity::key::{KeyType, generate_key, identify_key, to_public};
 use atproto_oauth::{
     jwk::generate as generate_jwk,
     pkce, resources,
-    workflow::{oauth_complete, oauth_init, OAuthClient, OAuthRequest, OAuthRequestState},
+    workflow::{OAuthClient, OAuthRequest, OAuthRequestState, oauth_complete, oauth_init},
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -837,7 +837,7 @@ mod tests {
     use super::*;
     use crate::oauth::auth_server::AuthorizationServer;
     use crate::storage::inmemory::MemoryOAuthStorage;
-    use atproto_identity::resolve::{create_resolver, IdentityResolver, InnerIdentityResolver};
+    use atproto_identity::resolve::{IdentityResolver, InnerIdentityResolver, create_resolver};
     use atproto_identity::storage_lru::LruDidDocumentStorage;
     use atproto_oauth::storage_lru::LruOAuthRequestStorage;
     use std::num::NonZeroUsize;
@@ -935,22 +935,26 @@ mod tests {
         assert_eq!(retrieved.redirect_uri, "https://example.com/callback");
 
         // Test non-existent session
-        assert!(storage
-            .get_authorization_request("non-existent")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            storage
+                .get_authorization_request("non-existent")
+                .await
+                .unwrap()
+                .is_none()
+        );
 
         // Test remove
         storage
             .remove_authorization_request("session-1")
             .await
             .unwrap();
-        assert!(storage
-            .get_authorization_request("session-1")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            storage
+                .get_authorization_request("session-1")
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -1004,11 +1008,13 @@ mod tests {
             .await
             .unwrap();
         assert!(sessions_after_remove.is_empty());
-        assert!(storage
-            .get_session_by_atp_state("atp-state-123")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            storage
+                .get_session_by_atp_state("atp-state-123")
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -1180,17 +1186,19 @@ mod tests {
                 .await
                 .unwrap();
             assert!(sessions_after_remove.is_empty());
-            assert!(storage
-                .get_session_by_atp_state("atp-state-123")
-                .await
-                .unwrap()
-                .is_none());
+            assert!(
+                storage
+                    .get_session_by_atp_state("atp-state-123")
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
         });
     }
 
     #[tokio::test]
     async fn test_different_key_types_for_jwt() {
-        use atproto_identity::key::{generate_key, to_public, KeyType};
+        use atproto_identity::key::{KeyType, generate_key, to_public};
 
         let server = create_test_atp_backed_server();
 
@@ -1256,7 +1264,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_keydata_serialization_integration() {
-        use atproto_identity::key::{generate_key, identify_key, KeyType};
+        use atproto_identity::key::{KeyType, generate_key, identify_key};
 
         let server = create_test_atp_backed_server();
 
@@ -1313,7 +1321,7 @@ mod tests {
     async fn test_complete_oauth_flow_with_atproto_identity() {
         use crate::oauth::dpop::DPoPValidator;
         use crate::storage::MemoryNonceStorage;
-        use atproto_identity::key::{generate_key, sign, to_public, KeyType};
+        use atproto_identity::key::{KeyType, generate_key, sign, to_public};
 
         let server = create_test_atp_backed_server();
 

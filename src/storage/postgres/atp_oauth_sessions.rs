@@ -4,8 +4,8 @@ use crate::errors::StorageError;
 use crate::storage::traits::{AtpOAuthSession, AtpOAuthSessionStorage, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::postgres::{PgPool, PgRow};
 use sqlx::Row;
+use sqlx::postgres::{PgPool, PgRow};
 
 /// PostgreSQL implementation of ATProtocol OAuth session storage
 pub struct PostgresAtpOAuthSessionStorage {

@@ -1,16 +1,16 @@
 //! Handles POST /oauth/token - Exchanges authorization codes for JWT access tokens with ATProtocol identity
 
 use axum::{
+    Form, Json,
     extract::State,
     http::{HeaderMap, StatusCode},
-    Form, Json,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::{context::AppState, utils_oauth::create_base_auth_server};
 use crate::errors::OAuthError;
 use crate::oauth::{
-    auth_server::{extract_client_auth, TokenForm},
+    auth_server::{TokenForm, extract_client_auth},
     types::TokenRequest,
 };
 
@@ -80,10 +80,10 @@ pub async fn handle_oauth_token(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::oauth::resource_server::ResourceServer;
     use crate::oauth::DPoPNonceGenerator;
-    use crate::storage::inmemory::MemoryOAuthStorage;
+    use crate::oauth::resource_server::ResourceServer;
     use crate::storage::SimpleKeyProvider;
+    use crate::storage::inmemory::MemoryOAuthStorage;
     use atproto_identity::{resolve::create_resolver, storage_lru::LruDidDocumentStorage};
     use atproto_oauth::storage_lru::LruOAuthRequestStorage;
     use std::{num::NonZeroUsize, sync::Arc};

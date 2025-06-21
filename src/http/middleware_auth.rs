@@ -6,8 +6,8 @@
 use std::sync::Arc;
 
 use crate::http::AppState;
-use crate::oauth::{types::*, DPoPNonceProvider};
-use atproto_oauth::dpop::{validate_dpop_jwt, DpopValidationConfig};
+use crate::oauth::{DPoPNonceProvider, types::*};
+use atproto_oauth::dpop::{DpopValidationConfig, validate_dpop_jwt};
 use atproto_oauth::pkce::challenge;
 use axum::extract::{FromRef, FromRequestParts, OriginalUri, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};

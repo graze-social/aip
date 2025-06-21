@@ -6,8 +6,8 @@ use crate::errors::DPoPError;
 use crate::storage::traits::NonceStorage;
 use atproto_identity::key::{KeyData, KeyType};
 use atproto_oauth::{
-    dpop::{extract_jwk_thumbprint, validate_dpop_jwt, DpopValidationConfig},
-    jwk::{to_key_data as jwk_to_key_data_impl, WrappedJsonWebKey},
+    dpop::{DpopValidationConfig, extract_jwk_thumbprint, validate_dpop_jwt},
+    jwk::{WrappedJsonWebKey, to_key_data as jwk_to_key_data_impl},
     jwt,
 };
 use base64::prelude::*;
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_jwk_thumbprint_computation() {
-        use atproto_identity::key::{generate_key, to_public, KeyType};
+        use atproto_identity::key::{KeyType, generate_key, to_public};
         use atproto_oauth::jwk::generate as generate_jwk;
 
         // Generate a real P-256 key and convert to JWK
@@ -385,7 +385,7 @@ mod tests {
 
     #[test]
     fn test_dpop_jwk_thumbprint_extraction() {
-        use atproto_identity::key::{generate_key, KeyType};
+        use atproto_identity::key::{KeyType, generate_key};
         use atproto_oauth::dpop::auth_dpop;
 
         // Generate a key and create a DPoP token
@@ -412,7 +412,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dpop_validation_with_standardized_implementation() {
-        use atproto_identity::key::{generate_key, KeyType};
+        use atproto_identity::key::{KeyType, generate_key};
         use atproto_oauth::dpop::auth_dpop;
 
         let store = Box::new(MemoryNonceStorage::new());
@@ -431,7 +431,7 @@ mod tests {
 
     #[test]
     fn test_jwk_to_keydata_conversion() {
-        use atproto_identity::key::{generate_key, to_public, KeyType};
+        use atproto_identity::key::{KeyType, generate_key, to_public};
         use atproto_oauth::jwk::generate as generate_jwk;
 
         let store = Box::new(MemoryNonceStorage::new());
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_standardized_dpop_validation() {
-        use atproto_identity::key::{generate_key, KeyType};
+        use atproto_identity::key::{KeyType, generate_key};
         use atproto_oauth::dpop::auth_dpop;
 
         // Generate a key and create a DPoP token
@@ -483,7 +483,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dpop_with_standardized_validation() {
-        use atproto_identity::key::{generate_key, KeyType};
+        use atproto_identity::key::{KeyType, generate_key};
         use atproto_oauth::dpop::auth_dpop;
 
         let store = Box::new(MemoryNonceStorage::new());
@@ -509,7 +509,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dpop_nonce_replay_protection() {
-        use atproto_identity::key::{generate_key, KeyType};
+        use atproto_identity::key::{KeyType, generate_key};
         use atproto_oauth::dpop::auth_dpop;
 
         let store = Box::new(MemoryNonceStorage::new());
@@ -534,7 +534,7 @@ mod tests {
 
     #[test]
     fn test_algorithm_detection_integration() {
-        use atproto_identity::key::{generate_key, to_public, KeyType};
+        use atproto_identity::key::{KeyType, generate_key, to_public};
         use atproto_oauth::jwk::generate as generate_jwk;
 
         let store = Box::new(MemoryNonceStorage::new());

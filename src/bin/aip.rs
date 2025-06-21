@@ -5,22 +5,22 @@
 
 use aip::{
     config::Config,
-    http::{build_router, AppEngine, AppState},
+    http::{AppEngine, AppState, build_router},
     oauth::{
+        DPoPNonceGenerator, UnifiedAtpOAuthSessionStorageAdapter,
+        UnifiedAuthorizationRequestStorageAdapter,
         atprotocol_bridge::{AtpOAuthSessionStorage, AuthorizationRequestStorage},
         clients::registration::ClientRegistrationService,
         resource_server::ResourceServer,
-        DPoPNonceGenerator, UnifiedAtpOAuthSessionStorageAdapter,
-        UnifiedAuthorizationRequestStorageAdapter,
     },
     storage::{
-        create_storage_backend, key_provider::SimpleKeyProvider, parse_storage_backend,
-        StorageBackend,
+        StorageBackend, create_storage_backend, key_provider::SimpleKeyProvider,
+        parse_storage_backend,
     },
 };
 use anyhow::Result;
 use atproto_identity::{
-    resolve::{create_resolver, IdentityResolver, InnerIdentityResolver},
+    resolve::{IdentityResolver, InnerIdentityResolver, create_resolver},
     storage::DidDocumentStorage,
     storage_lru::LruDidDocumentStorage,
 };
@@ -28,7 +28,7 @@ use atproto_oauth::{storage::OAuthRequestStorage, storage_lru::LruOAuthRequestSt
 use std::{env, num::NonZeroUsize, sync::Arc};
 
 #[cfg(feature = "postgres")]
-use aip::storage::{postgres::PostgresDidDocumentStorage, PostgresOAuthRequestStorage};
+use aip::storage::{PostgresOAuthRequestStorage, postgres::PostgresDidDocumentStorage};
 
 use tokio::net::TcpListener;
 use tokio::signal;

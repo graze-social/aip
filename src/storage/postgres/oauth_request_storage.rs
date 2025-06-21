@@ -7,8 +7,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use atproto_oauth::{storage::OAuthRequestStorage, workflow::OAuthRequest};
 use chrono::{DateTime, Utc};
-use sqlx::postgres::{PgPool, PgRow};
 use sqlx::Row;
+use sqlx::postgres::{PgPool, PgRow};
 
 /// PostgreSQL implementation of OAuthRequestStorage
 pub struct PostgresOAuthRequestStorage {

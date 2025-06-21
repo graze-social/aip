@@ -6,15 +6,15 @@ use crate::errors::OAuthError;
 use crate::oauth::{dpop::*, types::*};
 use crate::storage::traits::OAuthStorage;
 use axum::{
+    Form,
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::{Json, Redirect},
-    Form,
 };
-use base64::{prelude::*, Engine};
+use base64::{Engine, prelude::*};
 use chrono::{Duration, Utc};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use url::Url;
@@ -549,7 +549,7 @@ impl AuthorizationServer {
                 return Err(OAuthError::InvalidRequest(format!(
                     "Unsupported PKCE method: {}",
                     method
-                )))
+                )));
             }
         };
 

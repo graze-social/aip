@@ -5,8 +5,8 @@ use crate::oauth::types::AuthorizationRequest;
 use crate::storage::traits::{AuthorizationRequestStorage, Result};
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::postgres::{PgPool, PgRow};
 use sqlx::Row;
+use sqlx::postgres::{PgPool, PgRow};
 
 /// PostgreSQL implementation of authorization request storage
 pub struct PostgresAuthorizationRequestStorage {

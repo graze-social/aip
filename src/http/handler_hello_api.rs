@@ -1,7 +1,7 @@
 //! Handles GET /api/hello - OAuth-protected demo endpoint that returns a simple JSON message
 
-use axum::{extract::Extension, http::StatusCode, Json};
-use serde_json::{json, Value};
+use axum::{Json, extract::Extension, http::StatusCode};
+use serde_json::{Value, json};
 
 use crate::oauth::resource_server::TokenValidationResult;
 

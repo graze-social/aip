@@ -1,14 +1,14 @@
 //! Handles GET /oauth/authorize - ATProtocol-backed OAuth authorization endpoint that redirects to ATProtocol OAuth or shows login form
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
-    Json,
 };
 use axum_template::TemplateEngine;
 use chrono::Utc;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 use super::{context::AppState, utils_atprotocol_oauth::create_atp_backed_server};

@@ -1,15 +1,15 @@
 //! Handles POST /oauth/par - Pushed Authorization Request endpoint per RFC 9126
 
 use axum::{
+    Form,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::Json,
-    Form,
 };
 use base64::Engine;
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use ulid::Ulid;
 
@@ -159,7 +159,7 @@ fn validate_and_convert_par_request(
         _ => {
             return Err(OAuthError::UnsupportedResponseType(
                 request.response_type.clone(),
-            ))
+            ));
         }
     };
 
@@ -532,8 +532,10 @@ mod tests {
         };
 
         assert_eq!(response.expires_in, 600);
-        assert!(response
-            .request_uri
-            .contains("urn:ietf:params:oauth:request_uri:"));
+        assert!(
+            response
+                .request_uri
+                .contains("urn:ietf:params:oauth:request_uri:")
+        );
     }
 }

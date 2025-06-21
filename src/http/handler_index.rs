@@ -21,10 +21,10 @@ pub async fn handle_index(State(state): State<AppState>) -> Result<impl IntoResp
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::oauth::resource_server::ResourceServer;
     use crate::oauth::DPoPNonceGenerator;
-    use crate::storage::inmemory::MemoryOAuthStorage;
+    use crate::oauth::resource_server::ResourceServer;
     use crate::storage::SimpleKeyProvider;
+    use crate::storage::inmemory::MemoryOAuthStorage;
     use atproto_identity::{resolve::create_resolver, storage_lru::LruDidDocumentStorage};
     use atproto_oauth::storage_lru::LruOAuthRequestStorage;
     use std::{num::NonZeroUsize, sync::Arc};

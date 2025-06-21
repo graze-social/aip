@@ -4,7 +4,7 @@
 //! ATProtocol integration, and runtime options.
 
 use anyhow::Result;
-use atproto_identity::key::{generate_key, identify_key, KeyData, KeyType};
+use atproto_identity::key::{KeyData, KeyType, generate_key, identify_key};
 use std::time::Duration;
 
 use crate::errors::ConfigError;

@@ -4,7 +4,7 @@
 //! client credentials grant, dynamic client registration, and DPoP support.
 
 use aip::oauth::{
-    auth_server::*, clients::registration::*, resource_server::*, types::*, OAuthClientStore,
+    OAuthClientStore, auth_server::*, clients::registration::*, resource_server::*, types::*,
 };
 use aip::storage::{inmemory::MemoryOAuthStorage, traits::AccessTokenStore};
 use axum::http::HeaderMap;

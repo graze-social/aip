@@ -1,9 +1,8 @@
 //! Axum router configuration and endpoint registration.
 
 use axum::{
-    middleware,
+    Router, middleware,
     routing::{get, post},
-    Router,
 };
 use tower_http::{cors::CorsLayer, services::ServeDir};
 
@@ -112,10 +111,10 @@ pub fn build_router(ctx: AppState) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::oauth::resource_server::ResourceServer;
     use crate::oauth::DPoPNonceGenerator;
-    use crate::storage::inmemory::MemoryOAuthStorage;
+    use crate::oauth::resource_server::ResourceServer;
     use crate::storage::SimpleKeyProvider;
+    use crate::storage::inmemory::MemoryOAuthStorage;
     use atproto_identity::{resolve::create_resolver, storage_lru::LruDidDocumentStorage};
     use atproto_oauth::storage_lru::LruOAuthRequestStorage;
     use std::{num::NonZeroUsize, sync::Arc};

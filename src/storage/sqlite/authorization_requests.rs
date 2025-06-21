@@ -5,8 +5,8 @@ use crate::oauth::types::AuthorizationRequest;
 use crate::storage::traits::{AuthorizationRequestStorage, Result};
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::sqlite::{SqlitePool, SqliteRow};
 use sqlx::Row;
+use sqlx::sqlite::{SqlitePool, SqliteRow};
 
 /// SQLite implementation of authorization request storage
 pub struct SqliteAuthorizationRequestStorage {

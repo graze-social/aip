@@ -4,8 +4,8 @@ use crate::errors::StorageError;
 use crate::oauth::types::*;
 use crate::storage::traits::{OAuthClientStore, Result};
 use async_trait::async_trait;
-use sqlx::postgres::{PgPool, PgRow};
 use sqlx::Row;
+use sqlx::postgres::{PgPool, PgRow};
 
 /// PostgreSQL implementation of OAuth client storage
 pub struct PostgresOAuthClientStore {
@@ -193,7 +193,7 @@ impl PostgresOAuthClientStore {
             _ => {
                 return Err(StorageError::InvalidData(
                     "Redirect URIs must be an array".to_string(),
-                ))
+                ));
             }
         };
 

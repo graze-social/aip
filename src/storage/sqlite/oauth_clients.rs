@@ -5,8 +5,8 @@ use crate::oauth::types::*;
 use crate::storage::traits::{OAuthClientStore, Result};
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::sqlite::{SqlitePool, SqliteRow};
 use sqlx::Row;
+use sqlx::sqlite::{SqlitePool, SqliteRow};
 
 /// SQLite implementation of OAuth client storage
 pub struct SqliteOAuthClientStore {

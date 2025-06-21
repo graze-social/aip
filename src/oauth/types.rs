@@ -304,7 +304,7 @@ pub const STANDARD_SCOPES: &[&str] = &["openid", "profile", "email", "offline_ac
 pub fn generate_token() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    let bytes: [u8; 32] = rng.gen();
+    let bytes: [u8; 32] = rng.r#gen();
     base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(bytes)
 }
 

@@ -25,7 +25,7 @@ pub fn build_env(http_external: String, version: String) -> Environment<'static>
 mod reload_env {
     use std::{env, path::PathBuf};
 
-    use minijinja::{path_loader, Environment};
+    use minijinja::{Environment, path_loader};
     use minijinja_autoreload::AutoReloader;
 
     pub fn build_env() -> AutoReloader {

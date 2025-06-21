@@ -88,9 +88,11 @@ mod tests {
 
         // The nonce should be available again after cleanup
         let future_expiry = OffsetDateTime::now_utc() + Duration::minutes(5);
-        assert!(store
-            .check_and_use_nonce(nonce, future_expiry)
-            .await
-            .unwrap());
+        assert!(
+            store
+                .check_and_use_nonce(nonce, future_expiry)
+                .await
+                .unwrap()
+        );
     }
 }

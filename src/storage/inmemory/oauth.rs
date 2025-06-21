@@ -635,7 +635,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_key_storage() {
-        use atproto_identity::key::{generate_key, KeyType};
+        use atproto_identity::key::{KeyType, generate_key};
 
         let storage = MemoryOAuthStorage::new();
 
@@ -671,7 +671,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_key_type_validation() {
-        use atproto_identity::key::{generate_key, to_public, KeyType};
+        use atproto_identity::key::{KeyType, generate_key, to_public};
 
         let storage = MemoryOAuthStorage::new();
 
@@ -692,7 +692,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_keydata_string_serialization() {
-        use atproto_identity::key::{generate_key, identify_key, KeyType};
+        use atproto_identity::key::{KeyType, generate_key, identify_key};
 
         let storage = MemoryOAuthStorage::new();
 
@@ -728,7 +728,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_keydata_error_handling() {
-        use atproto_identity::key::{generate_key, KeyType};
+        use atproto_identity::key::{KeyType, generate_key};
 
         let storage = MemoryOAuthStorage::new();
 
@@ -762,7 +762,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_signing_key_storage() {
-        use atproto_identity::key::{generate_key, to_public, KeyType};
+        use atproto_identity::key::{KeyType, generate_key, to_public};
 
         let storage = MemoryOAuthStorage::new();
 

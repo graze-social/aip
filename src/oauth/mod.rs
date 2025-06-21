@@ -31,7 +31,8 @@ pub use dpop::{DPoPClaims, DPoPProof, DPoPValidator};
 pub use dpop_nonce::{DPoPNonceGenerator, DPoPNonceProvider};
 pub use resource_server::{ResourceServer, TokenValidationResult};
 pub use types::{
-    parse_scope, AccessToken, AuthorizationCode, AuthorizationRequest, ClientAuthMethod,
+    AccessToken, AuthorizationCode, AuthorizationRequest, ClientAuthMethod,
     ClientRegistrationRequest, ClientRegistrationResponse, ClientType, GrantType, OAuthClient,
     OAuthErrorResponse, RefreshToken, ResponseType, TokenRequest, TokenResponse, TokenType,
+    parse_scope,
 };

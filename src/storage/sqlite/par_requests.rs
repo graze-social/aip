@@ -5,8 +5,8 @@ use crate::oauth::types::AuthorizationRequest;
 use crate::storage::traits::{PARStorage, Result, StoredPushedRequest};
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::sqlite::{SqlitePool, SqliteRow};
 use sqlx::Row;
+use sqlx::sqlite::{SqlitePool, SqliteRow};
 
 /// SQLite implementation of PAR storage
 pub struct SqlitePARStorage {

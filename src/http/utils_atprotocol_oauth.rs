@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use super::context::AppState;
-use crate::oauth::{auth_server::AuthorizationServer, AtpBackedAuthorizationServer};
+use crate::oauth::{AtpBackedAuthorizationServer, auth_server::AuthorizationServer};
 use atproto_oauth_axum::state::OAuthClientConfig;
 
 /// Create ATProtocol-backed authorization server
@@ -52,10 +52,10 @@ pub async fn create_atp_backed_server(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::oauth::resource_server::ResourceServer;
     use crate::oauth::DPoPNonceGenerator;
-    use crate::storage::inmemory::MemoryOAuthStorage;
+    use crate::oauth::resource_server::ResourceServer;
     use crate::storage::SimpleKeyProvider;
+    use crate::storage::inmemory::MemoryOAuthStorage;
     use atproto_identity::{resolve::create_resolver, storage_lru::LruDidDocumentStorage};
     use atproto_oauth::storage_lru::LruOAuthRequestStorage;
     use std::{num::NonZeroUsize, sync::Arc};

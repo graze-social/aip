@@ -8,7 +8,7 @@ use axum::{
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::{context::AppState, utils_atprotocol_oauth::create_atp_backed_server};
 use crate::http::middleware_auth::ExtractedAuth;

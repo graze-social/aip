@@ -288,7 +288,7 @@ impl ClientRegistrationService {
         }
 
         // Validate grant types and response types are compatible
-        if let (Some(ref grant_types), Some(ref response_types)) =
+        if let (Some(grant_types), Some(response_types)) =
             (&request.grant_types, &request.response_types)
         {
             if grant_types.contains(&GrantType::AuthorizationCode)

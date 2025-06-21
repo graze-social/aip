@@ -5,8 +5,8 @@ use crate::oauth::types::{AccessToken, TokenType};
 use crate::storage::traits::{AccessTokenStore, Result};
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::postgres::{PgPool, PgRow};
 use sqlx::Row;
+use sqlx::postgres::{PgPool, PgRow};
 
 /// PostgreSQL implementation of access token storage
 pub struct PostgresAccessTokenStore {
