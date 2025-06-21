@@ -1,5 +1,7 @@
 # AIP - ATProtocol Identity Provider
 
+![Image from 391 Vol 1– 19 by Francis Picabia, https://archive.org/details/391-vol-1-19/page/n98/mode/1up](./aip.png)
+
 A high-performance OAuth 2.1 authorization server with native ATProtocol integration, enabling secure authentication and token management for decentralized identity applications.
 
 ## Features
@@ -16,7 +18,7 @@ A high-performance OAuth 2.1 authorization server with native ATProtocol integra
 
 ### Prerequisites
 
-- Rust 1.70+ 
+- Rust 1.70+
 - Optional: PostgreSQL or SQLite for persistent storage
 
 ### Installation
@@ -53,7 +55,7 @@ export LOG_LEVEL=info
 ### OAuth 2.1 Endpoints
 
 - `GET /oauth/authorize` - Authorization endpoint
-- `POST /oauth/token` - Token endpoint  
+- `POST /oauth/token` - Token endpoint
 - `POST /oauth/par` - Pushed Authorization Request (RFC 9126)
 - `POST /oauth/clients/register` - Dynamic client registration (RFC 7591)
 - `GET /.well-known/oauth-authorization-server` - Server metadata discovery
