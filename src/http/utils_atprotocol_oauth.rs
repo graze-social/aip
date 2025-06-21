@@ -33,6 +33,7 @@ pub async fn create_atp_backed_server(
         logo_uri: None,
         tos_uri: None,
         policy_uri: None,
+        scope: Some(state.config.oauth_supported_scopes.as_ref().join(" ")),
     };
 
     Ok(AtpBackedAuthorizationServer::new(
@@ -210,6 +211,9 @@ mod tests {
             logo_uri: None,
             tos_uri: None,
             policy_uri: None,
+            scope: Some(
+                "atproto:atproto atproto:transition:generic atproto:transition:email".to_string(),
+            ),
         };
 
         assert_eq!(client_config.client_id, expected_client_id);

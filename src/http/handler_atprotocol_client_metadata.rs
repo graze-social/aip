@@ -26,6 +26,7 @@ pub async fn handle_atpoauth_client_metadata(
         logo_uri: None,
         tos_uri: None,
         policy_uri: None,
+        scope: Some(app_state.config.oauth_supported_scopes.as_ref().join(" ")),
     };
 
     // Use the atproto-oauth-axum handler

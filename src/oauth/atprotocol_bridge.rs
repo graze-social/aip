@@ -881,6 +881,9 @@ mod tests {
             logo_uri: None,
             tos_uri: None,
             policy_uri: None,
+            scope: Some(
+                "atproto:atproto atproto:transition:generic atproto:transition:email".to_string(),
+            ),
         };
 
         // Create session storage

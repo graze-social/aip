@@ -51,8 +51,8 @@ mod reload_env {
 
 #[cfg(feature = "embed")]
 mod embed_env {
-    use std::path::PathBuf;
     use minijinja::Environment;
+    use std::path::PathBuf;
 
     pub fn build_env(http_external: String, version: String) -> Environment<'static> {
         let mut env = Environment::new();

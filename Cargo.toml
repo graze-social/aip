@@ -17,10 +17,10 @@ path = "src/lib.rs"
 
 [dependencies]
 axum = { version = "0.8" }
-atproto-client = { version = "0.7.0" }
-atproto-identity = { version = "0.7.0" }
-atproto-oauth = { version = "0.7.0" }
-atproto-oauth-axum = { version = "0.7.0" }
+atproto-client = { version = "0.8.1" }
+atproto-identity = { version = "0.8.1" }
+atproto-oauth = { version = "0.8.1" }
+atproto-oauth-axum = { version = "0.8.1" }
 
 axum-template = { version = "3.0", features = ["minijinja"] }
 minijinja = { version = "2.7", features = ["builtins"] }
