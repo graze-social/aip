@@ -1,0 +1,24 @@
+[package]
+name = "simple-website"
+version = "0.1.0"
+edition = "2021"
+description = "A minimal functional website that demonstrates OAuth 2.1 + PAR authentication with dynamic client registration"
+
+[[bin]]
+name = "simple-website"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.41", features = ["macros", "rt", "rt-multi-thread", "net", "sync"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest = { version = "0.12", features = ["json"] }
+base64 = "0.22"
+sha2 = "0.10"
+rand = "0.8"
+urlencoding = "2.1"
+html-escape = "0.2"
+uuid = { version = "1.11", features = ["v4", "serde"] }

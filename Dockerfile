@@ -1,40 +1,68 @@
-# Use a lightweight Python image
-FROM python:3.13-slim
+# Build stage
+FROM rust:1.87-slim AS builder
+
+# Install required system dependencies for building
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    libpq-dev \
-    postgresql-client \
-    gcc \
-    python3-dev \
-    jq \
-    && rm -rf /var/lib/apt/lists/*
+# Copy manifests first for better layer caching
+COPY Cargo.toml Cargo.lock build.rs ./
 
-# Install PDM globally
-RUN pip install pdm
+ARG FEATURES=embed,postgres
+ARG TEMPLATES=./templates
+ARG STATIC=./static
+ARG GIT_HASH=0
+ENV GIT_HASH=$GIT_HASH
 
-# TODO: we can split into a multi-stage build and just ship the .venv
-# just keeping everything for now
-COPY . .
+# Copy actual source code and assets
+COPY src ./src
+COPY migrations ./migrations
+COPY ${TEMPLATES} ./templates
+COPY ${STATIC} ./static
 
-# Ensure PDM always uses the in-project virtual environment
-ENV PDM_VENV_IN_PROJECT=1
-ENV PATH="/app/.venv/bin:$PATH"
+ENV HTTP_TEMPLATE_PATH=/app/templates/
 
-# Install dependencies properly inside the virtual environment
-RUN pdm install
+# Build the actual application with embed feature only
+RUN cargo build --release --no-default-features --features ${FEATURES}
+# Add the sqlx cli for running migrations in containers
+RUN cargo install sqlx-cli --root /app/.cargo --no-default-features --features native-tls,postgres
 
-# Expose the application port
-# TODO: These should be configurable, not hard-coded and thus publishing them here is moot.
+# Runtime stage using distroless
+FROM gcr.io/distroless/cc-debian12
+
+# Add OCI labels
+LABEL org.opencontainers.image.title="aip"
+LABEL org.opencontainers.image.description="A Placeholder Description"
+LABEL org.opencontainers.image.version="0.1.0"
+LABEL org.opencontainers.image.authors="Nick Gerakines <nick.gerakines@gmail.com>"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.created="2025-01-06T00:00:00Z"
+
+# Set working directory
+WORKDIR /app
+
+# Copy the binary from builder stage
+COPY --from=builder /app/target/release/aip /app/aip
+
+# Copy static directory
+COPY --from=builder /app/static ./static
+# Copy migrations directory
+COPY --from=builder /app/migrations ./migrations
+# Copy sqlx binary
+COPY --from=builder /app/.cargo/bin/sqlx /app/bin/sqlx
+
+
+# Set environment variables
+ENV HTTP_STATIC_PATH=/app/static
+ENV HTTP_PORT=8080
+
+# Expose port
 EXPOSE 8080
-EXPOSE 5100
 
-# Available CMDs
-# See pyproject.toml for more details
-# CMD ["pdm", "run", "aipserver"]
-# CMD ["pdm", "run", "resolve"]
-# CMD ["pdm", "run", "aiputil"]
+# Run the application
+ENTRYPOINT ["/app/aip"]

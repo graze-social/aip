@@ -1,71 +1,28 @@
+version: '3.8'
+
 services:
-  db:
-    image: postgres:17
-    container_name: aip_db
-    restart: always
+  postgres:
+    image: postgres:17-alpine
     environment:
+      POSTGRES_DB: aip_dev
       POSTGRES_USER: aip
-      POSTGRES_PASSWORD: aip_password
-      POSTGRES_DB: aip_db
-    volumes:
-      - aip_db_data:/var/lib/postgresql/data
+      POSTGRES_PASSWORD: aip_dev_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     ports:
-      - "5432:5432"
+      - "5434:5432"  # Using 5434 to avoid conflicts with system PostgreSQL
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aip -d aip_db"]
+      test: ["CMD-SHELL", "pg_isready -U aip -d aip_dev"]
       interval: 5s
+      timeout: 5s
       retries: 5
-      timeout: 3s
-
-  valkey:
-    image: valkey/valkey:8-alpine
-    container_name: aip_valkey
-    restart: always
-    ports:
-      - "6379:6379"
-
-  telegraf:
-    image: telegraf:latest
-    container_name: aip_telegraf
-    restart: always
-    depends_on:
-      - db
-      - valkey
-    ports:
-      - "8125:8125/udp"
-    volumes:
-      - ./telegraf.conf:/etc/telegraf/telegraf.conf
-
-  aip:
-    build: .
-    container_name: aip_service
-    command: ["pdm", "run", "aipserver"]
-    restart: always
-    depends_on:
-      db:
-        condition: service_healthy
-      valkey:
-        condition: service_started
-      telegraf:
-        condition: service_started
-    environment:
-      DATABASE_URL: postgresql+asyncpg://aip:aip_password@db:5432/aip_db
-      REDIS_URL: redis://valkey:6379/0
-      DEBUG: "true"
-      WORKER_ID: "dev1"
-      ACTIVE_SIGNING_KEYS: '["01JNEKAHBPFQYJX3RS7HH7W2RY"]'
-      JSON_WEB_KEYS: /app/signing_keys.json
-    ports:
-      - "8080:8080"
-      - "5100:5100"
-    volumes:
-      - .:/app # Mount local directory to container
-      - /app/.venv # Preserve virtual environment
-    # TODO: move to Tilt-based debugging
-    # volumes:
-    #   - .:/app
-    #   - /app/.venv
+    restart: unless-stopped
 
 volumes:
-  aip_db_data:
-  influxdb_data:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: aip_network

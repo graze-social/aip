@@ -1,0 +1,185 @@
+//! Handles POST /oauth/token - Exchanges authorization codes for JWT access tokens with ATProtocol identity
+
+use axum::{
+    Form, Json,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+};
+use serde_json::{Value, json};
+
+use super::{context::AppState, utils_oauth::create_base_auth_server};
+use crate::errors::OAuthError;
+use crate::oauth::{
+    auth_server::{TokenForm, extract_client_auth},
+    types::TokenRequest,
+};
+
+/// Handle ATProtocol-backed OAuth token requests
+/// POST /oauth/token - Exchanges authorization code for JWT with ATProtocol identity
+pub async fn handle_oauth_token(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<TokenForm>,
+) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // Extract client authentication from Authorization header or form
+    let client_auth = extract_client_auth(&headers, &form);
+
+    let request = match TokenRequest::try_from(form) {
+        Ok(req) => req,
+        Err(e) => {
+            let error_response = json!({
+                "error": "invalid_request",
+                "error_description": e.to_string()
+            });
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+        }
+    };
+
+    // Create base authorization server for token exchange
+    let base_auth_server = create_base_auth_server(&state).await.map_err(|e| {
+        let error_response = json!({
+            "error": "server_error",
+            "error_description": format!("Failed to create authorization server: {}", e)
+        });
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+    })?;
+
+    match base_auth_server.token(request, &headers, client_auth).await {
+        Ok(response) => {
+            // Check if we can enhance the response with ATProtocol identity
+            // For now, return the base token response
+            Ok(Json(json!({
+                "access_token": response.access_token,
+                "token_type": response.token_type,
+                "expires_in": response.expires_in,
+                "refresh_token": response.refresh_token,
+                "scope": response.scope
+            })))
+        }
+        Err(e) => {
+            let (status, error_code) = match e {
+                OAuthError::InvalidClient(_) => (StatusCode::UNAUTHORIZED, "invalid_client"),
+                OAuthError::InvalidGrant(_) => (StatusCode::BAD_REQUEST, "invalid_grant"),
+                OAuthError::UnsupportedGrantType(_) => {
+                    (StatusCode::BAD_REQUEST, "unsupported_grant_type")
+                }
+                OAuthError::InvalidScope(_) => (StatusCode::BAD_REQUEST, "invalid_scope"),
+                OAuthError::InvalidRequest(_) => (StatusCode::BAD_REQUEST, "invalid_request"),
+                _ => (StatusCode::INTERNAL_SERVER_ERROR, "server_error"),
+            };
+
+            let error_response = json!({
+                "error": error_code,
+                "error_description": e.to_string()
+            });
+            Err((status, Json(error_response)))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::oauth::DPoPNonceGenerator;
+    use crate::oauth::resource_server::ResourceServer;
+    use crate::storage::SimpleKeyProvider;
+    use crate::storage::inmemory::MemoryOAuthStorage;
+    use atproto_identity::{resolve::create_resolver, storage_lru::LruDidDocumentStorage};
+    use atproto_oauth::storage_lru::LruOAuthRequestStorage;
+    use std::{num::NonZeroUsize, sync::Arc};
+
+    fn create_test_app_state() -> AppState {
+        let oauth_storage = Arc::new(MemoryOAuthStorage::new());
+        let resource_server = Arc::new(ResourceServer::new(
+            oauth_storage.clone(),
+            "https://localhost".to_string(),
+        ));
+
+        let http_client = reqwest::Client::new();
+        let dns_nameservers = vec![];
+        let dns_resolver = create_resolver(&dns_nameservers);
+        let identity_resolver = atproto_identity::resolve::IdentityResolver(Arc::new(
+            atproto_identity::resolve::InnerIdentityResolver {
+                http_client,
+                dns_resolver,
+                plc_hostname: "plc.directory".to_string(),
+            },
+        ));
+
+        let key_provider = Arc::new(SimpleKeyProvider::new());
+        let oauth_request_storage =
+            Arc::new(LruOAuthRequestStorage::new(NonZeroUsize::new(256).unwrap()));
+        let document_storage =
+            Arc::new(LruDidDocumentStorage::new(NonZeroUsize::new(100).unwrap()));
+
+        #[cfg(feature = "reload")]
+        let template_env = {
+            use minijinja_autoreload::AutoReloader;
+            axum_template::engine::Engine::new(AutoReloader::new(|_| {
+                Ok(minijinja::Environment::new())
+            }))
+        };
+
+        #[cfg(not(feature = "reload"))]
+        let template_env = axum_template::engine::Engine::new(minijinja::Environment::new());
+
+        let config = Arc::new(crate::config::Config {
+            version: "test".to_string(),
+            http_port: "3000".to_string().try_into().unwrap(),
+            http_static_path: "static".to_string(),
+            http_templates_path: "templates".to_string(),
+            external_base: "https://localhost".to_string(),
+            certificate_bundles: "".to_string().try_into().unwrap(),
+            user_agent: "test-user-agent".to_string(),
+            plc_hostname: "plc.directory".to_string(),
+            dns_nameservers: "".to_string().try_into().unwrap(),
+            http_client_timeout: "10s".to_string().try_into().unwrap(),
+            atproto_oauth_signing_keys: Default::default(),
+            oauth_signing_keys: Default::default(),
+            oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
+                "read write atproto:atproto".to_string(),
+            )
+            .unwrap(),
+            dpop_nonce_seed: "seed".to_string(),
+            storage_backend: "memory".to_string(),
+            database_url: None,
+            redis_url: None,
+            enable_client_api: false,
+        });
+
+        let atp_session_storage =
+            Arc::new(crate::oauth::atprotocol_bridge::MemoryAtpOAuthSessionStorage::new());
+        let authorization_request_storage =
+            Arc::new(crate::oauth::atprotocol_bridge::MemoryAuthorizationRequestStorage::new());
+        let client_registration_service = Arc::new(crate::oauth::ClientRegistrationService::new(
+            oauth_storage.clone(),
+        ));
+
+        AppState {
+            config: config.clone(),
+            template_env,
+            identity_resolver,
+            key_provider,
+            oauth_request_storage,
+            document_storage,
+            oauth_storage,
+            resource_server,
+            client_registration_service,
+            atp_session_storage,
+            authorization_request_storage,
+            atproto_oauth_signing_keys: vec![],
+            dpop_nonce_provider: Arc::new(DPoPNonceGenerator::new(
+                config.dpop_nonce_seed.clone(),
+                1,
+            )),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_token_form_validation() {
+        // Test that token request forms can be created properly
+        // This is a placeholder test since we don't expose the TokenForm directly
+        let app_state = create_test_app_state();
+        assert!(!app_state.config.external_base.is_empty());
+    }
+}

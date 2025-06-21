@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /oauth/
+Disallow: /api/
+Allow: /
