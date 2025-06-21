@@ -37,7 +37,7 @@ FROM gcr.io/distroless/cc-debian12
 
 # Add OCI labels
 LABEL org.opencontainers.image.title="aip"
-LABEL org.opencontainers.image.description="A Placeholder Description"
+LABEL org.opencontainers.image.description="ATmosphere Authentication, Identity, and Permission Proxy"
 LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.authors="Nick Gerakines <nick.gerakines@gmail.com>"
 LABEL org.opencontainers.image.licenses="MIT"
