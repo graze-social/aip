@@ -69,4 +69,4 @@ ENV HTTP_PORT=8080
 EXPOSE 8080
 
 # Run the application
-# ENTRYPOINT ["/app/aip"]
+# CMD ["/app/aip"]
