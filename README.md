@@ -2,7 +2,7 @@
 
 ![Image from 391 Vol 1– 19 by Francis Picabia, https://archive.org/details/391-vol-1-19/page/n98/mode/1up](./aip.png)
 
-A high-performance OAuth 2.1 authorization server with native ATProtocol integration, enabling secure authentication and token management for decentralized identity applications.
+AIP (ATProtocol Identity Provider) is a high-performance OAuth 2.1 authorization server with native ATProtocol integration. It provides secure authentication and token management for decentralized identity applications, enabling OAuth flows backed by ATProtocol identities.
 
 ## Features
 
@@ -25,11 +25,11 @@ A high-performance OAuth 2.1 authorization server with native ATProtocol integra
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/aip-rs.git
-cd aip-rs
+git clone https://github.com/graze-social/aip.git
+cd aip
 
 # Build and run (development mode with auto-reloading templates)
-cargo run
+cargo run --bin aip
 
 # Or build for production with embedded templates
 cargo build --release --no-default-features --features embed,postgres
@@ -214,6 +214,33 @@ For security issues, please email security@your-domain.com instead of opening a 
 
 - [ATProtocol](https://github.com/bluesky-social/atproto) - Authenticated Transfer Protocol
 - [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1) - OAuth 2.1 Security Best Current Practice
+
+---
+
+## Binaries
+
+This crate produces two binaries:
+
+### aip
+The main OAuth 2.1 authorization server with ATProtocol integration. This server provides:
+- OAuth 2.1 authorization endpoints
+- ATProtocol OAuth authentication flows
+- Dynamic client registration
+- Token management and validation
+- Support for multiple storage backends
+
+### aip-client-management
+A CLI tool for managing OAuth 2.1 clients. Features include:
+- Dynamic client registration
+- Client information retrieval
+- Client configuration updates
+- Client deletion
+- Support for all OAuth 2.1 client parameters
+
+For detailed usage of the client management tool, run:
+```bash
+aip-client-management --help
+```
 
 ---
 

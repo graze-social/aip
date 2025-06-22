@@ -278,38 +278,6 @@ pub fn generate_id_token(
     ))
 }
 
-/// Generate ID token from unified OpenID claims
-pub fn generate_id_token_from_claims(
-    claims: &OpenIDClaims,
-    _signing_key: &atproto_identity::key::KeyData,
-) -> Result<String, OAuthError> {
-    // For now, create a simple unsigned JWT for testing purposes
-    // In production, this would use proper ES256 signing with the provided key
-
-    let header = serde_json::json!({
-        "alg": "ES256",
-        "typ": "JWT"
-    });
-
-    let header_encoded = base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(
-        serde_json::to_string(&header)
-            .map_err(|e| OAuthError::InvalidRequest(format!("Failed to encode header: {}", e)))?,
-    );
-
-    let payload_encoded = base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(
-        serde_json::to_string(claims)
-            .map_err(|e| OAuthError::InvalidRequest(format!("Failed to encode claims: {}", e)))?,
-    );
-
-    // TODO: Implement proper ES256 signature using the signing key
-    let signature = "PLACEHOLDER_SIGNATURE";
-
-    Ok(format!(
-        "{}.{}.{}",
-        header_encoded, payload_encoded, signature
-    ))
-}
-
 /// Calculate access token hash for at_hash claim (ES256)
 pub fn calculate_at_hash(access_token: &str) -> String {
     calculate_hash(access_token)

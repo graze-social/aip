@@ -16,7 +16,7 @@ pub async fn oauth_protected_resource_handler(State(state): State<AppState>) -> 
         "resource": state.config.external_base,
         "authorization_servers": [state.config.external_base],
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
-        "scopes_supported": ["read", "write", "atproto", "profile", "email"],
+        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
         "bearer_methods_supported": ["header", "body"],
         "dpop_signing_alg_values_supported": ["ES256"]
     });
@@ -35,7 +35,7 @@ pub async fn oauth_authorization_server_handler(State(state): State<AppState>) -
         "token_endpoint": format!("{}/oauth/token", state.config.external_base),
         "registration_endpoint": format!("{}/oauth/clients/register", state.config.external_base),
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
-        "scopes_supported": ["read", "write", "atproto", "profile", "email"],
+        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
         "response_types_supported": ["code"],
         "response_modes_supported": ["query"],
         "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token"],
@@ -74,7 +74,7 @@ pub async fn openid_configuration_handler(State(state): State<AppState>) -> Json
         "token_endpoint": format!("{}/oauth/token", state.config.external_base),
         "userinfo_endpoint": format!("{}/oauth/userinfo", state.config.external_base),
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
-        "response_types_supported": ["code", "id_token"],
+        "response_types_supported": ["code"],
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["ES256"],
         "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
@@ -134,7 +134,7 @@ mod tests {
         let dns_resolver = atproto_identity::resolve::create_resolver(&dns_nameservers);
         let identity_resolver = atproto_identity::resolve::IdentityResolver(Arc::new(
             atproto_identity::resolve::InnerIdentityResolver {
-                http_client,
+                http_client: http_client.clone(),
                 dns_resolver,
                 plc_hostname: "plc.directory".to_string(),
             },
@@ -193,6 +193,7 @@ mod tests {
         ));
 
         AppState {
+            http_client: http_client.clone(),
             config: config.clone(),
             template_env,
             identity_resolver,

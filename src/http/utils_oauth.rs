@@ -38,7 +38,7 @@ mod tests {
         let dns_resolver = create_resolver(&dns_nameservers);
         let identity_resolver = atproto_identity::resolve::IdentityResolver(Arc::new(
             atproto_identity::resolve::InnerIdentityResolver {
-                http_client,
+                http_client: http_client.clone(),
                 dns_resolver,
                 plc_hostname: "plc.directory".to_string(),
             },
@@ -94,6 +94,7 @@ mod tests {
         ));
 
         AppState {
+            http_client: http_client.clone(),
             config: config.clone(),
             template_env,
             identity_resolver,

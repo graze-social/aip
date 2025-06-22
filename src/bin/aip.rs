@@ -5,6 +5,7 @@
 
 use aip::{
     config::Config,
+    errors::StorageError,
     http::{AppEngine, AppState, build_router},
     oauth::{
         DPoPNonceGenerator, UnifiedAtpOAuthSessionStorageAdapter,
@@ -151,7 +152,9 @@ async fn main() -> Result<()> {
         StorageBackend::Memory => {
             let oauth_storage = create_storage_backend(storage_backend.clone())
                 .await
-                .map_err(|e| anyhow::anyhow!("Storage backend creation failed: {}", e))?;
+                .map_err(|e| {
+                    StorageError::DatabaseError(format!("Storage backend creation failed: {}", e))
+                })?;
             let oauth_request_storage =
                 Arc::new(LruOAuthRequestStorage::new(NonZeroUsize::new(256).unwrap()));
             let document_storage =
@@ -178,7 +181,9 @@ async fn main() -> Result<()> {
             // Create PostgreSQL connection pool
             let pool = sqlx::postgres::PgPool::connect(database_url)
                 .await
-                .map_err(|e| anyhow::anyhow!("PostgreSQL connection failed: {}", e))?;
+                .map_err(|e| {
+                    StorageError::ConnectionFailed(format!("PostgreSQL connection failed: {}", e))
+                })?;
 
             // Create PostgreSQL storage implementations
             let postgres_oauth_storage =
@@ -188,7 +193,7 @@ async fn main() -> Result<()> {
             postgres_oauth_storage
                 .migrate()
                 .await
-                .map_err(|e| anyhow::anyhow!("Migration failed: {}", e))?;
+                .map_err(|e| StorageError::DatabaseError(format!("Migration failed: {}", e)))?;
 
             let oauth_request_storage = Arc::new(PostgresOAuthRequestStorage::new(pool.clone()));
             let document_storage = Arc::new(PostgresDidDocumentStorage::new(pool));
@@ -215,7 +220,9 @@ async fn main() -> Result<()> {
         StorageBackend::Sqlite(_) => {
             let oauth_storage = create_storage_backend(storage_backend.clone())
                 .await
-                .map_err(|e| anyhow::anyhow!("Storage backend creation failed: {}", e))?;
+                .map_err(|e| {
+                    StorageError::DatabaseError(format!("Storage backend creation failed: {}", e))
+                })?;
             let oauth_request_storage =
                 Arc::new(LruOAuthRequestStorage::new(NonZeroUsize::new(256).unwrap()));
             let document_storage =
@@ -251,6 +258,7 @@ async fn main() -> Result<()> {
 
     // Create application context
     let app_context = AppState {
+        http_client: http_client.clone(),
         config: Arc::new(config.clone()),
         template_env,
         identity_resolver,

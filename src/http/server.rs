@@ -1,4 +1,4 @@
-//! Axum router configuration and endpoint registration.
+//! Main router configuration assembling all OAuth and ATProtocol endpoints.
 
 use axum::{
     Router, middleware,
@@ -44,6 +44,7 @@ pub fn build_router(ctx: AppState) -> Router {
         .route("/authorize", get(handle_oauth_authorize))
         .route("/token", post(handle_oauth_token))
         .route("/userinfo", get(get_userinfo_handler))
+        .route("/userinfo", post(get_userinfo_handler))
         .route("/par", post(pushed_authorization_request_handler))
         .route("/atp/callback", get(handle_atpoauth_callback))
         .route("/atp/client-metadata", get(handle_atpoauth_client_metadata));
@@ -85,6 +86,9 @@ pub fn build_router(ctx: AppState) -> Router {
                 .parse::<axum::http::HeaderValue>()
                 .unwrap(),
             "http://localhost:3002"
+                .parse::<axum::http::HeaderValue>()
+                .unwrap(),
+            "https://psteniusubi.github.io"
                 .parse::<axum::http::HeaderValue>()
                 .unwrap(),
         ])
@@ -138,7 +142,7 @@ mod tests {
         let dns_resolver = create_resolver(&dns_nameservers);
         let identity_resolver = atproto_identity::resolve::IdentityResolver(Arc::new(
             atproto_identity::resolve::InnerIdentityResolver {
-                http_client,
+                http_client: http_client.clone(),
                 dns_resolver,
                 plc_hostname: "plc.directory".to_string(),
             },
@@ -191,6 +195,7 @@ mod tests {
             Arc::new(crate::oauth::atprotocol_bridge::MemoryAuthorizationRequestStorage::new());
 
         AppState {
+            http_client,
             config: config.clone(),
             template_env,
             identity_resolver,

@@ -1,7 +1,4 @@
-//! Storage layer with pluggable backend implementations.
-//!
-//! Provides trait-based storage abstractions for OAuth data with
-//! in-memory, SQLite, and PostgreSQL backends via feature flags.
+//! Trait-based storage abstractions with in-memory, SQLite, and PostgreSQL backends.
 
 pub mod inmemory;
 pub mod key_provider;

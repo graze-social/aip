@@ -11,8 +11,11 @@ use chrono::Utc;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
-use super::{context::AppState, utils_atprotocol_oauth::create_atp_backed_server};
-use crate::oauth::{auth_server::AuthorizeQuery, types::AuthorizationRequest};
+use super::context::AppState;
+use crate::oauth::{
+    auth_server::AuthorizeQuery, types::AuthorizationRequest,
+    utils_atprotocol_oauth::create_atp_backed_server,
+};
 
 /// Handle ATProtocol-backed OAuth authorization requests
 /// GET /oauth/authorize - Redirects to ATProtocol OAuth for authentication or shows login form

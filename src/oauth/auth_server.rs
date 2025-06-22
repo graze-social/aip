@@ -1,6 +1,4 @@
-//! OAuth 2.1 authorization server implementation.
-//!
-//! Provides core OAuth endpoints: authorization, token exchange, and introspection.
+//! Core OAuth 2.1 authorization server handling authorization, token, and PKCE flows.
 
 use crate::errors::OAuthError;
 use crate::oauth::{dpop::*, types::*};
@@ -243,8 +241,6 @@ impl AuthorizationServer {
                 .to_str()
                 .map_err(|e| OAuthError::InvalidRequest(format!("Invalid DPoP header: {}", e)))?;
 
-            tracing::info!(?dpop_str, "dpop header value");
-
             // Construct full URL for DPoP validation using external base
             let full_token_url = format!("{}/oauth/token", self.issuer.trim_end_matches('/'));
 
@@ -294,7 +290,7 @@ impl AuthorizationServer {
             access_token: access_token.clone(),
             client_id: client.client_id,
             user_id: auth_code.user_id,
-            session_id: auth_code.session_id,
+            session_id: auth_code.session_id.clone(),
             scope: auth_code.scope.clone(),
             created_at: now,
             expires_at: Some(now + self.refresh_token_lifetime),

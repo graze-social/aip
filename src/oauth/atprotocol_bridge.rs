@@ -1,7 +1,4 @@
-//! ATProtocol OAuth integration bridge.
-//!
-//! Bridges base OAuth 2.1 authorization with ATProtocol OAuth authentication,
-//! allowing ATProtocol users to authenticate for OAuth flows.
+//! Bridge for ATProtocol OAuth authentication within base OAuth 2.1 flows.
 
 use crate::errors::OAuthError;
 use crate::oauth::{
@@ -539,11 +536,12 @@ impl AtpBackedAuthorizationServer {
         // Also add transition scopes based on profile and email scopes
         let filtered_scope = if let Some(ref original_scope) = request.scope {
             let scopes: Vec<&str> = original_scope.split_whitespace().collect();
+            tracing::info!(?scopes, "original scopes");
             let mut atprotocol_scopes: Vec<String> = scopes
                 .iter()
                 .filter_map(|scope| {
-                    if scope.starts_with("atprotocol:") {
-                        Some(scope.strip_prefix("atprotocol:").unwrap().to_string())
+                    if scope.starts_with("atproto:") {
+                        Some(scope.strip_prefix("atproto:").unwrap().to_string())
                     } else {
                         None
                     }
@@ -575,6 +573,8 @@ impl AtpBackedAuthorizationServer {
             "atproto transition:generic".to_string()
         };
 
+        tracing::info!(?filtered_scope, "filtered_scope");
+
         let atpoauth_request_state = OAuthRequestState {
             state: atpoauth_state.clone(),
             nonce: atpoauth_nonce.clone(),
@@ -592,6 +592,9 @@ impl AtpBackedAuthorizationServer {
             &atpoauth_request_state,
         )
         .await
+        .inspect_err(|err| {
+            tracing::error!(?err, "oauth_init error");
+        })
         .map_err(|e| OAuthError::AuthorizationFailed(format!("OAuth init failed: {:?}", e)))?;
 
         // Store OAuth request for callback handling

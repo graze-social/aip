@@ -39,11 +39,11 @@ FROM gcr.io/distroless/cc-debian12
 
 # Add OCI labels
 LABEL org.opencontainers.image.title="aip"
-LABEL org.opencontainers.image.description="ATmosphere Authentication, Identity, and Permission Proxy"
+LABEL org.opencontainers.image.description="ATProtocol Identity Provider - OAuth 2.1 authorization server with ATProtocol integration"
 LABEL org.opencontainers.image.version="0.1.0"
-LABEL org.opencontainers.image.authors="Nick Gerakines <nick.gerakines@gmail.com>"
+LABEL org.opencontainers.image.authors="Graze Social"
 LABEL org.opencontainers.image.licenses="MIT"
-LABEL org.opencontainers.image.created="2025-01-06T00:00:00Z"
+# Build time will be set during image build
 
 # Set working directory
 WORKDIR /app
@@ -69,4 +69,4 @@ ENV HTTP_PORT=8080
 EXPOSE 8080
 
 # Run the application
-# CMD ["/app/aip"]
+CMD ["/app/aip"]
