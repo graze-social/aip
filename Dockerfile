@@ -28,7 +28,9 @@ COPY ${STATIC} ./static
 ENV HTTP_TEMPLATE_PATH=/app/templates/
 
 # Build the actual application with embed feature only
-RUN cargo build --release --no-default-features --features ${FEATURES}
+RUN cargo build --release --bin aip --no-default-features --features ${FEATURES}
+# Build the client management CLI
+RUN cargo build --release --bin aip-client-management --no-default-features --features ${FEATURES}
 # Add the sqlx cli for running migrations in containers
 RUN cargo install sqlx-cli --root /app/.cargo --no-default-features --features native-tls,postgres
 
@@ -48,6 +50,8 @@ WORKDIR /app
 
 # Copy the binary from builder stage
 COPY --from=builder /app/target/release/aip /app/aip
+# Copy the client management binary from builder stage
+COPY --from=builder /app/target/release/aip-client-management /app/bin/aip-client-management
 
 # Copy static directory
 COPY --from=builder /app/static ./static
@@ -65,4 +69,4 @@ ENV HTTP_PORT=8080
 EXPOSE 8080
 
 # Run the application
-ENTRYPOINT ["/app/aip"]
+# CMD ["/app/aip"]
