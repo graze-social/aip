@@ -153,17 +153,22 @@ fn validate_and_convert_par_request(
     client: &OAuthClient,
     config: &crate::config::Config,
 ) -> Result<AuthorizationRequest, OAuthError> {
-    // Validate response type
-    let response_type = match request.response_type.as_str() {
-        "code" => ResponseType::Code,
-        _ => {
-            return Err(OAuthError::UnsupportedResponseType(
-                request.response_type.clone(),
-            ));
+    // Validate response type - parse space-separated response types
+    let response_types = match crate::oauth::types::parse_response_type(&request.response_type) {
+        Ok(types) => types,
+        Err(e) => {
+            return Err(OAuthError::UnsupportedResponseType(format!(
+                "Invalid response type: {}",
+                e
+            )));
         }
     };
 
-    if !client.response_types.contains(&response_type) {
+    // Check if any requested response type is supported by client
+    let has_supported_response_type = response_types
+        .iter()
+        .any(|rt| client.response_types.contains(rt));
+    if !has_supported_response_type {
         return Err(OAuthError::UnsupportedResponseType(
             "Response type not allowed for this client".to_string(),
         ));
@@ -219,7 +224,7 @@ fn validate_and_convert_par_request(
     }
 
     Ok(AuthorizationRequest {
-        response_type,
+        response_type: response_types,
         client_id: request.client_id.clone(),
         redirect_uri: request.redirect_uri.clone(),
         scope: request.scope.clone(),
@@ -370,7 +375,7 @@ mod tests {
         let auth_request =
             validate_and_convert_par_request(&par_request, &client, &test_config).unwrap();
 
-        assert_eq!(auth_request.response_type, ResponseType::Code);
+        assert_eq!(auth_request.response_type, vec![ResponseType::Code]);
         assert_eq!(auth_request.client_id, client.client_id);
         assert_eq!(auth_request.scope, Some("read".to_string()));
         assert_eq!(auth_request.state, Some("test-state".to_string()));

@@ -74,8 +74,12 @@ impl AuthorizationServer {
             ));
         }
 
-        // Validate response type
-        if !client.response_types.contains(&request.response_type) {
+        // Validate response type - check if any requested response type is supported by client
+        let has_supported_response_type = request
+            .response_type
+            .iter()
+            .any(|rt| client.response_types.contains(rt));
+        if !has_supported_response_type {
             return Err(OAuthError::UnsupportedResponseType(format!(
                 "{:?}",
                 request.response_type
@@ -189,7 +193,7 @@ impl AuthorizationServer {
             .ok_or_else(|| OAuthError::InvalidRequest("Missing redirect URI".to_string()))?;
 
         // Consume authorization code
-        let auth_code = self
+        let auth_code: AuthorizationCode = self
             .storage
             .consume_code(code)
             .await
@@ -303,13 +307,13 @@ impl AuthorizationServer {
                 OAuthError::ServerError(format!("Failed to store refresh token: {:?}", e))
             })?;
 
-        Ok(TokenResponse {
+        Ok(TokenResponse::new(
             access_token,
             token_type,
-            expires_in: self.access_token_lifetime.num_seconds() as u64,
-            refresh_token: Some(refresh_token),
-            scope: auth_code.scope,
-        })
+            self.access_token_lifetime.num_seconds() as u64,
+            Some(refresh_token),
+            auth_code.scope,
+        ))
     }
 
     /// Handle client credentials grant
@@ -393,13 +397,13 @@ impl AuthorizationServer {
                 OAuthError::ServerError(format!("Failed to store access token: {:?}", e))
             })?;
 
-        Ok(TokenResponse {
+        Ok(TokenResponse::new(
             access_token,
-            token_type: TokenType::Bearer,
-            expires_in: self.access_token_lifetime.num_seconds() as u64,
-            refresh_token: None, // No refresh token for client credentials
-            scope: granted_scope,
-        })
+            TokenType::Bearer,
+            self.access_token_lifetime.num_seconds() as u64,
+            None, // No refresh token for client credentials
+            granted_scope,
+        ))
     }
 
     /// Handle refresh token grant
@@ -478,13 +482,13 @@ impl AuthorizationServer {
                 OAuthError::ServerError(format!("Failed to store refresh token: {:?}", e))
             })?;
 
-        Ok(TokenResponse {
-            access_token: new_access_token,
-            token_type: TokenType::Bearer,
-            expires_in: self.access_token_lifetime.num_seconds() as u64,
-            refresh_token: Some(new_refresh_token),
-            scope: refresh_token_record.scope,
-        })
+        Ok(TokenResponse::new(
+            new_access_token,
+            TokenType::Bearer,
+            self.access_token_lifetime.num_seconds() as u64,
+            Some(new_refresh_token),
+            refresh_token_record.scope,
+        ))
     }
 
     /// Authenticate a client
@@ -588,7 +592,7 @@ pub struct AuthorizeQuery {
 impl From<AuthorizeQuery> for AuthorizationRequest {
     fn from(query: AuthorizeQuery) -> Self {
         Self {
-            response_type: ResponseType::Code, // Always code, regardless of input
+            response_type: vec![ResponseType::Code], // Always code, regardless of input
             client_id: query.client_id,
             redirect_uri: query.redirect_uri.unwrap_or_default(), // Default to empty for PAR
             scope: query.scope,
@@ -774,7 +778,7 @@ mod tests {
 
         // Step 1: Authorization request
         let auth_request = AuthorizationRequest {
-            response_type: ResponseType::Code,
+            response_type: vec![ResponseType::Code],
             client_id: "test-client".to_string(),
             redirect_uri: "https://example.com/callback".to_string(),
             scope: Some("read".to_string()),

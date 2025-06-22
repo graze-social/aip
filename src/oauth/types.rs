@@ -22,6 +22,8 @@ pub enum GrantType {
 #[serde(rename_all = "snake_case")]
 pub enum ResponseType {
     Code,
+    #[serde(rename = "id_token")]
+    IdToken,
 }
 
 /// OAuth 2.1 Token Types
@@ -83,8 +85,8 @@ pub enum ClientType {
 /// OAuth Authorization Request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthorizationRequest {
-    /// Response type
-    pub response_type: ResponseType,
+    /// Response type (can contain multiple space-separated values)
+    pub response_type: Vec<ResponseType>,
     /// Client ID
     pub client_id: String,
     /// Redirect URI
@@ -179,7 +181,7 @@ pub struct RefreshToken {
 }
 
 /// Token Exchange Request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct TokenRequest {
     /// Grant type
     pub grant_type: GrantType,
@@ -212,6 +214,35 @@ pub struct TokenResponse {
     pub refresh_token: Option<String>,
     /// Granted scope
     pub scope: Option<String>,
+    /// OpenID Connect ID token (when openid scope is requested)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_token: Option<String>,
+}
+
+impl TokenResponse {
+    /// Create a new token response without id_token
+    pub fn new(
+        access_token: String,
+        token_type: TokenType,
+        expires_in: u64,
+        refresh_token: Option<String>,
+        scope: Option<String>,
+    ) -> Self {
+        Self {
+            access_token,
+            token_type,
+            expires_in,
+            refresh_token,
+            scope,
+            id_token: None,
+        }
+    }
+
+    /// Add an ID token to the response
+    pub fn with_id_token(mut self, id_token: String) -> Self {
+        self.id_token = Some(id_token);
+        self
+    }
 }
 
 /// OAuth Error Response
@@ -332,4 +363,38 @@ pub fn join_scopes(scopes: &HashSet<String>) -> String {
     let mut scopes: Vec<_> = scopes.iter().collect();
     scopes.sort();
     scopes.into_iter().cloned().collect::<Vec<_>>().join(" ")
+}
+
+/// Check if OpenID scope is requested
+pub fn has_openid_scope(scope: &Option<String>) -> bool {
+    match scope {
+        Some(scope_str) => parse_scope(scope_str).contains("openid"),
+        None => false,
+    }
+}
+
+/// Check if response type requires ID token
+pub fn requires_id_token(response_types: &[ResponseType]) -> bool {
+    response_types
+        .iter()
+        .any(|rt| matches!(rt, ResponseType::IdToken))
+}
+
+/// Parse response type string into a vector of ResponseType
+pub fn parse_response_type(response_type_str: &str) -> Result<Vec<ResponseType>, String> {
+    let mut response_types = Vec::new();
+
+    for part in response_type_str.split_whitespace() {
+        match part {
+            "code" => response_types.push(ResponseType::Code),
+            "id_token" => response_types.push(ResponseType::IdToken),
+            _ => return Err(format!("Invalid response type: {}", part)),
+        }
+    }
+
+    if response_types.is_empty() {
+        return Err("Empty response type".to_string());
+    }
+
+    Ok(response_types)
 }

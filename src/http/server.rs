@@ -20,8 +20,10 @@ use super::{
         app_update_client_handler,
     },
     handler_par::pushed_authorization_request_handler,
+    handler_userinfo::get_userinfo_handler,
     handler_well_known::{
         jwks_handler, oauth_authorization_server_handler, oauth_protected_resource_handler,
+        openid_configuration_handler,
     },
 };
 use crate::http::middleware_auth::set_dpop_headers;
@@ -41,6 +43,7 @@ pub fn build_router(ctx: AppState) -> Router {
     let mut oauth_routes = Router::new()
         .route("/authorize", get(handle_oauth_authorize))
         .route("/token", post(handle_oauth_token))
+        .route("/userinfo", get(get_userinfo_handler))
         .route("/par", post(pushed_authorization_request_handler))
         .route("/atp/callback", get(handle_atpoauth_callback))
         .route("/atp/client-metadata", get(handle_atpoauth_client_metadata));
@@ -72,6 +75,7 @@ pub fn build_router(ctx: AppState) -> Router {
             "/oauth-authorization-server",
             get(oauth_authorization_server_handler),
         )
+        .route("/openid-configuration", get(openid_configuration_handler))
         .route("/jwks.json", get(jwks_handler));
 
     // Configure CORS to allow React frontend access

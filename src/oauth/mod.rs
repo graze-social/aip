@@ -8,6 +8,7 @@ pub mod auth_server;
 pub mod clients;
 pub mod dpop;
 pub mod dpop_nonce;
+pub mod openid;
 pub mod resource_server;
 pub mod types;
 
@@ -29,6 +30,7 @@ pub use auth_server::{AuthorizationServer, AuthorizeQuery, AuthorizeResponse, To
 pub use clients::ClientRegistrationService;
 pub use dpop::{DPoPClaims, DPoPProof, DPoPValidator};
 pub use dpop_nonce::{DPoPNonceGenerator, DPoPNonceProvider};
+pub use openid::OpenIDClaims;
 pub use resource_server::{ResourceServer, TokenValidationResult};
 pub use types::{
     AccessToken, AuthorizationCode, AuthorizationRequest, ClientAuthMethod,

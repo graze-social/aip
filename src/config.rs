@@ -78,7 +78,7 @@ impl Config {
         let oauth_signing_keys: PrivateKeys = optional_env("OAUTH_SIGNING_KEYS").try_into()?;
         let oauth_supported_scopes: OAuthSupportedScopes = default_env(
             "OAUTH_SUPPORTED_SCOPES",
-            "atproto:atproto atproto:transition:generic atproto:transition:email",
+            "openid atproto:atproto atproto:transition:generic atproto:transition:email",
         )
         .try_into()?;
         let plc_hostname = default_env("PLC_HOSTNAME", "plc.directory");

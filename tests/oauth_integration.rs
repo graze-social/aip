@@ -45,7 +45,7 @@ async fn test_complete_authorization_code_flow() {
 
     // Step 2: Authorization Request
     let auth_request = AuthorizationRequest {
-        response_type: ResponseType::Code,
+        response_type: vec![ResponseType::Code],
         client_id: client_id.clone(),
         redirect_uri: "https://app.example.com/callback".to_string(),
         scope: Some("read profile".to_string()),

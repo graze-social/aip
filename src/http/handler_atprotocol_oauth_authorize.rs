@@ -158,7 +158,7 @@ async fn process_authorization_query(
     }
 
     let request = AuthorizationRequest {
-        response_type: crate::oauth::types::ResponseType::Code,
+        response_type: vec![crate::oauth::types::ResponseType::Code],
         client_id: query.client_id.clone(),
         redirect_uri,
         scope: query.scope.clone(),
@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(request.redirect_uri, "https://example.com/callback");
         assert_eq!(
             request.response_type,
-            crate::oauth::types::ResponseType::Code
+            vec![crate::oauth::types::ResponseType::Code]
         );
     }
 
@@ -371,7 +371,7 @@ mod tests {
         assert_eq!(request.redirect_uri, "https://minimal.example.com/callback");
         assert_eq!(
             request.response_type,
-            crate::oauth::types::ResponseType::Code
+            vec![crate::oauth::types::ResponseType::Code]
         );
         assert!(request.scope.is_none());
         assert!(request.state.is_none());

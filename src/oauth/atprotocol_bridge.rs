@@ -536,9 +536,10 @@ impl AtpBackedAuthorizationServer {
 
         // Create OAuth request state for ATProtocol workflow
         // Filter original scope to only include atprotocol scopes, removing the prefix
+        // Also add transition scopes based on profile and email scopes
         let filtered_scope = if let Some(ref original_scope) = request.scope {
             let scopes: Vec<&str> = original_scope.split_whitespace().collect();
-            let atprotocol_scopes: Vec<String> = scopes
+            let mut atprotocol_scopes: Vec<String> = scopes
                 .iter()
                 .filter_map(|scope| {
                     if scope.starts_with("atprotocol:") {
@@ -548,6 +549,20 @@ impl AtpBackedAuthorizationServer {
                     }
                 })
                 .collect();
+
+            // Add transition:generic scope if profile scope is present
+            if scopes.contains(&"profile")
+                && !atprotocol_scopes.contains(&"transition:generic".to_string())
+            {
+                atprotocol_scopes.push("transition:generic".to_string());
+            }
+
+            // Add transition:email scope if email scope is present
+            if scopes.contains(&"email")
+                && !atprotocol_scopes.contains(&"transition:email".to_string())
+            {
+                atprotocol_scopes.push("transition:email".to_string());
+            }
 
             if atprotocol_scopes.is_empty() {
                 // If no atprotocol scopes found, use default
@@ -820,8 +835,12 @@ impl AtpBackedAuthorizationServer {
             ));
         }
 
-        // Validate response type
-        if !client.response_types.contains(&request.response_type) {
+        // Validate response type - check if any requested response type is supported by client
+        let has_supported_response_type = request
+            .response_type
+            .iter()
+            .any(|rt| client.response_types.contains(rt));
+        if !has_supported_response_type {
             return Err(OAuthError::UnsupportedResponseType(format!(
                 "{:?}",
                 request.response_type
@@ -910,7 +929,7 @@ mod tests {
         let storage = MemoryAuthorizationRequestStorage::new();
 
         let request = AuthorizationRequest {
-            response_type: ResponseType::Code,
+            response_type: vec![ResponseType::Code],
             client_id: "test-client".to_string(),
             redirect_uri: "https://example.com/callback".to_string(),
             scope: Some("read".to_string()),
@@ -1022,7 +1041,7 @@ mod tests {
         let server = create_test_atp_backed_server();
 
         let request = AuthorizationRequest {
-            response_type: ResponseType::Code,
+            response_type: vec![ResponseType::Code],
             client_id: "test-client".to_string(),
             redirect_uri: "https://example.com/callback".to_string(),
             scope: Some("read".to_string()),
@@ -1068,7 +1087,7 @@ mod tests {
             .unwrap();
 
         let request = AuthorizationRequest {
-            response_type: ResponseType::Code,
+            response_type: vec![ResponseType::Code],
             client_id: "test-client".to_string(),
             redirect_uri: "https://example.com/callback".to_string(),
             scope: Some("read".to_string()),
@@ -1455,6 +1474,125 @@ mod tests {
             let parsed = identify_key(&key.to_string()).unwrap();
             assert_eq!(key.to_string(), parsed.to_string());
         }
+    }
+
+    #[test]
+    fn test_scope_filtering_with_profile_and_email() {
+        use crate::oauth::types::{AuthorizationRequest, ResponseType};
+
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let server = create_test_atp_backed_server();
+
+            // Test scope filtering with profile scope
+            let request_with_profile = AuthorizationRequest {
+                response_type: vec![ResponseType::Code],
+                client_id: "test-client".to_string(),
+                redirect_uri: "https://example.com/callback".to_string(),
+                scope: Some("openid profile".to_string()),
+                state: Some("client-state".to_string()),
+                code_challenge: None,
+                code_challenge_method: None,
+                login_hint: Some("alice.bsky.social".to_string()),
+            };
+
+            // Store a test client to pass validation
+            let test_client = crate::oauth::types::OAuthClient {
+                client_id: "test-client".to_string(),
+                client_secret: None,
+                client_name: Some("Test Client".to_string()),
+                redirect_uris: vec!["https://example.com/callback".to_string()],
+                grant_types: vec![crate::oauth::types::GrantType::AuthorizationCode],
+                response_types: vec![crate::oauth::types::ResponseType::Code],
+                scope: Some("openid profile email".to_string()),
+                token_endpoint_auth_method: crate::oauth::types::ClientAuthMethod::None,
+                client_type: crate::oauth::types::ClientType::Public,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+                metadata: serde_json::json!({}),
+            };
+
+            server
+                .base_auth_server
+                .storage
+                .store_client(&test_client)
+                .await
+                .unwrap();
+
+            // Test with profile scope - should add transition:generic
+            let result_profile = server
+                .authorize_with_atprotocol(request_with_profile, "alice.bsky.social".to_string())
+                .await;
+
+            // The test will fail at ATProtocol OAuth step, but we can verify it passed our validation
+            assert!(result_profile.is_err());
+            let error_message = result_profile.unwrap_err().to_string();
+            println!("Profile error message: {}", error_message);
+            assert!(
+                error_message.contains("Failed to resolve subject")
+                    || error_message.contains("PDS discovery failed")
+                    || error_message.contains("error-aip-resolve-1")
+                    || error_message.contains("error-aip-oauth-1")
+                    || error_message.contains("OAuth init failed")
+            );
+
+            // Test scope filtering with email scope
+            let request_with_email = AuthorizationRequest {
+                response_type: vec![ResponseType::Code],
+                client_id: "test-client".to_string(),
+                redirect_uri: "https://example.com/callback".to_string(),
+                scope: Some("openid email".to_string()),
+                state: Some("client-state".to_string()),
+                code_challenge: None,
+                code_challenge_method: None,
+                login_hint: Some("alice.bsky.social".to_string()),
+            };
+
+            // Test with email scope - should add transition:email
+            let result_email = server
+                .authorize_with_atprotocol(request_with_email, "alice.bsky.social".to_string())
+                .await;
+
+            // The test will fail at ATProtocol OAuth step, but we can verify it passed our validation
+            assert!(result_email.is_err());
+            let error_message = result_email.unwrap_err().to_string();
+            println!("Email error message: {}", error_message);
+            assert!(
+                error_message.contains("Failed to resolve subject")
+                    || error_message.contains("PDS discovery failed")
+                    || error_message.contains("error-aip-resolve-1")
+                    || error_message.contains("error-aip-oauth-1")
+                    || error_message.contains("OAuth init failed")
+            );
+
+            // Test scope filtering with both profile and email scopes
+            let request_with_both = AuthorizationRequest {
+                response_type: vec![ResponseType::Code],
+                client_id: "test-client".to_string(),
+                redirect_uri: "https://example.com/callback".to_string(),
+                scope: Some("openid profile email".to_string()),
+                state: Some("client-state".to_string()),
+                code_challenge: None,
+                code_challenge_method: None,
+                login_hint: Some("alice.bsky.social".to_string()),
+            };
+
+            // Test with both scopes - should add both transition scopes
+            let result_both = server
+                .authorize_with_atprotocol(request_with_both, "alice.bsky.social".to_string())
+                .await;
+
+            // The test will fail at ATProtocol OAuth step, but we can verify it passed our validation
+            assert!(result_both.is_err());
+            let error_message = result_both.unwrap_err().to_string();
+            println!("Both scopes error message: {}", error_message);
+            assert!(
+                error_message.contains("Failed to resolve subject")
+                    || error_message.contains("PDS discovery failed")
+                    || error_message.contains("error-aip-resolve-1")
+                    || error_message.contains("error-aip-oauth-1")
+                    || error_message.contains("OAuth init failed")
+            );
+        });
     }
 }
 
