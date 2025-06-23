@@ -257,6 +257,7 @@ async fn test_token_expiry_and_cleanup() {
         created_at: Utc::now() - Duration::hours(2),
         expires_at: Utc::now() - Duration::hours(1), // Expired 1 hour ago
         dpop_jkt: None,
+        nonce: None,
     };
 
     storage.store_token(&expired_token).await.unwrap();
@@ -299,6 +300,7 @@ async fn test_scope_validation() {
         created_at: Utc::now(),
         expires_at: Utc::now() + Duration::hours(1),
         dpop_jkt: None,
+        nonce: None,
     };
 
     storage.store_token(&token).await.unwrap();

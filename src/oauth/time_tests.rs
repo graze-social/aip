@@ -71,6 +71,7 @@ mod tests {
             created_at: now,
             expires_at: now + Duration::hours(1),
             dpop_jkt: None,
+            nonce: None,
         };
 
         assert_eq!(access_token.created_at.timezone(), Utc);
@@ -86,6 +87,7 @@ mod tests {
             scope: Some("read write".to_string()),
             created_at: now,
             expires_at: Some(now + Duration::days(30)),
+            nonce: None,
         };
 
         assert_eq!(refresh_token.created_at.timezone(), Utc);
@@ -134,6 +136,7 @@ mod tests {
             created_at: now - Duration::hours(2),
             expires_at: now - Duration::hours(1), // Expired 1 hour ago
             dpop_jkt: None,
+            nonce: None,
         };
 
         // Create a valid token (expires in 1 hour)
@@ -148,6 +151,7 @@ mod tests {
             created_at: now,
             expires_at: now + Duration::hours(1),
             dpop_jkt: None,
+            nonce: None,
         };
 
         // Store both tokens

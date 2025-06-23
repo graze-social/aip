@@ -1,7 +1,7 @@
 //! Handles POST /oauth/token - Exchanges authorization codes for JWT access tokens with ATProtocol identity
 
 use anyhow::Result;
-use atproto_oauth::jwt::{Claims, Header, mint};
+use atproto_oauth::jwt::{Header, mint};
 use axum::{
     Form, Json,
     extract::State,
@@ -9,7 +9,6 @@ use axum::{
 };
 use chrono::Utc;
 use serde_json::{Value, json};
-use ulid::Ulid;
 
 use super::{context::AppState, utils_oauth::create_base_auth_server};
 use crate::oauth::{

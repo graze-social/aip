@@ -18,7 +18,7 @@ AIP (ATProtocol Identity Provider) is a high-performance OAuth 2.1 authorization
 
 ### Prerequisites
 
-- Rust 1.70+
+- Rust 1.87+
 - Optional: PostgreSQL or SQLite for persistent storage
 
 ### Installation
@@ -208,7 +208,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Security
 
-For security issues, please email security@your-domain.com instead of opening a public issue.
+For security issues, please create a private security advisory instead of opening a public issue.
 
 ## Related Projects
 
@@ -223,19 +223,21 @@ This crate produces two binaries:
 
 ### aip
 The main OAuth 2.1 authorization server with ATProtocol integration. This server provides:
-- OAuth 2.1 authorization endpoints
-- ATProtocol OAuth authentication flows
-- Dynamic client registration
-- Token management and validation
-- Support for multiple storage backends
+- **OAuth 2.1 Authorization Server** - Complete implementation with authorization, token, and PAR endpoints
+- **ATProtocol OAuth Integration** - Native support for ATProtocol identity resolution and OAuth flows
+- **Dynamic Client Registration** - RFC 7591 compliant client registration and management
+- **Token Management** - JWT-based access tokens with DPoP support (RFC 9449)
+- **Multiple Storage Backends** - In-memory, SQLite, and PostgreSQL support
+- **Production Ready** - Docker support, graceful shutdown, comprehensive logging, and template management
 
 ### aip-client-management
-A CLI tool for managing OAuth 2.1 clients. Features include:
-- Dynamic client registration
-- Client information retrieval
-- Client configuration updates
-- Client deletion
-- Support for all OAuth 2.1 client parameters
+A comprehensive CLI tool for managing OAuth 2.1 clients programmatically. Features include:
+- **Dynamic Client Registration** - Register new OAuth 2.1 clients with full metadata support
+- **Client Information Retrieval** - Get detailed client configuration and status
+- **Client Configuration Updates** - Modify client settings including redirect URIs and scopes
+- **Client Lifecycle Management** - Delete and manage client registrations
+- **OAuth 2.1 Compliance** - Support for all standard OAuth 2.1 client parameters and metadata
+- **Flexible Output** - JSON and human-readable output formats
 
 For detailed usage of the client management tool, run:
 ```bash

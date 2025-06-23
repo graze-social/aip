@@ -51,17 +51,17 @@ WORKDIR /app
 # Copy the binary from builder stage
 COPY --from=builder /app/target/release/aip /app/aip
 # Copy the client management binary from builder stage
-COPY --from=builder /app/target/release/aip-client-management /app/bin/aip-client-management
+COPY --from=builder /app/target/release/aip-client-management /app/aip-client-management
 
 # Copy static directory
 COPY --from=builder /app/static ./static
 # Copy migrations directory
 COPY --from=builder /app/migrations ./migrations
-# Copy sqlx binary
-COPY --from=builder /app/.cargo/bin/sqlx /app/bin/sqlx
+# Copy sqlx binary for running migrations
+COPY --from=builder /app/.cargo/bin/sqlx /app/sqlx
 
 
-# Set environment variables
+# Set default environment variables
 ENV HTTP_STATIC_PATH=/app/static
 ENV HTTP_PORT=8080
 

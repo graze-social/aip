@@ -58,9 +58,9 @@ impl PostgresAuthorizationCodeStore {
             code_challenge_method: row.try_get("code_challenge_method").map_err(|e| {
                 StorageError::DatabaseError(format!("Failed to get code_challenge_method: {}", e))
             })?,
-            nonce: row.try_get("nonce").map_err(|e| {
-                StorageError::DatabaseError(format!("Failed to get nonce: {}", e))
-            })?,
+            nonce: row
+                .try_get("nonce")
+                .map_err(|e| StorageError::DatabaseError(format!("Failed to get nonce: {}", e)))?,
             created_at,
             expires_at,
             used,

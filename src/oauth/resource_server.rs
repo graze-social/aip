@@ -452,6 +452,7 @@ mod tests {
             created_at: now,
             expires_at: now + Duration::hours(1),
             dpop_jkt: None,
+            nonce: None,
         };
 
         storage.store_token(&access_token).await.unwrap();
@@ -495,6 +496,7 @@ mod tests {
             created_at: now,
             expires_at: now + Duration::hours(1),
             dpop_jkt: None,
+            nonce: None,
         };
 
         storage.store_token(&access_token).await.unwrap();
@@ -535,6 +537,7 @@ mod tests {
             created_at: now - Duration::hours(2),
             expires_at: now - Duration::hours(1), // Expired
             dpop_jkt: None,
+            nonce: None,
         };
 
         storage.store_token(&access_token).await.unwrap();

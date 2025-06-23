@@ -1,6 +1,5 @@
 //! Handles GET /oauth/userinfo - OpenID Connect UserInfo endpoint
 
-use atproto_oauth::jwt::{mint, Header};
 use axum::{extract::State, http::StatusCode, response::Json};
 use serde_json::{Value, json};
 
@@ -257,6 +256,7 @@ mod tests {
             session_id: Some("test-session".to_string()),
             session_iteration: Some(1),
             scope: Some("read write".to_string()), // No ATProtocol scopes
+            nonce: None,
             created_at: Utc::now(),
             expires_at: Utc::now() + chrono::Duration::hours(1),
             dpop_jkt: None,
@@ -291,6 +291,7 @@ mod tests {
             session_id: Some("test-session".to_string()),
             session_iteration: Some(1),
             scope: Some("openid".to_string()),
+            nonce: None,
             created_at: Utc::now(),
             expires_at: Utc::now() + chrono::Duration::hours(1),
             dpop_jkt: None,
@@ -324,6 +325,7 @@ mod tests {
             session_id: Some("test-session".to_string()),
             session_iteration: Some(1),
             scope: Some("openid".to_string()),
+            nonce: None,
             created_at: Utc::now(),
             expires_at: Utc::now() + chrono::Duration::hours(1),
             dpop_jkt: None,

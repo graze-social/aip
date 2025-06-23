@@ -77,9 +77,9 @@ impl PostgresAccessTokenStore {
             scope: row
                 .try_get("scope")
                 .map_err(|e| StorageError::DatabaseError(format!("Failed to get scope: {}", e)))?,
-            nonce: row.try_get("nonce").map_err(|e| {
-                StorageError::DatabaseError(format!("Failed to get nonce: {}", e))
-            })?,
+            nonce: row
+                .try_get("nonce")
+                .map_err(|e| StorageError::DatabaseError(format!("Failed to get nonce: {}", e)))?,
             created_at,
             expires_at,
             dpop_jkt: row.try_get("dpop_jkt").map_err(|e| {
