@@ -1,27 +1,17 @@
 //! Handles GET /api/atprotocol/session - Retrieves ATProtocol OAuth session information including access tokens and DPoP keys
 
 use atproto_oauth::jwk::WrappedJsonWebKey;
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    response::Json,
-};
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use axum::{extract::State, http::StatusCode, response::Json};
+use serde::Serialize;
 use serde_json::{Value, json};
 
-use super::{context::AppState, utils_atprotocol_oauth::create_atp_backed_server};
-use crate::http::middleware_auth::ExtractedAuth;
+use super::context::AppState;
+use crate::{
+    http::middleware_auth::ExtractedAuth,
+    oauth::utils_atprotocol_oauth::get_atprotocol_session_with_refresh,
+};
 use atproto_identity::key::identify_key;
 use atproto_oauth::jwk::generate as generate_jwk;
-
-/// Query parameters for the session endpoint
-#[derive(Debug, Deserialize)]
-pub struct SessionQuery {
-    /// Force refresh of the session even if not expired
-    #[serde(default)]
-    pub force_refresh: Option<String>,
-}
 
 /// ATProtocol session information response
 #[derive(Debug, Serialize)]
@@ -49,25 +39,11 @@ pub struct AtpSessionResponse {
 /// Get ATProtocol session information
 /// GET /api/atprotocol/session
 ///
-/// Retrieves ATProtocol OAuth session information using either:
-/// 1. Session ID from query parameters, or
-/// 2. Session ID extracted from JWT bearer token
+/// Retrieves ATProtocol OAuth session information using the session ID extracted from JWT bearer token.
 pub async fn get_atprotocol_session_handler(
     State(state): State<AppState>,
-    Query(query): Query<SessionQuery>,
     ExtractedAuth(access_token): ExtractedAuth,
 ) -> Result<Json<AtpSessionResponse>, (StatusCode, Json<Value>)> {
-    tracing::info!(?access_token, ?query, "get_atprotocol_session_handler");
-
-    // Create ATProtocol-backed authorization server
-    let atp_auth_server = create_atp_backed_server(&state).await.map_err(|e| {
-        let error_response = json!({
-            "error": "server_error",
-            "error_description": format!("Failed to create ATProtocol authorization server: {}", e)
-        });
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
-    })?;
-
     let session_id = match access_token.session_id {
         Some(value) => value,
         None => {
@@ -87,93 +63,64 @@ pub async fn get_atprotocol_session_handler(
         (StatusCode::UNAUTHORIZED, Json(error_response))
     })?;
 
-    let sessions = match atp_auth_server
-        .session_storage()
-        .get_sessions(did, &session_id)
-        .await
-    {
-        Ok(sessions) if !sessions.is_empty() => sessions,
-        Ok(_) => {
+    // Retrieve the DID document from DocumentStorage
+    let document = match state.document_storage.get_document_by_did(did).await {
+        Ok(Some(doc)) => doc,
+        Ok(None) => {
             let error_response = json!({
-                "error": "session_not_found",
-                "error_description": "Session not found or expired"
+                "error": "not_found",
+                "error_description": "DID document not found"
             });
             return Err((StatusCode::NOT_FOUND, Json(error_response)));
         }
         Err(e) => {
             let error_response = json!({
-                "error": "storage_error",
-                "error_description": format!("Failed to retrieve session: {}", e)
+                "error": "server_error",
+                "error_description": format!("Failed to retrieve DID document: {}", e)
             });
             return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
         }
     };
 
-    tracing::info!(?sessions, "sessions found");
-
-    // Use the most recent session (highest iteration)
-    let session = &sessions[0];
-
-    tracing::info!(?session, "session found");
-
-    // Check if session has an exchange error
-    if let Some(ref exchange_error) = session.exchange_error {
-        let error_response = json!({
-            "error": "session_error",
-            "error_description": exchange_error
-        });
-        return Err((StatusCode::BAD_REQUEST, Json(error_response)));
-    }
-
-    // Check if token needs refreshing (expired or force refresh requested)
-    let now = chrono::Utc::now();
-    let should_refresh = query.force_refresh.is_some_and(|v| &v == "force_refresh")
-        || session
-            .access_token_expires_at
-            .map(|expires_at| expires_at <= now)
-            .unwrap_or(false);
-
-    tracing::info!(?should_refresh, "should refresh");
-
-    let current_session = if should_refresh {
-        // Perform session refresh
-        match refresh_session(&state, session, &atp_auth_server).await {
-            Ok(new_session) => new_session,
-            Err(e) => {
-                let error_response = json!({
-                    "error": "refresh_failed",
-                    "error_description": format!("Failed to refresh session: {}", e)
-                });
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
-            }
-        }
-    } else {
-        session.clone()
-    };
-
-    let document = match state
-        .document_storage
-        .get_document_by_did(&current_session.did)
+    // Use the helper function for normal flow with automatic refresh
+    let current_session = get_atprotocol_session_with_refresh(&state, &document, &session_id)
         .await
-    {
-        Ok(Some(value)) => value,
-        Ok(None) => {
-            let error_response = json!({
-                "error": "session_incomplete",
-                "error_description": "Session found but ATProtocol identity not yet established"
-            });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
-        }
-        Err(e) => {
-            let error_response = json!({
-                "error": "session_incomplete",
-                "error_description": format!("Session found but ATProtocol identity not yet established: {e}")
-            });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
-        }
-    };
+        .map_err(|e| {
+            let error_msg = e.to_string();
+            let (status, error_type, error_desc) = if error_msg.contains("No sessions found") {
+                (
+                    StatusCode::NOT_FOUND,
+                    "session_not_found",
+                    "Session not found or expired",
+                )
+            } else if error_msg.contains("DID document not found") {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "session_incomplete",
+                    "Session found but ATProtocol identity not yet established",
+                )
+            } else if error_msg.contains("Session has exchange error") {
+                (StatusCode::BAD_REQUEST, "session_error", error_msg.as_str())
+            } else if error_msg.contains("refresh") {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "refresh_failed",
+                    error_msg.as_str(),
+                )
+            } else {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "server_error",
+                    error_msg.as_str(),
+                )
+            };
 
-    tracing::info!(?document, "document found");
+            let error_response = json!({
+                "error": error_type,
+                "error_description": error_desc
+            });
+            (status, Json(error_response))
+        })?;
 
     let (access_token, expires_at, scopes) = match (
         current_session.access_token.clone(),
@@ -226,126 +173,6 @@ pub async fn get_atprotocol_session_handler(
         expires_at,
     };
     Ok(Json(response))
-}
-
-/// Refresh an ATProtocol OAuth session using oauth_refresh workflow
-async fn refresh_session(
-    _state: &AppState,
-    session: &crate::oauth::atprotocol_bridge::AtpOAuthSession,
-    atp_auth_server: &crate::oauth::AtpBackedAuthorizationServer,
-) -> Result<
-    crate::oauth::atprotocol_bridge::AtpOAuthSession,
-    Box<dyn std::error::Error + Send + Sync>,
-> {
-    use atproto_identity::key::identify_key;
-    use atproto_oauth::workflow::oauth_refresh;
-
-    let now = Utc::now();
-    let new_iteration = session.iteration + 1;
-
-    // Parse the DPoP key from the session
-    let dpop_key =
-        identify_key(&session.dpop_key).map_err(|e| format!("Failed to parse DPoP key: {}", e))?;
-
-    // Create new session with incremented iteration
-    let mut new_session = crate::oauth::atprotocol_bridge::AtpOAuthSession {
-        session_id: session.session_id.clone(),
-        did: session.did.clone(),
-        session_created_at: session.session_created_at,
-        atp_oauth_state: session.atp_oauth_state.clone(),
-        signing_key_jkt: session.signing_key_jkt.clone(),
-        dpop_key: session.dpop_key.clone(),
-        access_token: None,
-        refresh_token: None,
-        access_token_created_at: None,
-        access_token_expires_at: None,
-        access_token_scopes: None,
-        session_exchanged_at: Some(now),
-        exchange_error: None,
-        iteration: new_iteration,
-    };
-
-    // Get the document for the DID
-    let document = match atp_auth_server
-        .document_storage()
-        .get_document_by_did(&session.did)
-        .await
-    {
-        Ok(Some(doc)) => doc,
-        Ok(None) => {
-            new_session.exchange_error = Some("DID document not found".to_string());
-            atp_auth_server
-                .session_storage()
-                .store_session(&new_session)
-                .await
-                .map_err(|e| format!("Failed to store session with error: {}", e))?;
-            return Err("DID document not found".into());
-        }
-        Err(e) => {
-            new_session.exchange_error = Some(format!("Failed to get DID document: {}", e));
-            atp_auth_server
-                .session_storage()
-                .store_session(&new_session)
-                .await
-                .map_err(|e| format!("Failed to store session with error: {}", e))?;
-            return Err(format!("Failed to get DID document: {}", e).into());
-        }
-    };
-
-    // Create OAuth client
-    let oauth_client = atp_auth_server.create_oauth_client();
-
-    // Attempt to refresh the session
-    match session.refresh_token.as_ref() {
-        Some(refresh_token) => {
-            match oauth_refresh(
-                atp_auth_server.http_client(),
-                &oauth_client,
-                &dpop_key,
-                refresh_token,
-                &document,
-            )
-            .await
-            {
-                Ok(token_response) => {
-                    // Update session with new tokens
-                    new_session.access_token = Some(token_response.access_token);
-                    new_session.refresh_token = Some(token_response.refresh_token);
-                    new_session.access_token_created_at = Some(now);
-                    new_session.access_token_expires_at =
-                        Some(now + chrono::Duration::seconds(token_response.expires_in as i64));
-                    new_session.access_token_scopes = Some(
-                        token_response
-                            .scope
-                            .split_whitespace()
-                            .map(|s| s.to_string())
-                            .collect(),
-                    );
-                }
-                Err(e) => {
-                    // Store the refresh error in the new session
-                    new_session.exchange_error = Some(format!("Refresh failed: {}", e));
-                }
-            }
-        }
-        None => {
-            new_session.exchange_error = Some("No refresh token available".to_string());
-        }
-    }
-
-    // Store the new session
-    atp_auth_server
-        .session_storage()
-        .store_session(&new_session)
-        .await
-        .map_err(|e| format!("Failed to store refreshed session: {}", e))?;
-
-    // Return error if refresh failed
-    if let Some(ref error) = new_session.exchange_error {
-        return Err(error.clone().into());
-    }
-
-    Ok(new_session)
 }
 
 #[cfg(test)]

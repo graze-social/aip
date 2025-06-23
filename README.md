@@ -2,7 +2,7 @@
 
 ![Image from 391 Vol 1– 19 by Francis Picabia, https://archive.org/details/391-vol-1-19/page/n98/mode/1up](./aip.png)
 
-A high-performance OAuth 2.1 authorization server with native ATProtocol integration, enabling secure authentication and token management for decentralized identity applications.
+AIP (ATProtocol Identity Provider) is a high-performance OAuth 2.1 authorization server with native ATProtocol integration. It provides secure authentication and token management for decentralized identity applications, enabling OAuth flows backed by ATProtocol identities.
 
 ## Features
 
@@ -18,18 +18,18 @@ A high-performance OAuth 2.1 authorization server with native ATProtocol integra
 
 ### Prerequisites
 
-- Rust 1.70+
+- Rust 1.87+
 - Optional: PostgreSQL or SQLite for persistent storage
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/aip-rs.git
-cd aip-rs
+git clone https://github.com/graze-social/aip.git
+cd aip
 
 # Build and run (development mode with auto-reloading templates)
-cargo run
+cargo run --bin aip
 
 # Or build for production with embedded templates
 cargo build --release --no-default-features --features embed,postgres
@@ -208,12 +208,41 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Security
 
-For security issues, please email security@your-domain.com instead of opening a public issue.
+For security issues, please create a private security advisory instead of opening a public issue.
 
 ## Related Projects
 
 - [ATProtocol](https://github.com/bluesky-social/atproto) - Authenticated Transfer Protocol
 - [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1) - OAuth 2.1 Security Best Current Practice
+
+---
+
+## Binaries
+
+This crate produces two binaries:
+
+### aip
+The main OAuth 2.1 authorization server with ATProtocol integration. This server provides:
+- **OAuth 2.1 Authorization Server** - Complete implementation with authorization, token, and PAR endpoints
+- **ATProtocol OAuth Integration** - Native support for ATProtocol identity resolution and OAuth flows
+- **Dynamic Client Registration** - RFC 7591 compliant client registration and management
+- **Token Management** - JWT-based access tokens with DPoP support (RFC 9449)
+- **Multiple Storage Backends** - In-memory, SQLite, and PostgreSQL support
+- **Production Ready** - Docker support, graceful shutdown, comprehensive logging, and template management
+
+### aip-client-management
+A comprehensive CLI tool for managing OAuth 2.1 clients programmatically. Features include:
+- **Dynamic Client Registration** - Register new OAuth 2.1 clients with full metadata support
+- **Client Information Retrieval** - Get detailed client configuration and status
+- **Client Configuration Updates** - Modify client settings including redirect URIs and scopes
+- **Client Lifecycle Management** - Delete and manage client registrations
+- **OAuth 2.1 Compliance** - Support for all standard OAuth 2.1 client parameters and metadata
+- **Flexible Output** - JSON and human-readable output formats
+
+For detailed usage of the client management tool, run:
+```bash
+aip-client-management --help
+```
 
 ---
 

@@ -9,7 +9,9 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{context::AppState, utils_atprotocol_oauth::create_atp_backed_server};
+use crate::oauth::utils_atprotocol_oauth::create_atp_backed_server;
+
+use super::context::AppState;
 
 /// Query parameters for ATProtocol OAuth callback
 #[derive(Debug, Deserialize)]

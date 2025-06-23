@@ -1,4 +1,4 @@
-//! HTTP server implementation with OAuth 2.1 and ATProtocol endpoints.
+//! Axum HTTP server handlers and middleware for OAuth 2.1 and ATProtocol endpoints.
 
 pub mod context;
 mod handler_atprotocol_client_metadata;
@@ -11,10 +11,10 @@ mod handler_index;
 mod handler_oauth;
 mod handler_oauth_clients;
 mod handler_par;
+mod handler_userinfo;
 mod handler_well_known;
 mod middleware_auth;
 pub mod server;
-mod utils_atprotocol_oauth;
 mod utils_oauth;
 
 pub use context::{AppEngine, AppState};

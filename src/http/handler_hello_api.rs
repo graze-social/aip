@@ -55,6 +55,7 @@ mod tests {
                 created_at: Utc::now(),
                 expires_at: Utc::now() + Duration::hours(1),
                 dpop_jkt: None,
+                nonce: None,
             },
         };
 
@@ -85,6 +86,7 @@ mod tests {
                 created_at: Utc::now(),
                 expires_at: Utc::now() + Duration::hours(1),
                 dpop_jkt: None,
+                nonce: None,
             },
         };
 

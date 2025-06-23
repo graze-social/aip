@@ -65,6 +65,9 @@ impl SqliteAuthorizationCodeStore {
             code_challenge_method: row.try_get("code_challenge_method").map_err(|e| {
                 StorageError::DatabaseError(format!("Failed to get code_challenge_method: {}", e))
             })?,
+            nonce: row
+                .try_get("nonce")
+                .map_err(|e| StorageError::DatabaseError(format!("Failed to get nonce: {}", e)))?,
             created_at,
             expires_at,
             used,
@@ -83,8 +86,8 @@ impl AuthorizationCodeStore for SqliteAuthorizationCodeStore {
             r#"
             INSERT INTO authorization_codes (
                 code, client_id, user_id, session_id, redirect_uri, scope,
-                code_challenge, code_challenge_method, created_at, expires_at, used
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                code_challenge, code_challenge_method, nonce, created_at, expires_at, used
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&code.code)
@@ -95,6 +98,7 @@ impl AuthorizationCodeStore for SqliteAuthorizationCodeStore {
         .bind(&code.scope)
         .bind(&code.code_challenge)
         .bind(&code.code_challenge_method)
+        .bind(&code.nonce)
         .bind(created_at_str)
         .bind(expires_at_str)
         .bind(used_int)

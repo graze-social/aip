@@ -39,11 +39,11 @@ FROM gcr.io/distroless/cc-debian12
 
 # Add OCI labels
 LABEL org.opencontainers.image.title="aip"
-LABEL org.opencontainers.image.description="ATmosphere Authentication, Identity, and Permission Proxy"
+LABEL org.opencontainers.image.description="ATProtocol Identity Provider - OAuth 2.1 authorization server with ATProtocol integration"
 LABEL org.opencontainers.image.version="0.1.0"
-LABEL org.opencontainers.image.authors="Nick Gerakines <nick.gerakines@gmail.com>"
+LABEL org.opencontainers.image.authors="Graze Social"
 LABEL org.opencontainers.image.licenses="MIT"
-LABEL org.opencontainers.image.created="2025-01-06T00:00:00Z"
+# Build time will be set during image build
 
 # Set working directory
 WORKDIR /app
@@ -51,17 +51,17 @@ WORKDIR /app
 # Copy the binary from builder stage
 COPY --from=builder /app/target/release/aip /app/aip
 # Copy the client management binary from builder stage
-COPY --from=builder /app/target/release/aip-client-management /app/bin/aip-client-management
+COPY --from=builder /app/target/release/aip-client-management /app/aip-client-management
 
 # Copy static directory
 COPY --from=builder /app/static ./static
 # Copy migrations directory
 COPY --from=builder /app/migrations ./migrations
-# Copy sqlx binary
-COPY --from=builder /app/.cargo/bin/sqlx /app/bin/sqlx
+# Copy sqlx binary for running migrations
+COPY --from=builder /app/.cargo/bin/sqlx /app/sqlx
 
 
-# Set environment variables
+# Set default environment variables
 ENV HTTP_STATIC_PATH=/app/static
 ENV HTTP_PORT=8080
 
@@ -69,4 +69,4 @@ ENV HTTP_PORT=8080
 EXPOSE 8080
 
 # Run the application
-# CMD ["/app/aip"]
+CMD ["/app/aip"]

@@ -1,6 +1,4 @@
-//! Error types for AIP application
-//!
-//! All errors follow the format: error-aip-<domain>-<number> <message>: <details>
+//! Standardized error types following the `error-aip-<domain>-<number>` format.
 
 use axum::response::{IntoResponse, Response};
 use http::StatusCode;
@@ -100,6 +98,14 @@ pub enum OAuthError {
     /// Temporarily unavailable
     #[error("error-aip-oauth-13 Temporarily unavailable: {0}")]
     TemporarilyUnavailable(String),
+}
+
+/// Identity resolution errors
+#[derive(Debug, Error)]
+pub enum ResolveError {
+    /// Multiple DIDs resolved for method
+    #[error("error-aip-resolve-1 Multiple DIDs resolved for method: {0}")]
+    MultipleDidsResolved(String),
 }
 
 /// DPoP-related errors

@@ -36,6 +36,7 @@ pub type AppEngine = Engine<minijinja::Environment<'static>>;
 
 #[derive(Clone)]
 pub struct AppState {
+    pub http_client: reqwest::Client,
     pub config: Arc<Config>,
     /// Template engine for rendering HTML responses.
     pub template_env: AppEngine,

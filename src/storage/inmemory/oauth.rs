@@ -590,6 +590,7 @@ mod tests {
             scope: Some("read".to_string()),
             code_challenge: None,
             code_challenge_method: None,
+            nonce: None,
             created_at: Utc::now(),
             expires_at: Utc::now() + Duration::minutes(10),
             used: false,
@@ -623,6 +624,7 @@ mod tests {
             created_at: Utc::now(),
             expires_at: Utc::now() - Duration::minutes(1), // Expired
             dpop_jkt: None,
+            nonce: None,
         };
 
         // Store expired token

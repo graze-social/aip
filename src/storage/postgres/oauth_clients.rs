@@ -44,6 +44,7 @@ impl PostgresOAuthClientStore {
     fn response_type_to_string(response_type: &ResponseType) -> &'static str {
         match response_type {
             ResponseType::Code => "code",
+            ResponseType::IdToken => "id_token",
         }
     }
 

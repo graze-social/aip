@@ -1,28 +1,35 @@
 //! Handles POST /oauth/token - Exchanges authorization codes for JWT access tokens with ATProtocol identity
 
+use anyhow::Result;
+use atproto_oauth::jwt::{Header, mint};
 use axum::{
     Form, Json,
     extract::State,
     http::{HeaderMap, StatusCode},
 };
+use chrono::Utc;
 use serde_json::{Value, json};
 
 use super::{context::AppState, utils_oauth::create_base_auth_server};
-use crate::errors::OAuthError;
 use crate::oauth::{
+    OpenIDClaims,
     auth_server::{TokenForm, extract_client_auth},
     types::TokenRequest,
 };
+use crate::{errors::OAuthError, oauth::TokenResponse};
 
 /// Handle ATProtocol-backed OAuth token requests
 /// POST /oauth/token - Exchanges authorization code for JWT with ATProtocol identity
+#[axum::debug_handler]
 pub async fn handle_oauth_token(
     State(state): State<AppState>,
     headers: HeaderMap,
     Form(form): Form<TokenForm>,
-) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> Result<Json<TokenResponse>, (StatusCode, Json<Value>)> {
     // Extract client authentication from Authorization header or form
     let client_auth = extract_client_auth(&headers, &form);
+
+    let now = Utc::now();
 
     let request = match TokenRequest::try_from(form) {
         Ok(req) => req,
@@ -44,17 +51,44 @@ pub async fn handle_oauth_token(
         (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
     })?;
 
-    match base_auth_server.token(request, &headers, client_auth).await {
-        Ok(response) => {
-            // Check if we can enhance the response with ATProtocol identity
-            // For now, return the base token response
-            Ok(Json(json!({
-                "access_token": response.access_token,
-                "token_type": response.token_type,
-                "expires_in": response.expires_in,
-                "refresh_token": response.refresh_token,
-                "scope": response.scope
-            })))
+    match base_auth_server
+        .token(request.clone(), &headers, client_auth)
+        .await
+    {
+        Ok(mut value) => {
+            if value.scope.clone().is_some_and(|v| v.contains("openid")) {
+                let access_token = state
+                    .oauth_storage
+                    .get_token(value.access_token.as_ref())
+                    .await
+                    .unwrap();
+                let access_token: crate::oauth::AccessToken = access_token.unwrap();
+
+                let did = access_token.user_id.unwrap();
+
+                let claims = OpenIDClaims::new_id_token(
+                    state.config.external_base.clone(),
+                    did.clone(),
+                    access_token.client_id.clone(),
+                    now,
+                )
+                .with_did(did.clone())
+                .with_c_hash(request.code.unwrap().as_str())
+                .with_at_hash(&access_token.token)
+                .with_nonce(access_token.nonce);
+
+                let vague_claims = serde_json::to_value(claims).unwrap();
+                let real_claims: atproto_oauth::jwt::Claims =
+                    serde_json::from_value(vague_claims).unwrap();
+
+                let private_signing_key_data = state.atproto_oauth_signing_keys.first().unwrap();
+                let header: Header = private_signing_key_data.clone().try_into().unwrap();
+                let id_token = mint(private_signing_key_data, &header, &real_claims).unwrap();
+
+                value = value.with_id_token(id_token);
+            }
+
+            Ok(Json(value))
         }
         Err(e) => {
             let (status, error_code) = match e {
@@ -100,7 +134,7 @@ mod tests {
         let dns_resolver = create_resolver(&dns_nameservers);
         let identity_resolver = atproto_identity::resolve::IdentityResolver(Arc::new(
             atproto_identity::resolve::InnerIdentityResolver {
-                http_client,
+                http_client: http_client.clone(),
                 dns_resolver,
                 plc_hostname: "plc.directory".to_string(),
             },
@@ -147,15 +181,18 @@ mod tests {
             enable_client_api: false,
         });
 
-        let atp_session_storage =
-            Arc::new(crate::oauth::atprotocol_bridge::MemoryAtpOAuthSessionStorage::new());
-        let authorization_request_storage =
-            Arc::new(crate::oauth::atprotocol_bridge::MemoryAuthorizationRequestStorage::new());
+        let atp_session_storage = Arc::new(
+            crate::oauth::UnifiedAtpOAuthSessionStorageAdapter::new(oauth_storage.clone()),
+        );
+        let authorization_request_storage = Arc::new(
+            crate::oauth::UnifiedAuthorizationRequestStorageAdapter::new(oauth_storage.clone()),
+        );
         let client_registration_service = Arc::new(crate::oauth::ClientRegistrationService::new(
             oauth_storage.clone(),
         ));
 
         AppState {
+            http_client: http_client.clone(),
             config: config.clone(),
             template_env,
             identity_resolver,

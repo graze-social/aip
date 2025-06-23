@@ -58,6 +58,9 @@ impl PostgresAuthorizationCodeStore {
             code_challenge_method: row.try_get("code_challenge_method").map_err(|e| {
                 StorageError::DatabaseError(format!("Failed to get code_challenge_method: {}", e))
             })?,
+            nonce: row
+                .try_get("nonce")
+                .map_err(|e| StorageError::DatabaseError(format!("Failed to get nonce: {}", e)))?,
             created_at,
             expires_at,
             used,
@@ -72,8 +75,8 @@ impl AuthorizationCodeStore for PostgresAuthorizationCodeStore {
             r#"
             INSERT INTO authorization_codes (
                 code, client_id, user_id, session_id, redirect_uri, scope, code_challenge, 
-                code_challenge_method, created_at, expires_at, used
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                code_challenge_method, nonce, created_at, expires_at, used
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             "#,
         )
         .bind(&code.code)
@@ -84,6 +87,7 @@ impl AuthorizationCodeStore for PostgresAuthorizationCodeStore {
         .bind(&code.scope)
         .bind(&code.code_challenge)
         .bind(&code.code_challenge_method)
+        .bind(&code.nonce)
         .bind(code.created_at)
         .bind(code.expires_at)
         .bind(code.used)

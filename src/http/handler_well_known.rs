@@ -16,7 +16,7 @@ pub async fn oauth_protected_resource_handler(State(state): State<AppState>) -> 
         "resource": state.config.external_base,
         "authorization_servers": [state.config.external_base],
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
-        "scopes_supported": ["read", "write", "atproto"],
+        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
         "bearer_methods_supported": ["header", "body"],
         "dpop_signing_alg_values_supported": ["ES256"]
     });
@@ -35,7 +35,7 @@ pub async fn oauth_authorization_server_handler(State(state): State<AppState>) -
         "token_endpoint": format!("{}/oauth/token", state.config.external_base),
         "registration_endpoint": format!("{}/oauth/clients/register", state.config.external_base),
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
-        "scopes_supported": ["read", "write", "atproto"],
+        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
         "response_types_supported": ["code"],
         "response_modes_supported": ["query"],
         "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token"],
@@ -63,6 +63,29 @@ pub async fn oauth_authorization_server_handler(State(state): State<AppState>) -
     Json(metadata)
 }
 
+/// OpenID Connect Configuration handler
+/// GET /.well-known/openid-configuration
+///
+/// Returns OpenID Provider metadata as specified by OpenID Connect Discovery 1.0 specification.
+pub async fn openid_configuration_handler(State(state): State<AppState>) -> Json<Value> {
+    let metadata = json!({
+        "issuer": state.config.external_base,
+        "authorization_endpoint": format!("{}/oauth/authorize", state.config.external_base),
+        "token_endpoint": format!("{}/oauth/token", state.config.external_base),
+        "userinfo_endpoint": format!("{}/oauth/userinfo", state.config.external_base),
+        "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
+        "response_types_supported": ["code"],
+        "subject_types_supported": ["public"],
+        "userinfo_signed_response_alg": ["ES256"],
+        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
+        "claims_supported": ["iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "at_hash", "c_hash", "email", "did", "name", "profile", "pds_endpoint"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "response_modes_supported": ["query", "fragment"]
+    });
+
+    Json(metadata)
+}
+
 /// JWKS (JSON Web Key Set) handler
 /// GET /.well-known/jwks.json
 ///
@@ -71,6 +94,13 @@ pub async fn jwks_handler(
     State(state): State<AppState>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let mut jwks_keys = Vec::new();
+    for key_data in state.config.oauth_signing_keys.as_ref() {
+        if let Ok(public_key_data) = to_public(key_data) {
+            if let Ok(jwk) = generate(&public_key_data) {
+                jwks_keys.push(jwk);
+            }
+        }
+    }
     for key_data in state.config.atproto_oauth_signing_keys.as_ref() {
         if let Ok(public_key_data) = to_public(key_data) {
             if let Ok(jwk) = generate(&public_key_data) {
@@ -104,7 +134,7 @@ mod tests {
         let dns_resolver = atproto_identity::resolve::create_resolver(&dns_nameservers);
         let identity_resolver = atproto_identity::resolve::IdentityResolver(Arc::new(
             atproto_identity::resolve::InnerIdentityResolver {
-                http_client,
+                http_client: http_client.clone(),
                 dns_resolver,
                 plc_hostname: "plc.directory".to_string(),
             },
@@ -154,15 +184,18 @@ mod tests {
             enable_client_api: false,
         });
 
-        let atp_session_storage =
-            Arc::new(crate::oauth::atprotocol_bridge::MemoryAtpOAuthSessionStorage::new());
-        let authorization_request_storage =
-            Arc::new(crate::oauth::atprotocol_bridge::MemoryAuthorizationRequestStorage::new());
+        let atp_session_storage = Arc::new(
+            crate::oauth::UnifiedAtpOAuthSessionStorageAdapter::new(oauth_storage.clone()),
+        );
+        let authorization_request_storage = Arc::new(
+            crate::oauth::UnifiedAuthorizationRequestStorageAdapter::new(oauth_storage.clone()),
+        );
         let client_registration_service = Arc::new(crate::oauth::ClientRegistrationService::new(
             oauth_storage.clone(),
         ));
 
         AppState {
+            http_client: http_client.clone(),
             config: config.clone(),
             template_env,
             identity_resolver,
@@ -236,6 +269,64 @@ mod tests {
             .as_array()
             .unwrap();
         assert!(dpop_algs.contains(&json!("ES256")));
+    }
+
+    #[tokio::test]
+    async fn test_openid_configuration_handler() {
+        let app_state = create_test_app_state();
+        let response = openid_configuration_handler(State(app_state)).await;
+        let metadata = response.0;
+
+        // Verify required OpenID Connect metadata fields
+        assert!(metadata.get("issuer").is_some());
+        assert!(metadata.get("authorization_endpoint").is_some());
+        assert!(metadata.get("token_endpoint").is_some());
+        assert!(metadata.get("userinfo_endpoint").is_some());
+        assert!(metadata.get("jwks_uri").is_some());
+        assert!(metadata.get("response_types_supported").is_some());
+        assert!(metadata.get("subject_types_supported").is_some());
+        assert!(
+            metadata
+                .get("id_token_signing_alg_values_supported")
+                .is_some()
+        );
+
+        // Verify OpenID Connect specific requirements
+        let response_types = metadata["response_types_supported"].as_array().unwrap();
+        assert!(response_types.contains(&json!("code")));
+        assert!(response_types.contains(&json!("id_token")));
+
+        let subject_types = metadata["subject_types_supported"].as_array().unwrap();
+        assert!(subject_types.contains(&json!("public")));
+
+        let id_token_algs = metadata["id_token_signing_alg_values_supported"]
+            .as_array()
+            .unwrap();
+        assert!(id_token_algs.contains(&json!("ES256")));
+
+        // Verify scopes include openid
+        let scopes = metadata["scopes_supported"].as_array().unwrap();
+        assert!(scopes.contains(&json!("openid")));
+
+        // Verify endpoint URLs are properly formatted
+        let issuer = metadata["issuer"].as_str().unwrap();
+        assert!(issuer.starts_with("https://"));
+
+        let auth_endpoint = metadata["authorization_endpoint"].as_str().unwrap();
+        assert!(auth_endpoint.starts_with("https://"));
+        assert!(auth_endpoint.ends_with("/oauth/authorize"));
+
+        let token_endpoint = metadata["token_endpoint"].as_str().unwrap();
+        assert!(token_endpoint.starts_with("https://"));
+        assert!(token_endpoint.ends_with("/oauth/token"));
+
+        let jwks_uri = metadata["jwks_uri"].as_str().unwrap();
+        assert!(jwks_uri.starts_with("https://"));
+        assert!(jwks_uri.ends_with("/.well-known/jwks.json"));
+
+        let userinfo_endpoint = metadata["userinfo_endpoint"].as_str().unwrap();
+        assert!(userinfo_endpoint.starts_with("https://"));
+        assert!(userinfo_endpoint.ends_with("/oauth/userinfo"));
     }
 
     #[tokio::test]

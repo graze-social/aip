@@ -1,6 +1,4 @@
-//! OAuth 2.1 authorization server implementation.
-//!
-//! Provides core OAuth endpoints: authorization, token exchange, and introspection.
+//! Core OAuth 2.1 authorization server handling authorization, token, and PKCE flows.
 
 use crate::errors::OAuthError;
 use crate::oauth::{dpop::*, types::*};
@@ -74,8 +72,12 @@ impl AuthorizationServer {
             ));
         }
 
-        // Validate response type
-        if !client.response_types.contains(&request.response_type) {
+        // Validate response type - check if any requested response type is supported by client
+        let has_supported_response_type = request
+            .response_type
+            .iter()
+            .any(|rt| client.response_types.contains(rt));
+        if !has_supported_response_type {
             return Err(OAuthError::UnsupportedResponseType(format!(
                 "{:?}",
                 request.response_type
@@ -123,6 +125,7 @@ impl AuthorizationServer {
             scope: request.scope,
             code_challenge: request.code_challenge,
             code_challenge_method: request.code_challenge_method,
+            nonce: request.nonce,
             created_at: now,
             expires_at: now + self.auth_code_lifetime,
             used: false,
@@ -189,7 +192,7 @@ impl AuthorizationServer {
             .ok_or_else(|| OAuthError::InvalidRequest("Missing redirect URI".to_string()))?;
 
         // Consume authorization code
-        let auth_code = self
+        let auth_code: AuthorizationCode = self
             .storage
             .consume_code(code)
             .await
@@ -239,8 +242,6 @@ impl AuthorizationServer {
                 .to_str()
                 .map_err(|e| OAuthError::InvalidRequest(format!("Invalid DPoP header: {}", e)))?;
 
-            tracing::info!(?dpop_str, "dpop header value");
-
             // Construct full URL for DPoP validation using external base
             let full_token_url = format!("{}/oauth/token", self.issuer.trim_end_matches('/'));
 
@@ -272,6 +273,7 @@ impl AuthorizationServer {
             session_id: auth_code.session_id.clone(),
             session_iteration: None, // TODO: Get from AtpOAuth session if available
             scope: auth_code.scope.clone(),
+            nonce: auth_code.nonce.clone(),
             created_at: now,
             expires_at: now + self.access_token_lifetime,
             dpop_jkt,
@@ -290,8 +292,9 @@ impl AuthorizationServer {
             access_token: access_token.clone(),
             client_id: client.client_id,
             user_id: auth_code.user_id,
-            session_id: auth_code.session_id,
+            session_id: auth_code.session_id.clone(),
             scope: auth_code.scope.clone(),
+            nonce: auth_code.nonce.clone(),
             created_at: now,
             expires_at: Some(now + self.refresh_token_lifetime),
         };
@@ -303,13 +306,13 @@ impl AuthorizationServer {
                 OAuthError::ServerError(format!("Failed to store refresh token: {:?}", e))
             })?;
 
-        Ok(TokenResponse {
+        Ok(TokenResponse::new(
             access_token,
             token_type,
-            expires_in: self.access_token_lifetime.num_seconds() as u64,
-            refresh_token: Some(refresh_token),
-            scope: auth_code.scope,
-        })
+            self.access_token_lifetime.num_seconds() as u64,
+            Some(refresh_token),
+            auth_code.scope,
+        ))
     }
 
     /// Handle client credentials grant
@@ -381,6 +384,7 @@ impl AuthorizationServer {
             session_id: None,
             session_iteration: None, // No session for client credentials
             scope: granted_scope.clone(),
+            nonce: None, // No nonce for client credentials grant
             created_at: now,
             expires_at: now + self.access_token_lifetime,
             dpop_jkt: None,
@@ -393,13 +397,13 @@ impl AuthorizationServer {
                 OAuthError::ServerError(format!("Failed to store access token: {:?}", e))
             })?;
 
-        Ok(TokenResponse {
+        Ok(TokenResponse::new(
             access_token,
-            token_type: TokenType::Bearer,
-            expires_in: self.access_token_lifetime.num_seconds() as u64,
-            refresh_token: None, // No refresh token for client credentials
-            scope: granted_scope,
-        })
+            TokenType::Bearer,
+            self.access_token_lifetime.num_seconds() as u64,
+            None, // No refresh token for client credentials
+            granted_scope,
+        ))
     }
 
     /// Handle refresh token grant
@@ -447,6 +451,7 @@ impl AuthorizationServer {
             session_id: refresh_token_record.session_id.clone(),
             session_iteration: None, // TODO: Get from original token if available
             scope: refresh_token_record.scope.clone(),
+            nonce: refresh_token_record.nonce.clone(),
             created_at: now,
             expires_at: now + self.access_token_lifetime,
             dpop_jkt: None, // TODO: Handle DPoP binding
@@ -467,6 +472,7 @@ impl AuthorizationServer {
             user_id: refresh_token_record.user_id,
             session_id: refresh_token_record.session_id,
             scope: refresh_token_record.scope.clone(),
+            nonce: refresh_token_record.nonce.clone(),
             created_at: now,
             expires_at: Some(now + self.refresh_token_lifetime),
         };
@@ -478,13 +484,13 @@ impl AuthorizationServer {
                 OAuthError::ServerError(format!("Failed to store refresh token: {:?}", e))
             })?;
 
-        Ok(TokenResponse {
-            access_token: new_access_token,
-            token_type: TokenType::Bearer,
-            expires_in: self.access_token_lifetime.num_seconds() as u64,
-            refresh_token: Some(new_refresh_token),
-            scope: refresh_token_record.scope,
-        })
+        Ok(TokenResponse::new(
+            new_access_token,
+            TokenType::Bearer,
+            self.access_token_lifetime.num_seconds() as u64,
+            Some(new_refresh_token),
+            refresh_token_record.scope,
+        ))
     }
 
     /// Authenticate a client
@@ -583,12 +589,13 @@ pub struct AuthorizeQuery {
     pub code_challenge_method: Option<String>,
     pub request_uri: Option<String>, // For PAR (RFC 9126)
     pub login_hint: Option<String>,
+    pub nonce: Option<String>,
 }
 
 impl From<AuthorizeQuery> for AuthorizationRequest {
     fn from(query: AuthorizeQuery) -> Self {
         Self {
-            response_type: ResponseType::Code, // Always code, regardless of input
+            response_type: vec![ResponseType::Code], // Always code, regardless of input
             client_id: query.client_id,
             redirect_uri: query.redirect_uri.unwrap_or_default(), // Default to empty for PAR
             scope: query.scope,
@@ -596,6 +603,7 @@ impl From<AuthorizeQuery> for AuthorizationRequest {
             code_challenge: query.code_challenge,
             code_challenge_method: query.code_challenge_method,
             login_hint: query.login_hint,
+            nonce: query.nonce,
         }
     }
 }
@@ -774,7 +782,7 @@ mod tests {
 
         // Step 1: Authorization request
         let auth_request = AuthorizationRequest {
-            response_type: ResponseType::Code,
+            response_type: vec![ResponseType::Code],
             client_id: "test-client".to_string(),
             redirect_uri: "https://example.com/callback".to_string(),
             scope: Some("read".to_string()),
@@ -782,6 +790,7 @@ mod tests {
             code_challenge: None,
             code_challenge_method: None,
             login_hint: None,
+            nonce: None,
         };
 
         let auth_response = auth_server

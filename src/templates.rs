@@ -1,7 +1,4 @@
-//! Template engine configuration.
-//!
-//! Manages Minijinja template environments with embedded templates for production
-//! or filesystem auto-reloading for development via feature flags.
+//! Minijinja template engine configuration with embedded and auto-reload modes.
 
 #[cfg(feature = "reload")]
 use minijinja_autoreload::AutoReloader;

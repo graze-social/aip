@@ -1,7 +1,4 @@
-//! Application configuration management.
-//!
-//! Provides environment-based configuration for server settings, OAuth parameters,
-//! ATProtocol integration, and runtime options.
+//! Environment-based configuration types for AIP server runtime settings.
 
 use anyhow::Result;
 use atproto_identity::key::{KeyData, KeyType, generate_key, identify_key};
@@ -78,7 +75,7 @@ impl Config {
         let oauth_signing_keys: PrivateKeys = optional_env("OAUTH_SIGNING_KEYS").try_into()?;
         let oauth_supported_scopes: OAuthSupportedScopes = default_env(
             "OAUTH_SUPPORTED_SCOPES",
-            "atproto:atproto atproto:transition:generic atproto:transition:email",
+            "openid profile email atproto:atproto atproto:transition:generic atproto:transition:email",
         )
         .try_into()?;
         let plc_hostname = default_env("PLC_HOSTNAME", "plc.directory");
