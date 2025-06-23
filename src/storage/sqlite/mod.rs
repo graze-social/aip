@@ -4,6 +4,7 @@
 //! SQLite is suitable for single-instance deployments and development.
 
 mod access_tokens;
+mod app_passwords;
 mod atp_oauth_sessions;
 mod authorization_codes;
 mod authorization_requests;
@@ -19,6 +20,7 @@ use sqlx::sqlite::SqlitePool;
 use std::sync::Arc;
 
 pub use access_tokens::SqliteAccessTokenStore;
+pub use app_passwords::{SqliteAppPasswordSessionStore, SqliteAppPasswordStore};
 pub use atp_oauth_sessions::SqliteAtpOAuthSessionStorage;
 pub use authorization_codes::SqliteAuthorizationCodeStore;
 pub use authorization_requests::SqliteAuthorizationRequestStorage;
@@ -40,6 +42,8 @@ pub struct SqliteOAuthStorage {
     par_storage: Arc<SqlitePARStorage>,
     atp_oauth_session_storage: Arc<SqliteAtpOAuthSessionStorage>,
     authorization_request_storage: Arc<SqliteAuthorizationRequestStorage>,
+    app_password_store: Arc<SqliteAppPasswordStore>,
+    app_password_session_store: Arc<SqliteAppPasswordSessionStore>,
 }
 
 impl SqliteOAuthStorage {
@@ -54,6 +58,8 @@ impl SqliteOAuthStorage {
         let atp_oauth_session_storage = Arc::new(SqliteAtpOAuthSessionStorage::new(pool.clone()));
         let authorization_request_storage =
             Arc::new(SqliteAuthorizationRequestStorage::new(pool.clone()));
+        let app_password_store = Arc::new(SqliteAppPasswordStore::new(pool.clone()));
+        let app_password_session_store = Arc::new(SqliteAppPasswordSessionStore::new(pool.clone()));
 
         Self {
             pool,
@@ -65,6 +71,8 @@ impl SqliteOAuthStorage {
             par_storage,
             atp_oauth_session_storage,
             authorization_request_storage,
+            app_password_store,
+            app_password_session_store,
         }
     }
 
@@ -328,6 +336,86 @@ impl AuthorizationRequestStorage for SqliteOAuthStorage {
     async fn remove_authorization_request(&self, session_id: &str) -> Result<()> {
         self.authorization_request_storage
             .remove_authorization_request(session_id)
+            .await
+    }
+}
+
+#[async_trait]
+impl AppPasswordStore for SqliteOAuthStorage {
+    async fn store_app_password(&self, app_password: &AppPassword) -> Result<()> {
+        self.app_password_store
+            .store_app_password(app_password)
+            .await
+    }
+
+    async fn get_app_password(&self, client_id: &str, did: &str) -> Result<Option<AppPassword>> {
+        self.app_password_store
+            .get_app_password(client_id, did)
+            .await
+    }
+
+    async fn delete_app_password(&self, client_id: &str, did: &str) -> Result<()> {
+        self.app_password_store
+            .delete_app_password(client_id, did)
+            .await
+    }
+
+    async fn list_app_passwords_by_did(&self, did: &str) -> Result<Vec<AppPassword>> {
+        self.app_password_store.list_app_passwords_by_did(did).await
+    }
+
+    async fn list_app_passwords_by_client(&self, client_id: &str) -> Result<Vec<AppPassword>> {
+        self.app_password_store
+            .list_app_passwords_by_client(client_id)
+            .await
+    }
+}
+
+#[async_trait]
+impl AppPasswordSessionStore for SqliteOAuthStorage {
+    async fn store_app_password_session(&self, session: &AppPasswordSession) -> Result<()> {
+        self.app_password_session_store
+            .store_app_password_session(session)
+            .await
+    }
+
+    async fn get_app_password_session(
+        &self,
+        client_id: &str,
+        did: &str,
+    ) -> Result<Option<AppPasswordSession>> {
+        self.app_password_session_store
+            .get_app_password_session(client_id, did)
+            .await
+    }
+
+    async fn update_app_password_session(&self, session: &AppPasswordSession) -> Result<()> {
+        self.app_password_session_store
+            .update_app_password_session(session)
+            .await
+    }
+
+    async fn delete_app_password_sessions(&self, client_id: &str, did: &str) -> Result<()> {
+        self.app_password_session_store
+            .delete_app_password_sessions(client_id, did)
+            .await
+    }
+
+    async fn list_app_password_sessions_by_did(
+        &self,
+        did: &str,
+    ) -> Result<Vec<AppPasswordSession>> {
+        self.app_password_session_store
+            .list_app_password_sessions_by_did(did)
+            .await
+    }
+
+    async fn list_app_password_sessions_by_client(
+        &self,
+        client_id: &str,
+    ) -> Result<Vec<AppPasswordSession>> {
+        self.app_password_session_store
+            .list_app_password_sessions_by_client(client_id)
             .await
     }
 }

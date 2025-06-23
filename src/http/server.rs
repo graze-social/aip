@@ -8,6 +8,7 @@ use tower_http::{cors::CorsLayer, services::ServeDir};
 
 use super::{
     context::AppState,
+    handler_app_password::create_app_password_handler,
     handler_atprotocol_client_metadata::handle_atpoauth_client_metadata,
     handler_atprotocol_oauth_authorize::handle_oauth_authorize,
     handler_atprotocol_oauth_callback::handle_atpoauth_callback,
@@ -34,6 +35,10 @@ pub fn build_router(ctx: AppState) -> Router {
     let protected_api_routes = Router::new()
         .route("/hello", get(handle_hello_api))
         .route("/atprotocol/session", get(get_atprotocol_session_handler))
+        .route(
+            "/atprotocol/app-password",
+            post(create_app_password_handler),
+        )
         .layer(middleware::map_response_with_state(
             ctx.clone(),
             set_dpop_headers,
