@@ -107,17 +107,6 @@ pub async fn get_userinfo_handler(
 
     claims = claims.with_nonce(access_token.nonce);
 
-    // let vague_claims = serde_json::to_value(claims).unwrap();
-    // let real_claims: atproto_oauth::jwt::Claims = serde_json::from_value(vague_claims).unwrap();
-
-    // let private_signing_key_data = state.atproto_oauth_signing_keys.first().unwrap();
-    // let header: Header = private_signing_key_data.clone().try_into().unwrap();
-    // let client_assertion_token = mint(
-    //     private_signing_key_data,
-    //     &header,
-    //     &real_claims,
-    // ).unwrap();
-
     Ok(Json(claims))
 }
 
@@ -261,8 +250,13 @@ mod tests {
                 "serviceEndpoint": "https://bsky.social"
             }],
             "verificationMethod": []
-        })).unwrap();
-        app_state.document_storage.store_document(test_document).await.unwrap();
+        }))
+        .unwrap();
+        app_state
+            .document_storage
+            .store_document(test_document)
+            .await
+            .unwrap();
 
         // Generate a test DPoP key
         let dpop_key = generate_key(KeyType::P256Private).unwrap();
@@ -285,7 +279,11 @@ mod tests {
             exchange_error: None,
             iteration: 1,
         };
-        app_state.atp_session_storage.store_session(&test_session).await.unwrap();
+        app_state
+            .atp_session_storage
+            .store_session(&test_session)
+            .await
+            .unwrap();
 
         // Create an access token without ATProtocol scopes
         let access_token = AccessToken {
@@ -363,13 +361,18 @@ mod tests {
             "id": "did:plc:user123",
             "alsoKnownAs": [],
             "service": [{
-                "id": "#atproto_pds", 
+                "id": "#atproto_pds",
                 "type": "AtprotoPersonalDataServer",
                 "serviceEndpoint": "https://bsky.social"
             }],
             "verificationMethod": []
-        })).unwrap();
-        app_state.document_storage.store_document(test_document).await.unwrap();
+        }))
+        .unwrap();
+        app_state
+            .document_storage
+            .store_document(test_document)
+            .await
+            .unwrap();
 
         // Generate a test DPoP key
         let dpop_key = generate_key(KeyType::P256Private).unwrap();
@@ -392,7 +395,11 @@ mod tests {
             exchange_error: None,
             iteration: 1,
         };
-        app_state.atp_session_storage.store_session(&test_session).await.unwrap();
+        app_state
+            .atp_session_storage
+            .store_session(&test_session)
+            .await
+            .unwrap();
 
         // Create an access token with non-ATProtocol scopes
         let access_token = AccessToken {

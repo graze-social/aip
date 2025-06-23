@@ -24,6 +24,8 @@ pub struct SessionQuery {
     /// Access token type - "oauth_session" (default) or "app_password_session"
     #[serde(default = "default_access_token_type")]
     pub access_token_type: String,
+    /// Subject DID for app password session lookup (optional)
+    pub sub: Option<String>,
 }
 
 fn default_access_token_type() -> String {
@@ -63,13 +65,43 @@ pub async fn get_atprotocol_session_handler(
     Query(query): Query<SessionQuery>,
     ExtractedAuth(access_token): ExtractedAuth,
 ) -> Result<Json<AtpSessionResponse>, (StatusCode, Json<Value>)> {
-    let did = access_token.user_id.as_ref().ok_or_else(|| {
-        let error_response = json!({
-            "error": "invalid_token",
-            "error_description": "Token missing user_id (DID)"
-        });
-        (StatusCode::UNAUTHORIZED, Json(error_response))
-    })?;
+    // For app_password_session, handle sub parameter logic
+    let did = if query.access_token_type == "app_password_session" {
+        match (&access_token.user_id, &query.sub) {
+            // Both user_id and sub are set - they must match
+            (Some(user_id), Some(sub)) => {
+                if user_id != sub {
+                    let error_response = json!({
+                        "error": "invalid_request",
+                        "error_description": "Token user_id and sub parameter do not match"
+                    });
+                    return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+                }
+                user_id
+            }
+            // user_id is set but sub is not - use user_id
+            (Some(user_id), None) => user_id,
+            // user_id is not set but sub is - use sub
+            (None, Some(sub)) => sub,
+            // Neither user_id nor sub are set - error
+            (None, None) => {
+                let error_response = json!({
+                    "error": "invalid_token",
+                    "error_description": "Token missing user_id (DID) and no sub parameter provided"
+                });
+                return Err((StatusCode::UNAUTHORIZED, Json(error_response)));
+            }
+        }
+    } else {
+        // For non-app_password_session types, require user_id in token
+        access_token.user_id.as_ref().ok_or_else(|| {
+            let error_response = json!({
+                "error": "invalid_token",
+                "error_description": "Token missing user_id (DID)"
+            });
+            (StatusCode::UNAUTHORIZED, Json(error_response))
+        })?
+    };
 
     // Retrieve the DID document from DocumentStorage
     let document = match state.document_storage.get_document_by_did(did).await {
