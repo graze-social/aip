@@ -536,7 +536,6 @@ impl AtpBackedAuthorizationServer {
         // Also add transition scopes based on profile and email scopes
         let filtered_scope = if let Some(ref original_scope) = request.scope {
             let scopes: Vec<&str> = original_scope.split_whitespace().collect();
-            tracing::info!(?scopes, "original scopes");
             let mut atprotocol_scopes: Vec<String> = scopes
                 .iter()
                 .filter_map(|scope| {
@@ -940,6 +939,7 @@ mod tests {
             code_challenge: None,
             code_challenge_method: None,
             login_hint: Some("alice.bsky.social".to_string()),
+            nonce: None,
         };
 
         // Test store and retrieve
@@ -1052,6 +1052,7 @@ mod tests {
             code_challenge: None,
             code_challenge_method: None,
             login_hint: Some("alice.bsky.social".to_string()),
+            nonce: None,
         };
 
         // This will fail because the client doesn't exist, but tests the flow
@@ -1098,6 +1099,7 @@ mod tests {
             code_challenge: None,
             code_challenge_method: None,
             login_hint: Some("alice.bsky.social".to_string()),
+            nonce: None,
         };
 
         // Test that validation passes (the actual ATProtocol OAuth will fail in tests,
@@ -1496,6 +1498,7 @@ mod tests {
                 code_challenge: None,
                 code_challenge_method: None,
                 login_hint: Some("alice.bsky.social".to_string()),
+                nonce: None,
             };
 
             // Store a test client to pass validation
@@ -1548,6 +1551,7 @@ mod tests {
                 code_challenge: None,
                 code_challenge_method: None,
                 login_hint: Some("alice.bsky.social".to_string()),
+                nonce: None,
             };
 
             // Test with email scope - should add transition:email
@@ -1577,6 +1581,7 @@ mod tests {
                 code_challenge: None,
                 code_challenge_method: None,
                 login_hint: Some("alice.bsky.social".to_string()),
+                nonce: None,
             };
 
             // Test with both scopes - should add both transition scopes

@@ -1,5 +1,6 @@
 //! Handles GET /oauth/userinfo - OpenID Connect UserInfo endpoint
 
+use atproto_oauth::jwt::{mint, Header};
 use axum::{extract::State, http::StatusCode, response::Json};
 use serde_json::{Value, json};
 
@@ -78,7 +79,7 @@ pub async fn get_userinfo_handler(
     };
 
     // Use the helper function to build claims with document information
-    let claims = build_openid_claims_with_document_info(
+    let mut claims = build_openid_claims_with_document_info(
         &state.http_client,
         initial_claims,
         &document,
@@ -104,6 +105,19 @@ pub async fn get_userinfo_handler(
         });
         (status, Json(error_response))
     })?;
+
+    claims = claims.with_nonce(access_token.nonce);
+
+    // let vague_claims = serde_json::to_value(claims).unwrap();
+    // let real_claims: atproto_oauth::jwt::Claims = serde_json::from_value(vague_claims).unwrap();
+
+    // let private_signing_key_data = state.atproto_oauth_signing_keys.first().unwrap();
+    // let header: Header = private_signing_key_data.clone().try_into().unwrap();
+    // let client_assertion_token = mint(
+    //     private_signing_key_data,
+    //     &header,
+    //     &real_claims,
+    // ).unwrap();
 
     Ok(Json(claims))
 }
@@ -320,7 +334,7 @@ mod tests {
         let result = get_userinfo_handler(axum::extract::State(app_state), extracted_auth).await;
 
         assert!(result.is_ok());
-        let response = result.unwrap().0;
+        let response = result.unwrap();
 
         assert_eq!(response.sub, "did:plc:user123");
         assert_eq!(response.did, Some("did:plc:user123".to_string()));

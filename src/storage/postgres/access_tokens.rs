@@ -77,6 +77,9 @@ impl PostgresAccessTokenStore {
             scope: row
                 .try_get("scope")
                 .map_err(|e| StorageError::DatabaseError(format!("Failed to get scope: {}", e)))?,
+            nonce: row.try_get("nonce").map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to get nonce: {}", e))
+            })?,
             created_at,
             expires_at,
             dpop_jkt: row.try_get("dpop_jkt").map_err(|e| {
@@ -95,8 +98,8 @@ impl AccessTokenStore for PostgresAccessTokenStore {
             r#"
             INSERT INTO access_tokens (
                 token, token_type, client_id, user_id, session_id, session_iteration,
-                scope, created_at, expires_at, dpop_jkt
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                scope, nonce, created_at, expires_at, dpop_jkt
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
         )
         .bind(&token.token)
@@ -106,6 +109,7 @@ impl AccessTokenStore for PostgresAccessTokenStore {
         .bind(&token.session_id)
         .bind(token.session_iteration.map(|i| i as i32))
         .bind(&token.scope)
+        .bind(&token.nonce)
         .bind(token.created_at)
         .bind(token.expires_at)
         .bind(&token.dpop_jkt)

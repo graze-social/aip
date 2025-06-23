@@ -83,6 +83,9 @@ impl SqliteAccessTokenStore {
             scope: row
                 .try_get("scope")
                 .map_err(|e| StorageError::DatabaseError(format!("Failed to get scope: {}", e)))?,
+            nonce: row.try_get("nonce").map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to get nonce: {}", e))
+            })?,
             created_at,
             expires_at,
             dpop_jkt: row.try_get("dpop_jkt").map_err(|e| {
@@ -104,8 +107,8 @@ impl AccessTokenStore for SqliteAccessTokenStore {
             r#"
             INSERT INTO access_tokens (
                 token, token_type, client_id, user_id, session_id, session_iteration,
-                scope, created_at, expires_at, dpop_jkt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                scope, nonce, created_at, expires_at, dpop_jkt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&token.token)
@@ -115,6 +118,7 @@ impl AccessTokenStore for SqliteAccessTokenStore {
         .bind(&token.session_id)
         .bind(session_iteration)
         .bind(&token.scope)
+        .bind(&token.nonce)
         .bind(created_at_str)
         .bind(expires_at_str)
         .bind(&token.dpop_jkt)

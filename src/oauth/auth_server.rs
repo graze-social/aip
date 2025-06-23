@@ -125,6 +125,7 @@ impl AuthorizationServer {
             scope: request.scope,
             code_challenge: request.code_challenge,
             code_challenge_method: request.code_challenge_method,
+            nonce: request.nonce,
             created_at: now,
             expires_at: now + self.auth_code_lifetime,
             used: false,
@@ -272,6 +273,7 @@ impl AuthorizationServer {
             session_id: auth_code.session_id.clone(),
             session_iteration: None, // TODO: Get from AtpOAuth session if available
             scope: auth_code.scope.clone(),
+            nonce: auth_code.nonce.clone(),
             created_at: now,
             expires_at: now + self.access_token_lifetime,
             dpop_jkt,
@@ -292,6 +294,7 @@ impl AuthorizationServer {
             user_id: auth_code.user_id,
             session_id: auth_code.session_id.clone(),
             scope: auth_code.scope.clone(),
+            nonce: auth_code.nonce.clone(),
             created_at: now,
             expires_at: Some(now + self.refresh_token_lifetime),
         };
@@ -381,6 +384,7 @@ impl AuthorizationServer {
             session_id: None,
             session_iteration: None, // No session for client credentials
             scope: granted_scope.clone(),
+            nonce: None, // No nonce for client credentials grant
             created_at: now,
             expires_at: now + self.access_token_lifetime,
             dpop_jkt: None,
@@ -447,6 +451,7 @@ impl AuthorizationServer {
             session_id: refresh_token_record.session_id.clone(),
             session_iteration: None, // TODO: Get from original token if available
             scope: refresh_token_record.scope.clone(),
+            nonce: refresh_token_record.nonce.clone(),
             created_at: now,
             expires_at: now + self.access_token_lifetime,
             dpop_jkt: None, // TODO: Handle DPoP binding
@@ -467,6 +472,7 @@ impl AuthorizationServer {
             user_id: refresh_token_record.user_id,
             session_id: refresh_token_record.session_id,
             scope: refresh_token_record.scope.clone(),
+            nonce: refresh_token_record.nonce.clone(),
             created_at: now,
             expires_at: Some(now + self.refresh_token_lifetime),
         };
@@ -583,6 +589,7 @@ pub struct AuthorizeQuery {
     pub code_challenge_method: Option<String>,
     pub request_uri: Option<String>, // For PAR (RFC 9126)
     pub login_hint: Option<String>,
+    pub nonce: Option<String>,
 }
 
 impl From<AuthorizeQuery> for AuthorizationRequest {
@@ -596,6 +603,7 @@ impl From<AuthorizeQuery> for AuthorizationRequest {
             code_challenge: query.code_challenge,
             code_challenge_method: query.code_challenge_method,
             login_hint: query.login_hint,
+            nonce: query.nonce,
         }
     }
 }
@@ -782,6 +790,7 @@ mod tests {
             code_challenge: None,
             code_challenge_method: None,
             login_hint: None,
+            nonce: None,
         };
 
         let auth_response = auth_server

@@ -53,6 +53,7 @@ async fn test_complete_authorization_code_flow() {
         code_challenge: None,
         code_challenge_method: None,
         login_hint: None,
+        nonce: None,
     };
 
     let auth_response = auth_server

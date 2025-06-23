@@ -67,6 +67,9 @@ impl SqliteRefreshTokenStore {
             scope: row
                 .try_get("scope")
                 .map_err(|e| StorageError::DatabaseError(format!("Failed to get scope: {}", e)))?,
+            nonce: row.try_get("nonce").map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to get nonce: {}", e))
+            })?,
             created_at,
             expires_at,
         })
@@ -83,8 +86,8 @@ impl RefreshTokenStore for SqliteRefreshTokenStore {
             r#"
             INSERT INTO refresh_tokens (
                 token, access_token, client_id, user_id, session_id,
-                scope, created_at, expires_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                scope, nonce, created_at, expires_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&token.token)
@@ -93,6 +96,7 @@ impl RefreshTokenStore for SqliteRefreshTokenStore {
         .bind(&token.user_id)
         .bind(&token.session_id)
         .bind(&token.scope)
+        .bind(&token.nonce)
         .bind(created_at_str)
         .bind(expires_at_str)
         .execute(&self.pool)

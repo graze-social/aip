@@ -48,6 +48,9 @@ impl PostgresRefreshTokenStore {
             scope: row
                 .try_get("scope")
                 .map_err(|e| StorageError::DatabaseError(format!("Failed to get scope: {}", e)))?,
+            nonce: row.try_get("nonce").map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to get nonce: {}", e))
+            })?,
             created_at,
             expires_at,
         })
@@ -60,8 +63,8 @@ impl RefreshTokenStore for PostgresRefreshTokenStore {
         sqlx::query(
             r#"
             INSERT INTO refresh_tokens (
-                token, access_token, client_id, user_id, session_id, scope, created_at, expires_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                token, access_token, client_id, user_id, session_id, scope, nonce, created_at, expires_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
         )
         .bind(&token.token)
@@ -70,6 +73,7 @@ impl RefreshTokenStore for PostgresRefreshTokenStore {
         .bind(&token.user_id)
         .bind(&token.session_id)
         .bind(&token.scope)
+        .bind(&token.nonce)
         .bind(token.created_at)
         .bind(token.expires_at)
         .execute(&self.pool)

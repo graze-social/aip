@@ -53,8 +53,6 @@ pub async fn handle_oauth_authorize(
         }
     };
 
-    tracing::info!(?login_hint, "login hint");
-
     // Check if login_hint is missing - if so, render login form
     if login_hint.is_none() {
         return render_login_form(state, &original_query, &request).await;
@@ -169,6 +167,7 @@ async fn process_authorization_query(
         code_challenge: query.code_challenge.clone(),
         code_challenge_method: query.code_challenge_method.clone(),
         login_hint: query.login_hint.clone(),
+        nonce: query.nonce.clone(),
     };
 
     // Validate scope against server's supported scopes for traditional OAuth requests
@@ -228,6 +227,9 @@ async fn render_login_form(
     }
     if let Some(ref request_uri) = query.request_uri {
         query_params.insert("request_uri".to_string(), request_uri.clone());
+    }
+    if let Some(ref nonce) = query.nonce {
+        query_params.insert("nonce".to_string(), nonce.clone());
     }
 
     let template_data = json!({
@@ -297,6 +299,7 @@ mod tests {
             code_challenge_method: None,
             request_uri: None,
             login_hint: None,
+            nonce: None,
         };
 
         let config = create_test_config();
@@ -330,6 +333,7 @@ mod tests {
             code_challenge_method: Some("S256".to_string()),
             request_uri: None,
             login_hint: None,
+            nonce: None,
         };
 
         let config = create_test_config();
@@ -360,6 +364,7 @@ mod tests {
             code_challenge_method: None,
             request_uri: None,
             login_hint: None,
+            nonce: None,
         };
 
         let config = create_test_config();
@@ -395,6 +400,7 @@ mod tests {
             code_challenge_method: None,
             request_uri: Some("urn:ietf:params:oauth:request_uri:invalid123".to_string()),
             login_hint: None,
+            nonce: None,
         };
 
         let config = create_test_config();
@@ -424,6 +430,7 @@ mod tests {
             code_challenge_method: None,
             request_uri: None,
             login_hint: None,
+            nonce: None,
         };
 
         let config = create_test_config();
@@ -453,6 +460,7 @@ mod tests {
             code_challenge_method: None,
             request_uri: None,
             login_hint: None,
+            nonce: None,
         };
 
         let config = create_test_config();

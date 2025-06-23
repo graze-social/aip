@@ -76,7 +76,7 @@ pub async fn openid_configuration_handler(State(state): State<AppState>) -> Json
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
         "response_types_supported": ["code"],
         "subject_types_supported": ["public"],
-        "id_token_signing_alg_values_supported": ["ES256"],
+        "userinfo_signed_response_alg": ["ES256"],
         "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
         "claims_supported": ["iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "at_hash", "c_hash", "email", "did", "name", "profile", "pds_endpoint"],
         "grant_types_supported": ["authorization_code", "refresh_token"],

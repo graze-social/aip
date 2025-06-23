@@ -1,15 +1,19 @@
 //! Handles POST /oauth/token - Exchanges authorization codes for JWT access tokens with ATProtocol identity
 
 use anyhow::Result;
+use atproto_oauth::jwt::{Claims, Header, mint};
 use axum::{
     Form, Json,
     extract::State,
     http::{HeaderMap, StatusCode},
 };
+use chrono::Utc;
 use serde_json::{Value, json};
+use ulid::Ulid;
 
 use super::{context::AppState, utils_oauth::create_base_auth_server};
 use crate::oauth::{
+    OpenIDClaims,
     auth_server::{TokenForm, extract_client_auth},
     types::TokenRequest,
 };
@@ -25,6 +29,8 @@ pub async fn handle_oauth_token(
 ) -> Result<Json<TokenResponse>, (StatusCode, Json<Value>)> {
     // Extract client authentication from Authorization header or form
     let client_auth = extract_client_auth(&headers, &form);
+
+    let now = Utc::now();
 
     let request = match TokenRequest::try_from(form) {
         Ok(req) => req,
@@ -50,7 +56,41 @@ pub async fn handle_oauth_token(
         .token(request.clone(), &headers, client_auth)
         .await
     {
-        Ok(value) => Ok(Json(value)),
+        Ok(mut value) => {
+            if value.scope.clone().is_some_and(|v| v.contains("openid")) {
+                let access_token = state
+                    .oauth_storage
+                    .get_token(value.access_token.as_ref())
+                    .await
+                    .unwrap();
+                let access_token: crate::oauth::AccessToken = access_token.unwrap();
+
+                let did = access_token.user_id.unwrap();
+
+                let claims = OpenIDClaims::new_id_token(
+                    state.config.external_base.clone(),
+                    did.clone(),
+                    access_token.client_id.clone(),
+                    now,
+                )
+                .with_did(did.clone())
+                .with_c_hash(request.code.unwrap().as_str())
+                .with_at_hash(&access_token.token)
+                .with_nonce(access_token.nonce);
+
+                let vague_claims = serde_json::to_value(claims).unwrap();
+                let real_claims: atproto_oauth::jwt::Claims =
+                    serde_json::from_value(vague_claims).unwrap();
+
+                let private_signing_key_data = state.atproto_oauth_signing_keys.first().unwrap();
+                let header: Header = private_signing_key_data.clone().try_into().unwrap();
+                let id_token = mint(private_signing_key_data, &header, &real_claims).unwrap();
+
+                value = value.with_id_token(id_token);
+            }
+
+            Ok(Json(value))
+        }
         Err(e) => {
             let (status, error_code) = match e {
                 OAuthError::InvalidClient(_) => (StatusCode::UNAUTHORIZED, "invalid_client"),

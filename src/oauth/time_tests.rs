@@ -49,6 +49,7 @@ mod tests {
             scope: Some("read".to_string()),
             code_challenge: None,
             code_challenge_method: None,
+            nonce: None,
             created_at: now,
             expires_at: now + Duration::minutes(10),
             used: false,

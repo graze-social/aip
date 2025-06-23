@@ -30,6 +30,7 @@ pub struct PushedAuthorizationRequest {
     pub request: Option<String>,
     pub request_uri: Option<String>,
     pub login_hint: Option<String>,
+    pub nonce: Option<String>,
 
     // ATProtocol-specific parameter (legacy, prefer login_hint)
     pub subject: Option<String>,
@@ -232,6 +233,7 @@ fn validate_and_convert_par_request(
         code_challenge: request.code_challenge.clone(),
         code_challenge_method: request.code_challenge_method.clone(),
         login_hint: request.login_hint.clone().or(request.subject.clone()),
+        nonce: request.nonce.clone(),
     })
 }
 
@@ -345,6 +347,7 @@ mod tests {
             request: None,
             request_uri: None,
             login_hint: None,
+            nonce: None,
             subject: Some("alice.bsky.social".to_string()),
         };
 
@@ -409,6 +412,7 @@ mod tests {
             request: None,
             request_uri: None,
             login_hint: None,
+            nonce: None,
             subject: None,
         };
 
@@ -469,6 +473,7 @@ mod tests {
             request: None,
             request_uri: None,
             login_hint: None,
+            nonce: None,
             subject: None,
         };
 

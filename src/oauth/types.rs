@@ -101,6 +101,8 @@ pub struct AuthorizationRequest {
     pub code_challenge_method: Option<String>,
     /// Login hint for ATProtocol subject
     pub login_hint: Option<String>,
+    /// Nonce for OpenID Connect
+    pub nonce: Option<String>,
 }
 
 /// OAuth Authorization Code
@@ -123,6 +125,8 @@ pub struct AuthorizationCode {
     pub code_challenge: Option<String>,
     /// Code challenge method for PKCE
     pub code_challenge_method: Option<String>,
+    /// Nonce for OpenID Connect
+    pub nonce: Option<String>,
     /// Creation timestamp
     pub created_at: DateTime<Utc>,
     /// Expiration timestamp
@@ -150,6 +154,8 @@ pub struct AccessToken {
 
     /// Granted scope
     pub scope: Option<String>,
+    /// Nonce for OpenID Connect
+    pub nonce: Option<String>,
     /// Creation timestamp
     pub created_at: DateTime<Utc>,
     /// Expiration timestamp
@@ -174,6 +180,8 @@ pub struct RefreshToken {
 
     /// Granted scope
     pub scope: Option<String>,
+    /// Nonce for OpenID Connect
+    pub nonce: Option<String>,
     /// Creation timestamp
     pub created_at: DateTime<Utc>,
     /// Expiration timestamp (optional, can be long-lived)
