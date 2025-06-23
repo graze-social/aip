@@ -184,10 +184,12 @@ mod tests {
             enable_client_api: false,
         });
 
-        let atp_session_storage =
-            Arc::new(crate::oauth::atprotocol_bridge::MemoryAtpOAuthSessionStorage::new());
-        let authorization_request_storage =
-            Arc::new(crate::oauth::atprotocol_bridge::MemoryAuthorizationRequestStorage::new());
+        let atp_session_storage = Arc::new(
+            crate::oauth::UnifiedAtpOAuthSessionStorageAdapter::new(oauth_storage.clone()),
+        );
+        let authorization_request_storage = Arc::new(
+            crate::oauth::UnifiedAuthorizationRequestStorageAdapter::new(oauth_storage.clone()),
+        );
         let client_registration_service = Arc::new(crate::oauth::ClientRegistrationService::new(
             oauth_storage.clone(),
         ));

@@ -344,28 +344,6 @@ pub async fn build_openid_claims_with_document_info(
     Ok(claims)
 }
 
-// /// Try to fetch email from ATProtocol session
-// async fn try_fetch_email_from_session(
-//     state: &AppState,
-//     document: &Document,
-//     session_id: &str,
-// ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-//     // Get the session with automatic refresh
-//     let session = get_atprotocol_session_with_refresh(state, document, session_id).await?;
-
-//     // Check if we have a valid ATProtocol access token
-//     if let (Some(atp_access_token), Some(pds_endpoint)) =
-//         (&session.access_token, document.pds_endpoints().first())
-//     {
-//         let email =
-//             fetch_email_from_pds(state, atp_access_token, &session.dpop_key, pds_endpoint).await?;
-
-//         Ok(email)
-//     } else {
-//         Ok(None)
-//     }
-// }
-
 /// ATProtocol getSession response
 #[derive(Debug, Deserialize)]
 struct AtpGetSessionResponse {
@@ -482,10 +460,12 @@ mod tests {
             enable_client_api: false,
         });
 
-        let atp_session_storage =
-            Arc::new(crate::oauth::atprotocol_bridge::MemoryAtpOAuthSessionStorage::new());
-        let authorization_request_storage =
-            Arc::new(crate::oauth::atprotocol_bridge::MemoryAuthorizationRequestStorage::new());
+        let atp_session_storage = Arc::new(
+            crate::oauth::UnifiedAtpOAuthSessionStorageAdapter::new(oauth_storage.clone()),
+        );
+        let authorization_request_storage = Arc::new(
+            crate::oauth::UnifiedAuthorizationRequestStorageAdapter::new(oauth_storage.clone()),
+        );
         let client_registration_service = Arc::new(crate::oauth::ClientRegistrationService::new(
             oauth_storage.clone(),
         ));

@@ -12,47 +12,16 @@ use atproto_oauth::{
     workflow::{OAuthClient, OAuthRequest, OAuthRequestState, oauth_complete, oauth_init},
 };
 use chrono::{DateTime, Duration, Utc};
-use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::oauth::dpop::compute_jwk_thumbprint;
 
-/// Session linking OAuth authorization requests to ATProtocol OAuth flows
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AtpOAuthSession {
-    /// Unique session ID
-    pub session_id: String,
-    /// DID being authenticated
-    pub did: String,
-    /// Session creation time (UTC)
-    pub session_created_at: DateTime<Utc>,
-    /// ATProtocol OAuth state for tracking
-    pub atp_oauth_state: String,
-    /// JWK thumbprint of the signing key used to create the session
-    pub signing_key_jkt: String,
-    /// String serialized KeyData p256 private key provided to oauth_init
-    pub dpop_key: String,
-    /// Access token from token exchange process
-    pub access_token: Option<String>,
-    /// Refresh token from token exchange process
-    pub refresh_token: Option<String>,
-    /// Timestamp when the access token was created
-    pub access_token_created_at: Option<DateTime<Utc>>,
-    /// Timestamp when the access token expires
-    pub access_token_expires_at: Option<DateTime<Utc>>,
-    /// Scopes associated with the access token
-    pub access_token_scopes: Option<Vec<String>>,
-    /// Timestamp when the oauth_callback method was invoked
-    pub session_exchanged_at: Option<DateTime<Utc>>,
-    /// Exchange error if oauth_callback returns an error
-    pub exchange_error: Option<String>,
-    /// Iteration counter for the session_id
-    pub iteration: u32,
-}
+// Re-export unified storage types
+pub use crate::storage::traits::AtpOAuthSession;
 
-/// Storage trait for ATProtocol OAuth sessions
+/// Storage trait for ATProtocol OAuth sessions (legacy interface)
 #[async_trait::async_trait]
 pub trait AtpOAuthSessionStorage: Send + Sync {
     /// Store a new ATProtocol OAuth session
@@ -104,167 +73,7 @@ pub trait AtpOAuthSessionStorage: Send + Sync {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
-/// In-memory implementation of ATProtocol OAuth session storage
-#[derive(Default)]
-pub struct MemoryAtpOAuthSessionStorage {
-    sessions: tokio::sync::RwLock<HashMap<String, AtpOAuthSession>>, // session_key -> session
-    state_index: tokio::sync::RwLock<HashMap<String, String>>,       // atp_state -> session_key
-    session_iterations: tokio::sync::RwLock<HashMap<String, Vec<u32>>>, // (did, session_id) -> iterations
-}
-
-impl MemoryAtpOAuthSessionStorage {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Generate a unique session key from DID, session_id, and iteration
-    fn session_key(did: &str, session_id: &str, iteration: u32) -> String {
-        format!("{}:{}:{}", did, session_id, iteration)
-    }
-
-    /// Generate a session index key from DID and session_id
-    fn session_index_key(did: &str, session_id: &str) -> String {
-        format!("{}:{}", did, session_id)
-    }
-}
-
-#[async_trait::async_trait]
-impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
-    async fn store_session(
-        &self,
-        session: &AtpOAuthSession,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut sessions = self.sessions.write().await;
-        let mut state_index = self.state_index.write().await;
-        let mut session_iterations = self.session_iterations.write().await;
-
-        let session_key = Self::session_key(&session.did, &session.session_id, session.iteration);
-        let index_key = Self::session_index_key(&session.did, &session.session_id);
-
-        // Store the session
-        sessions.insert(session_key.clone(), session.clone());
-
-        // Update state index
-        state_index.insert(session.atp_oauth_state.clone(), session_key);
-
-        // Update iterations index
-        let iterations = session_iterations.entry(index_key).or_insert_with(Vec::new);
-        if !iterations.contains(&session.iteration) {
-            iterations.push(session.iteration);
-            iterations.sort_by(|a, b| b.cmp(a)); // Sort highest to lowest
-        }
-
-        Ok(())
-    }
-
-    async fn get_sessions(
-        &self,
-        did: &str,
-        session_id: &str,
-    ) -> Result<Vec<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>> {
-        let sessions = self.sessions.read().await;
-        let session_iterations = self.session_iterations.read().await;
-
-        let index_key = Self::session_index_key(did, session_id);
-        tracing::warn!(?did, ?session_id, "getting sessions");
-
-        if let Some(iterations) = session_iterations.get(&index_key) {
-            let mut result = Vec::new();
-            for &iteration in iterations {
-                let session_key = Self::session_key(did, session_id, iteration);
-                if let Some(session) = sessions.get(&session_key) {
-                    result.push(session.clone());
-                }
-            }
-            Ok(result)
-        } else {
-            Ok(Vec::new())
-        }
-    }
-
-    async fn get_session(
-        &self,
-        did: &str,
-        session_id: &str,
-        iteration: u32,
-    ) -> Result<Option<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>> {
-        let sessions = self.sessions.read().await;
-        let session_key = Self::session_key(did, session_id, iteration);
-        tracing::warn!(?did, ?session_id, ?iteration, "getting specific session");
-        Ok(sessions.get(&session_key).cloned())
-    }
-
-    async fn get_session_by_atp_state(
-        &self,
-        atp_state: &str,
-    ) -> Result<Option<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>> {
-        let state_index = self.state_index.read().await;
-        if let Some(session_key) = state_index.get(atp_state) {
-            let sessions = self.sessions.read().await;
-            Ok(sessions.get(session_key).cloned())
-        } else {
-            Ok(None)
-        }
-    }
-
-    async fn update_session_tokens(
-        &self,
-        did: &str,
-        session_id: &str,
-        iteration: u32,
-        access_token: Option<String>,
-        refresh_token: Option<String>,
-        access_token_created_at: Option<DateTime<Utc>>,
-        access_token_expires_at: Option<DateTime<Utc>>,
-        access_token_scopes: Option<Vec<String>>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut sessions = self.sessions.write().await;
-        let session_key = Self::session_key(did, session_id, iteration);
-        if let Some(session) = sessions.get_mut(&session_key) {
-            session.access_token = access_token;
-            session.refresh_token = refresh_token;
-            session.access_token_created_at = access_token_created_at;
-            session.access_token_expires_at = access_token_expires_at;
-            session.access_token_scopes = access_token_scopes;
-        }
-        tracing::warn!(?did, ?session_id, ?iteration, "updating session tokens");
-        Ok(())
-    }
-
-    async fn remove_session(
-        &self,
-        did: &str,
-        session_id: &str,
-        iteration: u32,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut sessions = self.sessions.write().await;
-        let mut state_index = self.state_index.write().await;
-        let mut session_iterations = self.session_iterations.write().await;
-
-        let session_key = Self::session_key(did, session_id, iteration);
-        let index_key = Self::session_index_key(did, session_id);
-
-        if let Some(session) = sessions.remove(&session_key) {
-            // Remove from state index
-            state_index.remove(&session.atp_oauth_state);
-
-            // Remove iteration from the iterations list
-            if let Some(iterations) = session_iterations.get_mut(&index_key) {
-                iterations.retain(|&i| i != iteration);
-                // If no more iterations, remove the entire entry
-                if iterations.is_empty() {
-                    session_iterations.remove(&index_key);
-                }
-            }
-        }
-
-        tracing::warn!(?did, ?session_id, ?iteration, "deleting session");
-
-        Ok(())
-    }
-}
-
-/// Storage trait for OAuth authorization requests
+/// Storage trait for OAuth authorization requests (legacy interface)
 #[async_trait::async_trait]
 pub trait AuthorizationRequestStorage: Send + Sync {
     /// Store an authorization request by session ID
@@ -285,53 +94,6 @@ pub trait AuthorizationRequestStorage: Send + Sync {
         &self,
         session_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-}
-
-/// In-memory implementation of authorization request storage
-#[derive(Default)]
-pub struct MemoryAuthorizationRequestStorage {
-    requests: tokio::sync::RwLock<HashMap<String, AuthorizationRequest>>,
-}
-
-impl MemoryAuthorizationRequestStorage {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-#[async_trait::async_trait]
-impl AuthorizationRequestStorage for MemoryAuthorizationRequestStorage {
-    async fn store_authorization_request(
-        &self,
-        session_id: &str,
-        request: &AuthorizationRequest,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut requests = self.requests.write().await;
-        requests.insert(session_id.to_string(), request.clone());
-
-        tracing::info!(?session_id, ?requests, "storing request");
-        Ok(())
-    }
-
-    async fn get_authorization_request(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<AuthorizationRequest>, Box<dyn std::error::Error + Send + Sync>> {
-        let requests = self.requests.read().await;
-
-        tracing::info!(?session_id, ?requests, "getting request");
-
-        Ok(requests.get(session_id).cloned())
-    }
-
-    async fn remove_authorization_request(
-        &self,
-        session_id: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut requests = self.requests.write().await;
-        requests.remove(session_id);
-        Ok(())
-    }
 }
 
 /// ATProtocol-backed OAuth authorization server
@@ -857,17 +619,23 @@ impl AtpBackedAuthorizationServer {
 mod tests {
     use super::*;
     use crate::oauth::auth_server::AuthorizationServer;
+    use crate::oauth::{
+        UnifiedAtpOAuthSessionStorageAdapter, UnifiedAuthorizationRequestStorageAdapter,
+    };
     use crate::storage::inmemory::MemoryOAuthStorage;
     use atproto_identity::resolve::{IdentityResolver, InnerIdentityResolver, create_resolver};
     use atproto_identity::storage_lru::LruDidDocumentStorage;
     use atproto_oauth::storage_lru::LruOAuthRequestStorage;
     use std::num::NonZeroUsize;
 
+    #[cfg(test)]
     fn create_test_atp_backed_server() -> AtpBackedAuthorizationServer {
-        // Create base OAuth server
+        // Create unified OAuth storage
         let oauth_storage = Arc::new(MemoryOAuthStorage::new());
+
+        // Create base OAuth server
         let base_server = Arc::new(AuthorizationServer::new(
-            oauth_storage,
+            oauth_storage.clone(),
             "https://localhost".to_string(),
         ));
 
@@ -907,11 +675,15 @@ mod tests {
             ),
         };
 
-        // Create session storage
-        let session_storage = Arc::new(MemoryAtpOAuthSessionStorage::new());
+        // Create session storage using unified adapter
+        let session_storage = Arc::new(UnifiedAtpOAuthSessionStorageAdapter::new(
+            oauth_storage.clone(),
+        ));
 
-        // Create authorization request storage
-        let authorization_request_storage = Arc::new(MemoryAuthorizationRequestStorage::new());
+        // Create authorization request storage using unified adapter
+        let authorization_request_storage = Arc::new(
+            UnifiedAuthorizationRequestStorageAdapter::new(oauth_storage.clone()),
+        );
 
         AtpBackedAuthorizationServer::new(
             base_server,
@@ -928,7 +700,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_authorization_request_storage() {
-        let storage = MemoryAuthorizationRequestStorage::new();
+        let oauth_storage = Arc::new(MemoryOAuthStorage::new());
+        let storage = UnifiedAuthorizationRequestStorageAdapter::new(oauth_storage);
 
         let request = AuthorizationRequest {
             response_type: vec![ResponseType::Code],
@@ -981,7 +754,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_atp_oauth_session_storage() {
-        let storage = MemoryAtpOAuthSessionStorage::new();
+        let oauth_storage = Arc::new(MemoryOAuthStorage::new());
+        let storage = UnifiedAtpOAuthSessionStorageAdapter::new(oauth_storage);
 
         let session = AtpOAuthSession {
             session_id: "session-1".to_string(),
@@ -1163,7 +937,8 @@ mod tests {
     #[test]
     fn test_session_storage_operations() {
         tokio::runtime::Runtime::new().unwrap().block_on(async {
-            let storage = MemoryAtpOAuthSessionStorage::new();
+            let oauth_storage = Arc::new(MemoryOAuthStorage::new());
+            let storage = UnifiedAtpOAuthSessionStorageAdapter::new(oauth_storage);
 
             // Test that non-existent session returns empty list
             let result = storage

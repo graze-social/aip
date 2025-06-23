@@ -21,8 +21,8 @@ pub use crate::storage::{
     },
 };
 pub use atprotocol_bridge::{
-    AtpBackedAuthorizationServer, AtpOAuthSessionStorage, MemoryAtpOAuthSessionStorage,
-    UnifiedAtpOAuthSessionStorageAdapter, UnifiedAuthorizationRequestStorageAdapter,
+    AtpBackedAuthorizationServer, AtpOAuthSessionStorage, UnifiedAtpOAuthSessionStorageAdapter,
+    UnifiedAuthorizationRequestStorageAdapter,
 };
 pub use auth_server::{AuthorizationServer, AuthorizeQuery, AuthorizeResponse, TokenForm};
 pub use clients::ClientRegistrationService;
