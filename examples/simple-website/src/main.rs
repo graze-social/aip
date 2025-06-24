@@ -278,7 +278,10 @@ fn generate_pkce() -> (String, String) {
     use sha2::{Digest, Sha256};
 
     // Generate code verifier (43-128 characters, URL-safe)
-    let code_verifier = generate_from_alphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~", 43);
+    let code_verifier = generate_from_alphabet(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~",
+        43,
+    );
 
     // Generate code challenge (SHA256 hash of verifier, base64url encoded)
     let mut hasher = Sha256::new();
@@ -291,7 +294,10 @@ fn generate_pkce() -> (String, String) {
 
 /// Generate random state parameter
 fn generate_state() -> String {
-    generate_from_alphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 32)
+    generate_from_alphabet(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
+        32,
+    )
 }
 
 /// Register a dynamic OAuth client with the AIP server (RFC 7591)
