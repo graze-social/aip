@@ -259,20 +259,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Get a secure random token of specified length from a provided alphabet
+///
+/// SECURITY: rand's thread_rng uses the same generator as StdRng, a cryptographically secure PRNG
+fn generate_from_alphabet(alphabet: &str, n: usize) -> String {
+    use rand::seq::SliceRandom;
+    alphabet
+        .chars()
+        .collect::<Vec<char>>()
+        .choose_multiple(&mut rand::thread_rng(), n)
+        .cloned()
+        .collect()
+}
+
 /// Generate PKCE code verifier and challenge
 fn generate_pkce() -> (String, String) {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-    use rand::Rng;
     use sha2::{Digest, Sha256};
 
     // Generate code verifier (43-128 characters, URL-safe)
-    let mut rng = rand::thread_rng();
-    let code_verifier: String = (0..43)
-        .map(|_| {
-            let chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-            chars[rng.gen_range(0..chars.len())] as char
-        })
-        .collect();
+    let code_verifier = generate_from_alphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~", 43);
 
     // Generate code challenge (SHA256 hash of verifier, base64url encoded)
     let mut hasher = Sha256::new();
@@ -285,14 +291,7 @@ fn generate_pkce() -> (String, String) {
 
 /// Generate random state parameter
 fn generate_state() -> String {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    (0..32)
-        .map(|_| {
-            let chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-            chars[rng.gen_range(0..chars.len())] as char
-        })
-        .collect()
+    generate_from_alphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 32)
 }
 
 /// Register a dynamic OAuth client with the AIP server (RFC 7591)
