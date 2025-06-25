@@ -5,28 +5,16 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{{ title }}{% endblock %}</title>
-    <meta name="description" content="AIP - ATProtocol Identity Provider for managing OAuth and app-passwords">
+    {% if canonical_url %}
+    <link rel="canonical" href="{{ canonical_url }}">
+    {% endif %}
     <link rel="stylesheet" href="/static/pico.css">
     <link rel="stylesheet" href="/static/pico.colors.css">
-    {% block head %}{% endblock %}
+    {% block head %}
+    {% endblock %}
 </head>
 <body>
-    <nav>
-        <ul>
-            <li><strong>AIP</strong></li>
-        </ul>
-        <ul>
-            <li><a href="/">Home</a></li>
-            <li><a href="/identity">Identity</a></li>
-        </ul>
-    </nav>
-    <main class="container">
-        {% block content %}{% endblock %}
-    </main>
-    <footer class="container">
-        <small>
-            AIP v{{ version }} - ATProtocol Identity Provider
-        </small>
-    </footer>
+    {% include 'nav.html' %}
+    {% block content %}{% endblock %}
 </body>
 </html>

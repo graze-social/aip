@@ -1,56 +1,59 @@
 {% extends "base.html" %}
-
-{% block title %}Sign In - {{ title }}{% endblock %}
-
+{% block title %}AIP Login{% endblock %}
+{% block head %}
+<meta property="og:title" content="AIP - ATProtocol Identity Provider">
+<meta name="description" content="AIP - ATProtocol Identity Provider for managing OAuth and app-passwords">
+{% endblock %}
 {% block content %}
 <header>
     <h1>Sign In</h1>
     <p>Please enter your ATProtocol handle or DID to continue with OAuth authorization</p>
 </header>
+<main>
+    <section>
+        <article>
+            <h3>Enter Your Identity</h3>
+            <form method="GET" action="/oauth/authorize">
+                {% for key in query_params %}
+                    {% if key != "login_hint" %}
+                        <input type="hidden" name="{{ key }}" value="{{ query_params[key] }}">
+                    {% endif %}
+                {% endfor %}
+                
+                <label for="login_hint">
+                    ATProtocol Handle or DID
+                    <input 
+                        type="text" 
+                        id="login_hint" 
+                        name="login_hint" 
+                        placeholder="user.bsky.social or did:plc:..." 
+                        required
+                        title="Enter a handle (e.g., user.bsky.social) or DID (e.g., did:plc:...)"
+                    >
+                </label>
+                <small>
+                    Enter your handle (like <code>user.bsky.social</code>) or DID (like <code>did:plc:xyz123...</code>)
+                </small>
+                
+                <button type="submit">Continue</button>
+            </form>
+        </article>
+    </section>
+    
+    {% if client_name %}
+    <section>
+        <details>
+            <summary>OAuth Request Details</summary>
+            <p><strong>Application:</strong> {{ client_name }}</p>
+            {% if scope %}
+            <p><strong>Requested Permissions:</strong> {{ scope }}</p>
+            {% endif %}
+            {% if redirect_uri %}
+            <p><strong>Redirect URI:</strong> <code>{{ redirect_uri }}</code></p>
+            {% endif %}
+        </details>
+    </section>
+    {% endif %}
+</main>
 
-<section>
-    <article>
-        <h3>Enter Your Identity</h3>
-        <form method="GET" action="/oauth/authorize">
-            {% for key in query_params %}
-                {% if key != "login_hint" %}
-                    <input type="hidden" name="{{ key }}" value="{{ query_params[key] }}">
-                {% endif %}
-            {% endfor %}
-            
-            <label for="login_hint">
-                ATProtocol Handle or DID
-                <input 
-                    type="text" 
-                    id="login_hint" 
-                    name="login_hint" 
-                    placeholder="user.bsky.social or did:plc:..." 
-                    required
-                    pattern="^(did:|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}).*$"
-                    title="Enter a handle (e.g., user.bsky.social) or DID (e.g., did:plc:...)"
-                >
-            </label>
-            <small>
-                Enter your handle (like <code>user.bsky.social</code>) or DID (like <code>did:plc:xyz123...</code>)
-            </small>
-            
-            <button type="submit">Continue</button>
-        </form>
-    </article>
-</section>
-
-{% if client_name %}
-<section>
-    <details>
-        <summary>OAuth Request Details</summary>
-        <p><strong>Application:</strong> {{ client_name }}</p>
-        {% if scope %}
-        <p><strong>Requested Permissions:</strong> {{ scope }}</p>
-        {% endif %}
-        {% if redirect_uri %}
-        <p><strong>Redirect URI:</strong> <code>{{ redirect_uri }}</code></p>
-        {% endif %}
-    </details>
-</section>
-{% endif %}
 {% endblock %}
