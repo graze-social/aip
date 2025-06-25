@@ -42,6 +42,7 @@ Configure via environment variables:
 ```bash
 # Required
 export EXTERNAL_BASE=http://localhost:8080
+export DPOP_NONCE_SEED=$(openssl rand -hex 32)
 
 # Optional
 export PORT=8080
@@ -49,6 +50,8 @@ export STORAGE_BACKEND=postgres  # postgres, sqlite, or inmemory
 export DATABASE_URL=postgresql://user:pass@localhost/aip
 export LOG_LEVEL=info
 ```
+
+see [CONFIGURATION.md](./CONFIGURATION.md) for more.
 
 ## Architecture
 
@@ -174,18 +177,6 @@ docker run -p 8080:8080 \
 curl -H "Authorization: Bearer <jwt_token>" \
   http://localhost:8080/api/atprotocol/session
 ```
-
-## Configuration Reference
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `EXTERNAL_BASE` | Required | Public base URL of the server |
-| `PORT` | `8080` | HTTP server port |
-| `STORAGE_BACKEND` | `inmemory` | Storage backend: `inmemory`, `sqlite`, `postgres` |
-| `DATABASE_URL` | - | Database connection string (for SQLite/PostgreSQL) |
-| `LOG_LEVEL` | `info` | Log level: `trace`, `debug`, `info`, `warn`, `error` |
-| `TEMPLATE_PATH` | `templates/` | Template directory (development mode) |
-| `STATIC_PATH` | `static/` | Static files directory |
 
 ## Contributing
 
