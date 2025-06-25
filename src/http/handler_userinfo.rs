@@ -107,17 +107,6 @@ pub async fn get_userinfo_handler(
 
     claims = claims.with_nonce(access_token.nonce);
 
-    // let vague_claims = serde_json::to_value(claims).unwrap();
-    // let real_claims: atproto_oauth::jwt::Claims = serde_json::from_value(vague_claims).unwrap();
-
-    // let private_signing_key_data = state.atproto_oauth_signing_keys.first().unwrap();
-    // let header: Header = private_signing_key_data.clone().try_into().unwrap();
-    // let client_assertion_token = mint(
-    //     private_signing_key_data,
-    //     &header,
-    //     &real_claims,
-    // ).unwrap();
-
     Ok(Json(claims))
 }
 
@@ -245,9 +234,56 @@ mod tests {
     #[tokio::test]
     async fn test_userinfo_handler_without_atproto_scopes() {
         use crate::oauth::types::{AccessToken, TokenType};
+        use crate::storage::traits::AtpOAuthSession;
+        use atproto_identity::key::{KeyType, generate_key};
         use chrono::Utc;
 
         let app_state = create_test_app_state();
+
+        // Create and store a test DID document
+        let test_document = serde_json::from_value(serde_json::json!({
+            "id": "did:plc:test123",
+            "alsoKnownAs": [],
+            "service": [{
+                "id": "#atproto_pds",
+                "type": "AtprotoPersonalDataServer",
+                "serviceEndpoint": "https://bsky.social"
+            }],
+            "verificationMethod": []
+        }))
+        .unwrap();
+        app_state
+            .document_storage
+            .store_document(test_document)
+            .await
+            .unwrap();
+
+        // Generate a test DPoP key
+        let dpop_key = generate_key(KeyType::P256Private).unwrap();
+        let dpop_key_data = dpop_key.to_string();
+
+        // Create and store a test ATProtocol OAuth session
+        let test_session = AtpOAuthSession {
+            session_id: "test-session".to_string(),
+            did: "did:plc:test123".to_string(),
+            session_created_at: Utc::now(),
+            atp_oauth_state: "test-atp-state".to_string(),
+            signing_key_jkt: "test-jkt".to_string(),
+            dpop_key: dpop_key_data,
+            access_token: Some("test-atp-access-token".to_string()),
+            refresh_token: Some("test-atp-refresh-token".to_string()),
+            access_token_created_at: Some(Utc::now()),
+            access_token_expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
+            access_token_scopes: Some(vec!["atproto:atproto".to_string()]),
+            session_exchanged_at: Some(Utc::now()),
+            exchange_error: None,
+            iteration: 1,
+        };
+        app_state
+            .atp_session_storage
+            .store_session(&test_session)
+            .await
+            .unwrap();
 
         // Create an access token without ATProtocol scopes
         let access_token = AccessToken {
@@ -314,9 +350,56 @@ mod tests {
     #[tokio::test]
     async fn test_userinfo_handler_without_atproto_scopes_minimal() {
         use crate::oauth::types::{AccessToken, TokenType};
+        use crate::storage::traits::AtpOAuthSession;
+        use atproto_identity::key::{KeyType, generate_key};
         use chrono::Utc;
 
         let app_state = create_test_app_state();
+
+        // Create and store a test DID document
+        let test_document = serde_json::from_value(serde_json::json!({
+            "id": "did:plc:user123",
+            "alsoKnownAs": [],
+            "service": [{
+                "id": "#atproto_pds",
+                "type": "AtprotoPersonalDataServer",
+                "serviceEndpoint": "https://bsky.social"
+            }],
+            "verificationMethod": []
+        }))
+        .unwrap();
+        app_state
+            .document_storage
+            .store_document(test_document)
+            .await
+            .unwrap();
+
+        // Generate a test DPoP key
+        let dpop_key = generate_key(KeyType::P256Private).unwrap();
+        let dpop_key_data = dpop_key.to_string();
+
+        // Create and store a test ATProtocol OAuth session
+        let test_session = AtpOAuthSession {
+            session_id: "test-session".to_string(),
+            did: "did:plc:user123".to_string(),
+            session_created_at: Utc::now(),
+            atp_oauth_state: "test-atp-state".to_string(),
+            signing_key_jkt: "test-jkt".to_string(),
+            dpop_key: dpop_key_data,
+            access_token: Some("test-atp-access-token".to_string()),
+            refresh_token: Some("test-atp-refresh-token".to_string()),
+            access_token_created_at: Some(Utc::now()),
+            access_token_expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
+            access_token_scopes: Some(vec!["atproto:atproto".to_string()]),
+            session_exchanged_at: Some(Utc::now()),
+            exchange_error: None,
+            iteration: 1,
+        };
+        app_state
+            .atp_session_storage
+            .store_session(&test_session)
+            .await
+            .unwrap();
 
         // Create an access token with non-ATProtocol scopes
         let access_token = AccessToken {

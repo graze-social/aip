@@ -1,6 +1,7 @@
 //! Axum HTTP server handlers and middleware for OAuth 2.1 and ATProtocol endpoints.
 
 pub mod context;
+mod handler_app_password;
 mod handler_atprotocol_client_metadata;
 mod handler_atprotocol_oauth_authorize;
 mod handler_atprotocol_oauth_callback;

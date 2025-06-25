@@ -29,6 +29,9 @@ pub struct MemoryOAuthStorage {
     atp_session_iterations: tokio::sync::RwLock<HashMap<String, Vec<u32>>>, // (did, session_id) -> iterations
     // Authorization request storage
     auth_requests: tokio::sync::RwLock<HashMap<String, AuthorizationRequest>>,
+    // App password storage
+    app_passwords: tokio::sync::RwLock<HashMap<String, AppPassword>>, // "client_id:did" -> AppPassword
+    app_password_sessions: tokio::sync::RwLock<HashMap<String, AppPasswordSession>>, // "client_id:did" -> AppPasswordSession
 }
 
 impl MemoryOAuthStorage {
@@ -44,6 +47,11 @@ impl MemoryOAuthStorage {
     /// Generate a session index key from DID and session_id
     fn session_index_key(did: &str, session_id: &str) -> String {
         format!("{}:{}", did, session_id)
+    }
+
+    /// Generate a unique app password key from client_id and DID
+    fn app_password_key(client_id: &str, did: &str) -> String {
+        format!("{}:{}", client_id, did)
     }
 }
 
@@ -568,6 +576,121 @@ impl AuthorizationRequestStorage for MemoryOAuthStorage {
         let mut requests = self.auth_requests.write().await;
         requests.remove(session_id);
         Ok(())
+    }
+}
+
+#[async_trait]
+impl AppPasswordStore for MemoryOAuthStorage {
+    async fn store_app_password(&self, app_password: &AppPassword) -> Result<()> {
+        let mut passwords = self.app_passwords.write().await;
+        let key = Self::app_password_key(&app_password.client_id, &app_password.did);
+        passwords.insert(key, app_password.clone());
+        Ok(())
+    }
+
+    async fn get_app_password(&self, client_id: &str, did: &str) -> Result<Option<AppPassword>> {
+        let passwords = self.app_passwords.read().await;
+        let key = Self::app_password_key(client_id, did);
+        Ok(passwords.get(&key).cloned())
+    }
+
+    async fn delete_app_password(&self, client_id: &str, did: &str) -> Result<()> {
+        let mut passwords = self.app_passwords.write().await;
+        let key = Self::app_password_key(client_id, did);
+        passwords.remove(&key);
+
+        // Also delete all associated sessions
+        let mut sessions = self.app_password_sessions.write().await;
+        sessions.remove(&key);
+
+        Ok(())
+    }
+
+    async fn list_app_passwords_by_did(&self, did: &str) -> Result<Vec<AppPassword>> {
+        let passwords = self.app_passwords.read().await;
+        let result: Vec<_> = passwords
+            .values()
+            .filter(|p| p.did == did)
+            .cloned()
+            .collect();
+        Ok(result)
+    }
+
+    async fn list_app_passwords_by_client(&self, client_id: &str) -> Result<Vec<AppPassword>> {
+        let passwords = self.app_passwords.read().await;
+        let result: Vec<_> = passwords
+            .values()
+            .filter(|p| p.client_id == client_id)
+            .cloned()
+            .collect();
+        Ok(result)
+    }
+}
+
+#[async_trait]
+impl AppPasswordSessionStore for MemoryOAuthStorage {
+    async fn store_app_password_session(&self, session: &AppPasswordSession) -> Result<()> {
+        let mut sessions = self.app_password_sessions.write().await;
+        let key = Self::app_password_key(&session.client_id, &session.did);
+        sessions.insert(key, session.clone());
+        Ok(())
+    }
+
+    async fn get_app_password_session(
+        &self,
+        client_id: &str,
+        did: &str,
+    ) -> Result<Option<AppPasswordSession>> {
+        let sessions = self.app_password_sessions.read().await;
+        let key = Self::app_password_key(client_id, did);
+        Ok(sessions.get(&key).cloned())
+    }
+
+    async fn update_app_password_session(&self, session: &AppPasswordSession) -> Result<()> {
+        let mut sessions = self.app_password_sessions.write().await;
+        let key = Self::app_password_key(&session.client_id, &session.did);
+
+        if let std::collections::hash_map::Entry::Occupied(mut e) = sessions.entry(key) {
+            e.insert(session.clone());
+            Ok(())
+        } else {
+            Err(StorageError::QueryFailed(
+                "App password session not found".to_string(),
+            ))
+        }
+    }
+
+    async fn delete_app_password_sessions(&self, client_id: &str, did: &str) -> Result<()> {
+        let mut sessions = self.app_password_sessions.write().await;
+        let key = Self::app_password_key(client_id, did);
+        sessions.remove(&key);
+        Ok(())
+    }
+
+    async fn list_app_password_sessions_by_did(
+        &self,
+        did: &str,
+    ) -> Result<Vec<AppPasswordSession>> {
+        let sessions = self.app_password_sessions.read().await;
+        let result: Vec<_> = sessions
+            .values()
+            .filter(|s| s.did == did)
+            .cloned()
+            .collect();
+        Ok(result)
+    }
+
+    async fn list_app_password_sessions_by_client(
+        &self,
+        client_id: &str,
+    ) -> Result<Vec<AppPasswordSession>> {
+        let sessions = self.app_password_sessions.read().await;
+        let result: Vec<_> = sessions
+            .values()
+            .filter(|s| s.client_id == client_id)
+            .cloned()
+            .collect();
+        Ok(result)
     }
 }
 

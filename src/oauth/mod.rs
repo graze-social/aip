@@ -8,6 +8,7 @@ pub mod dpop_nonce;
 pub mod openid;
 pub mod resource_server;
 pub mod types;
+pub mod utils_app_password;
 pub mod utils_atprotocol_oauth;
 
 #[cfg(test)]
@@ -35,4 +36,8 @@ pub use types::{
     ClientRegistrationRequest, ClientRegistrationResponse, ClientType, GrantType, OAuthClient,
     OAuthErrorResponse, RefreshToken, ResponseType, TokenRequest, TokenResponse, TokenType,
     parse_scope,
+};
+pub use utils_app_password::{
+    authenticate_with_app_password, create_app_password_session,
+    get_app_password_session_with_refresh, refresh_app_password_session,
 };

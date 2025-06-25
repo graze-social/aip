@@ -4,6 +4,7 @@
 //! PostgreSQL is suitable for production deployments with high availability requirements.
 
 mod access_tokens;
+mod app_passwords;
 mod atp_oauth_sessions;
 mod authorization_codes;
 mod authorization_requests;
@@ -21,6 +22,7 @@ use sqlx::postgres::PgPool;
 use std::sync::Arc;
 
 pub use access_tokens::PostgresAccessTokenStore;
+pub use app_passwords::{PostgresAppPasswordSessionStore, PostgresAppPasswordStore};
 pub use atp_oauth_sessions::PostgresAtpOAuthSessionStorage;
 pub use authorization_codes::PostgresAuthorizationCodeStore;
 pub use authorization_requests::PostgresAuthorizationRequestStorage;
@@ -46,6 +48,8 @@ pub struct PostgresOAuthStorage {
     authorization_request_storage: Arc<PostgresAuthorizationRequestStorage>,
     did_document_storage: Arc<PostgresDidDocumentStorage>,
     oauth_request_storage: Arc<PostgresOAuthRequestStorage>,
+    app_password_store: Arc<PostgresAppPasswordStore>,
+    app_password_session_store: Arc<PostgresAppPasswordSessionStore>,
 }
 
 impl PostgresOAuthStorage {
@@ -62,6 +66,9 @@ impl PostgresOAuthStorage {
             Arc::new(PostgresAuthorizationRequestStorage::new(pool.clone()));
         let did_document_storage = Arc::new(PostgresDidDocumentStorage::new(pool.clone()));
         let oauth_request_storage = Arc::new(PostgresOAuthRequestStorage::new(pool.clone()));
+        let app_password_store = Arc::new(PostgresAppPasswordStore::new(pool.clone()));
+        let app_password_session_store =
+            Arc::new(PostgresAppPasswordSessionStore::new(pool.clone()));
 
         Self {
             pool,
@@ -75,6 +82,8 @@ impl PostgresOAuthStorage {
             authorization_request_storage,
             did_document_storage,
             oauth_request_storage,
+            app_password_store,
+            app_password_session_store,
         }
     }
 
@@ -402,6 +411,86 @@ impl atproto_oauth::storage::OAuthRequestStorage for PostgresOAuthStorage {
     async fn clear_expired_oauth_requests(&self) -> anyhow::Result<u64> {
         self.oauth_request_storage
             .clear_expired_oauth_requests()
+            .await
+    }
+}
+
+#[async_trait]
+impl AppPasswordStore for PostgresOAuthStorage {
+    async fn store_app_password(&self, app_password: &AppPassword) -> Result<()> {
+        self.app_password_store
+            .store_app_password(app_password)
+            .await
+    }
+
+    async fn get_app_password(&self, client_id: &str, did: &str) -> Result<Option<AppPassword>> {
+        self.app_password_store
+            .get_app_password(client_id, did)
+            .await
+    }
+
+    async fn delete_app_password(&self, client_id: &str, did: &str) -> Result<()> {
+        self.app_password_store
+            .delete_app_password(client_id, did)
+            .await
+    }
+
+    async fn list_app_passwords_by_did(&self, did: &str) -> Result<Vec<AppPassword>> {
+        self.app_password_store.list_app_passwords_by_did(did).await
+    }
+
+    async fn list_app_passwords_by_client(&self, client_id: &str) -> Result<Vec<AppPassword>> {
+        self.app_password_store
+            .list_app_passwords_by_client(client_id)
+            .await
+    }
+}
+
+#[async_trait]
+impl AppPasswordSessionStore for PostgresOAuthStorage {
+    async fn store_app_password_session(&self, session: &AppPasswordSession) -> Result<()> {
+        self.app_password_session_store
+            .store_app_password_session(session)
+            .await
+    }
+
+    async fn get_app_password_session(
+        &self,
+        client_id: &str,
+        did: &str,
+    ) -> Result<Option<AppPasswordSession>> {
+        self.app_password_session_store
+            .get_app_password_session(client_id, did)
+            .await
+    }
+
+    async fn update_app_password_session(&self, session: &AppPasswordSession) -> Result<()> {
+        self.app_password_session_store
+            .update_app_password_session(session)
+            .await
+    }
+
+    async fn delete_app_password_sessions(&self, client_id: &str, did: &str) -> Result<()> {
+        self.app_password_session_store
+            .delete_app_password_sessions(client_id, did)
+            .await
+    }
+
+    async fn list_app_password_sessions_by_did(
+        &self,
+        did: &str,
+    ) -> Result<Vec<AppPasswordSession>> {
+        self.app_password_session_store
+            .list_app_password_sessions_by_did(did)
+            .await
+    }
+
+    async fn list_app_password_sessions_by_client(
+        &self,
+        client_id: &str,
+    ) -> Result<Vec<AppPasswordSession>> {
+        self.app_password_session_store
+            .list_app_password_sessions_by_client(client_id)
             .await
     }
 }
