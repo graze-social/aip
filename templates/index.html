@@ -1,37 +1,14 @@
 {% extends "base.html" %}
-
-{% block title %}{{ title }}{% endblock %}
-
-{% block content %}
-<header>
-    <h1>Welcome to AIP</h1>
-    <p>ATProtocol Identity Provider - Manage your OAuth and app-passwords</p>
-</header>
-
-<section>
-    <h2>About AIP</h2>
-    <p>
-        AIP is a web application that manages ATProtocol access tokens using OAuth and app-passwords. 
-        It provides a secure and convenient way to authenticate and authorize applications that interact 
-        with the ATProtocol ecosystem.
-    </p>
-</section>
-
-<section>
-    <h2>Features</h2>
-    <ul>
-        <li>OAuth authentication flow support</li>
-        <li>App-password management</li>
-        <li>ATProtocol identity resolution</li>
-        <li>Secure token management</li>
-    </ul>
-</section>
-
-<section>
-    <h2>Getting Started</h2>
-    <p>
-        To get started with AIP, navigate to the <a href="/identity">Identity</a> page to manage your 
-        ATProtocol identities and authentication methods.
-    </p>
-</section>
+{% block title %}AIP - ATProtocol Identity Provider{% endblock %}
+{% block head %}
+<meta property="og:title" content="AIP - ATProtocol Identity Provider">
+<meta name="description" content="AIP - ATProtocol Identity Provider for managing OAuth and app-passwords">
 {% endblock %}
+{% block content %}
+<main>
+    <section>
+        <h1 id="about">About</h1>
+        <p>ATProtocol Identity Provider (AIP) is an OAuth 2.0 and OpenID Connect (OIDC) service supporting ATProtocol identities.</p>
+    </section>
+</main>
+{% endblock %} 
