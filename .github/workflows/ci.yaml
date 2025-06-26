@@ -58,9 +58,9 @@ jobs:
             runs-on: ubuntu-24.04
             target: x86_64-unknown-linux-musl
 
-          - os-name: Linux-aarch64
-            runs-on: ubuntu-24.04
-            target: aarch64-unknown-linux-musl
+          # - os-name: Linux-aarch64
+          #   runs-on: ubuntu-24.04
+          #   target: aarch64-unknown-linux-musl
 
     runs-on: ubuntu-24.04
     steps:
@@ -72,9 +72,6 @@ jobs:
 
       - name: build_and_test_binary
         uses: houseabsolute/actions-rust-cross@v1
-        env:
-          OPENSSL_DIR: /usr/local/ssl
-          OPENSSL_INCLUDE_DIR: /usr/include/openssl/
         with:
           command: both
           target: ${{ matrix.platform.target }}
