@@ -9,7 +9,6 @@ env:
 
 jobs:
   lint_and_fmt:
-    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - name: checkout
