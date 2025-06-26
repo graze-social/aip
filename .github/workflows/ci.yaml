@@ -72,6 +72,8 @@ jobs:
 
       - name: build_and_test_binary
         uses: houseabsolute/actions-rust-cross@v1
+        env:
+          OPENSSL_DIR: /usr/local/ssl
         with:
           command: both
           target: ${{ matrix.platform.target }}
