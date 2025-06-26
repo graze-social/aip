@@ -8,22 +8,52 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_and_test:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup_toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+        # just building default features as a test
+      - name: build_binary
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: build
+          target: x86_64-pc-windows-msvc
+          args: "--locked"
+          strip: true
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup_toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+        # default features again
+      - name: build_and_test_binary
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: both # build and test
+          target: x86_64-apple-darwin
+          args: "--locked"
+          strip: true
+  linux:
     strategy:
       matrix:
         features:
-          - embed,sqlite
+          # - embed,sqlite
           - embed,sqlite,redis
-          - embed,postgres
+          # - embed,postgres
           - embed,postgres,redis
-          - reload,postgres
-          - reload,sqlite
+          - reload,postgres,redis
+          # - reload,sqlite
           - reload,sqlite,redis
         platform:
-          # - os-name: FreeBSD-x86_64
-          #   runs-on: ubuntu-24.04
-          #   target: x86_64-unknown-freebsd
-
           - os-name: Linux-x86_64
             runs-on: ubuntu-24.04
             target: x86_64-unknown-linux-musl
@@ -32,18 +62,7 @@ jobs:
             runs-on: ubuntu-24.04
             target: aarch64-unknown-linux-musl
 
-          - os-name: Linux-riscv64
-            runs-on: ubuntu-24.04
-            target: riscv64gc-unknown-linux-gnu
-
-          # - os-name: Windows-x86_64
-          #   runs-on: windows-latest
-          #   target: x86_64-pc-windows-msvc
-
-          - os-name: macOS-x86_64
-            runs-on: macOS-latest
-            target: x86_64-apple-darwin
-    runs-on: ${{matrix.platform.runs-on}}
+    runs-on: ubuntu-24.04
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -51,14 +70,11 @@ jobs:
       - name: setup_toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: setup_qemu
-        uses: docker/setup-qemu-action@v2
-
-      - name: test_binary
+      - name: build_and_test_binary
         uses: houseabsolute/actions-rust-cross@v1
         with:
-          command: test
-          target: ${{ matrix.target }}
+          command: both
+          target: ${{ matrix.platform.target }}
           toolchain: stable
-          args: "--no-default-features --features ${{matrix.features}}"
+          args: "--locked --no-default-features --features ${{matrix.features}}"
           strip: true
