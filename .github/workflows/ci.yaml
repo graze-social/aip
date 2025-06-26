@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    strategy:
+      matrix:
+        features:
+          - embed,sqlite
+          - embed,sqlite,redis
+          - embed,postgres
+          - embed,postgres,redis
+          - reload,postgres
+          - reload,sqlite
+          - reload,sqlite,redis
+        platform:
+          # - os-name: FreeBSD-x86_64
+          #   runs-on: ubuntu-24.04
+          #   target: x86_64-unknown-freebsd
+
+          - os-name: Linux-x86_64
+            runs-on: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+
+          - os-name: Linux-aarch64
+            runs-on: ubuntu-24.04
+            target: aarch64-unknown-linux-musl
+
+          - os-name: Linux-riscv64
+            runs-on: ubuntu-24.04
+            target: riscv64gc-unknown-linux-gnu
+
+          # - os-name: Windows-x86_64
+          #   runs-on: windows-latest
+          #   target: x86_64-pc-windows-msvc
+
+          - os-name: macOS-x86_64
+            runs-on: macOS-latest
+            target: x86_64-apple-darwin
+    runs-on: ${{matrix.platform.runs-on}}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: setup_toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: setup_qemu
+        uses: docker/setup-qemu-action@v2
+
+      - name: test_binary
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: test
+          target: ${{ matrix.target }}
+          toolchain: stable
+          args: "--no-default-features --features ${{matrix.features}}"
+          strip: true
