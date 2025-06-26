@@ -74,6 +74,7 @@ jobs:
         uses: houseabsolute/actions-rust-cross@v1
         env:
           OPENSSL_DIR: /usr/local/ssl
+          OPENSSL_INCLUDE_DIR: /usr/include/openssl/
         with:
           command: both
           target: ${{ matrix.platform.target }}
