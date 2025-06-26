@@ -76,5 +76,5 @@ jobs:
           command: both
           target: ${{ matrix.platform.target }}
           toolchain: stable
-          args: "--locked --no-default-features --features ${{matrix.features}}"
+          args: "--no-default-features --features ${{matrix.features}}"
           strip: true
