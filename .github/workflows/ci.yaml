@@ -21,7 +21,7 @@ jobs:
       - name: build_binary
         uses: houseabsolute/actions-rust-cross@v1
         with:
-          command: build
+          command: both
           target: x86_64-pc-windows-msvc
           args: "--locked"
           strip: true
@@ -46,21 +46,17 @@ jobs:
     strategy:
       matrix:
         features:
-          # - embed,sqlite
           - embed,sqlite,redis
-          # - embed,postgres
           - embed,postgres,redis
           - reload,postgres,redis
-          # - reload,sqlite
           - reload,sqlite,redis
         platform:
           - os-name: Linux-x86_64
             runs-on: ubuntu-24.04
             target: x86_64-unknown-linux-musl
-
-          # - os-name: Linux-aarch64
-          #   runs-on: ubuntu-24.04
-          #   target: aarch64-unknown-linux-musl
+          - os-name: Linux-aarch64
+            runs-on: ubuntu-24.04
+            target: aarch64-unknown-linux-musl
 
     runs-on: ubuntu-24.04
     steps:
