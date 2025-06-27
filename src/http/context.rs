@@ -13,7 +13,6 @@ use std::sync::Arc;
 use crate::oauth::{
     atprotocol_bridge::{AtpOAuthSessionStorage, AuthorizationRequestStorage},
     clients::registration::ClientRegistrationService,
-    resource_server::ResourceServer,
 };
 use crate::storage::traits::OAuthStorage;
 use crate::{config::Config, oauth::DPoPNonceProvider};
@@ -50,8 +49,7 @@ pub struct AppState {
     pub document_storage: Arc<dyn DidDocumentStorage + Send + Sync>,
     /// OAuth storage for tokens, clients, and codes
     pub oauth_storage: Arc<dyn OAuthStorage + Send + Sync>,
-    /// Resource server for OAuth token validation
-    pub resource_server: Arc<ResourceServer>,
+
     /// Client registration service for dynamic client registration
     pub client_registration_service: Arc<ClientRegistrationService>,
     /// ATP OAuth session storage

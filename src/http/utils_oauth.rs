@@ -19,7 +19,6 @@ pub async fn create_base_auth_server(
 mod tests {
     use super::*;
     use crate::oauth::DPoPNonceGenerator;
-    use crate::oauth::resource_server::ResourceServer;
     use crate::storage::SimpleKeyProvider;
     use crate::storage::inmemory::MemoryOAuthStorage;
     use atproto_identity::{resolve::create_resolver, storage_lru::LruDidDocumentStorage};
@@ -28,10 +27,6 @@ mod tests {
 
     fn create_test_app_state() -> AppState {
         let oauth_storage = Arc::new(MemoryOAuthStorage::new());
-        let resource_server = Arc::new(ResourceServer::new(
-            oauth_storage.clone(),
-            "https://localhost".to_string(),
-        ));
 
         let http_client = reqwest::Client::new();
         let dns_nameservers = vec![];
@@ -104,7 +99,6 @@ mod tests {
             oauth_request_storage,
             document_storage,
             oauth_storage,
-            resource_server,
             client_registration_service,
             atp_session_storage,
             authorization_request_storage,

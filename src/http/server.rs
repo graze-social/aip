@@ -13,7 +13,6 @@ use super::{
     handler_atprotocol_oauth_authorize::handle_oauth_authorize,
     handler_atprotocol_oauth_callback::handle_atpoauth_callback,
     handler_atprotocol_session::get_atprotocol_session_handler,
-    handler_hello_api::handle_hello_api,
     handler_index::handle_index,
     handler_oauth::handle_oauth_token,
     handler_oauth_clients::{
@@ -33,7 +32,6 @@ use crate::http::middleware_auth::set_dpop_headers;
 pub fn build_router(ctx: AppState) -> Router {
     // Create protected API routes with OAuth middleware
     let protected_api_routes = Router::new()
-        .route("/hello", get(handle_hello_api))
         .route("/atprotocol/session", get(get_atprotocol_session_handler))
         .route(
             "/atprotocol/app-password",
@@ -125,7 +123,6 @@ pub fn build_router(ctx: AppState) -> Router {
 mod tests {
     use super::*;
     use crate::oauth::DPoPNonceGenerator;
-    use crate::oauth::resource_server::ResourceServer;
     use crate::storage::SimpleKeyProvider;
     use crate::storage::inmemory::MemoryOAuthStorage;
     use atproto_identity::{resolve::create_resolver, storage_lru::LruDidDocumentStorage};
@@ -134,10 +131,6 @@ mod tests {
 
     fn create_test_app_state() -> AppState {
         let oauth_storage = Arc::new(MemoryOAuthStorage::new());
-        let resource_server = Arc::new(ResourceServer::new(
-            oauth_storage.clone(),
-            "https://localhost".to_string(),
-        ));
         let client_registration_service = Arc::new(crate::oauth::ClientRegistrationService::new(
             oauth_storage.clone(),
         ));
@@ -210,7 +203,6 @@ mod tests {
             oauth_request_storage,
             document_storage,
             oauth_storage,
-            resource_server,
             client_registration_service,
             atp_session_storage,
             authorization_request_storage,
