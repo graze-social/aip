@@ -26,7 +26,7 @@ pub use atprotocol_bridge::{
 };
 pub use auth_server::{AuthorizationServer, AuthorizeQuery, AuthorizeResponse, TokenForm};
 pub use clients::ClientRegistrationService;
-pub use dpop::{DPoPClaims, DPoPProof, DPoPValidator};
+pub use dpop::{DPoPProof, DPoPValidator};
 pub use dpop_nonce::{DPoPNonceGenerator, DPoPNonceProvider};
 pub use openid::OpenIDClaims;
 pub use types::{

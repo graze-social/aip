@@ -15,11 +15,14 @@ use ulid::Ulid;
 
 use super::context::AppState;
 use crate::errors::OAuthError;
-use crate::oauth::{auth_server::AuthorizationServer, types::*};
+use crate::oauth::{
+    auth_server::{AuthorizationServer, ClientAuthentication},
+    types::*,
+};
 
 /// PAR request parameters
 #[derive(Debug, Deserialize)]
-pub struct PushedAuthorizationRequest {
+pub(super) struct PushedAuthorizationRequest {
     pub response_type: String,
     pub client_id: String,
     pub redirect_uri: String,
@@ -38,7 +41,7 @@ pub struct PushedAuthorizationRequest {
 
 /// PAR response
 #[derive(Debug, Serialize)]
-pub struct PushedAuthorizationResponse {
+pub(super) struct PushedAuthorizationResponse {
     pub request_uri: String,
     pub expires_in: u64,
 }
@@ -288,13 +291,6 @@ fn authenticate_client(
             "private_key_jwt not implemented for PAR".to_string(),
         )),
     }
-}
-
-/// Client Authentication extracted from request
-#[derive(Debug, Clone)]
-pub struct ClientAuthentication {
-    pub client_id: String,
-    pub client_secret: Option<String>,
 }
 
 #[cfg(test)]

@@ -122,7 +122,7 @@ fn require_env(name: &str) -> Result<String> {
     std::env::var(name).map_err(|_| ConfigError::EnvVarRequired(name.to_string()).into())
 }
 
-pub fn optional_env(name: &str) -> Option<String> {
+pub(crate) fn optional_env(name: &str) -> Option<String> {
     std::env::var(name).ok()
 }
 
