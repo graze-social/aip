@@ -12,7 +12,6 @@ use aip::{
         UnifiedAuthorizationRequestStorageAdapter,
         atprotocol_bridge::{AtpOAuthSessionStorage, AuthorizationRequestStorage},
         clients::registration::ClientRegistrationService,
-        resource_server::ResourceServer,
     },
     storage::{
         StorageBackend, create_storage_backend, key_provider::SimpleKeyProvider,
@@ -246,12 +245,6 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Create resource server for OAuth token validation
-    let resource_server = Arc::new(ResourceServer::new(
-        oauth_storage.clone(),
-        config.external_base.clone(),
-    ));
-
     // Create client registration service for dynamic client registration
     let client_registration_service =
         Arc::new(ClientRegistrationService::new(oauth_storage.clone()));
@@ -266,7 +259,6 @@ async fn main() -> Result<()> {
         oauth_request_storage,
         document_storage,
         oauth_storage,
-        resource_server,
         client_registration_service,
         atp_session_storage,
         authorization_request_storage,

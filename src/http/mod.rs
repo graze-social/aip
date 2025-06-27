@@ -7,7 +7,6 @@ mod handler_atprotocol_oauth_authorize;
 mod handler_atprotocol_oauth_callback;
 mod handler_atprotocol_session;
 
-mod handler_hello_api;
 mod handler_index;
 mod handler_oauth;
 mod handler_oauth_clients;

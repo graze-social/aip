@@ -6,7 +6,6 @@ pub mod clients;
 pub mod dpop;
 pub mod dpop_nonce;
 pub mod openid;
-pub mod resource_server;
 pub mod types;
 pub mod utils_app_password;
 pub mod utils_atprotocol_oauth;
@@ -30,7 +29,6 @@ pub use clients::ClientRegistrationService;
 pub use dpop::{DPoPClaims, DPoPProof, DPoPValidator};
 pub use dpop_nonce::{DPoPNonceGenerator, DPoPNonceProvider};
 pub use openid::OpenIDClaims;
-pub use resource_server::{ResourceServer, TokenValidationResult};
 pub use types::{
     AccessToken, AuthorizationCode, AuthorizationRequest, ClientAuthMethod,
     ClientRegistrationRequest, ClientRegistrationResponse, ClientType, GrantType, OAuthClient,

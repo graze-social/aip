@@ -615,6 +615,234 @@ impl AtpBackedAuthorizationServer {
     }
 }
 
+// ===== Adapter Implementations =====
+//
+// These adapters bridge from the new unified storage traits to the old oauth bridge traits
+
+/// Adapter to bridge new unified AtpOAuthSessionStorage to old oauth bridge trait
+pub struct UnifiedAtpOAuthSessionStorageAdapter {
+    storage: Arc<dyn crate::storage::traits::AtpOAuthSessionStorage>,
+}
+
+impl UnifiedAtpOAuthSessionStorageAdapter {
+    pub fn new(storage: Arc<dyn crate::storage::traits::AtpOAuthSessionStorage>) -> Self {
+        Self { storage }
+    }
+}
+
+#[async_trait::async_trait]
+impl AtpOAuthSessionStorage for UnifiedAtpOAuthSessionStorageAdapter {
+    async fn store_session(
+        &self,
+        session: &AtpOAuthSession,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Convert from oauth bridge AtpOAuthSession to storage traits AtpOAuthSession
+        let storage_session = crate::storage::traits::AtpOAuthSession {
+            session_id: session.session_id.clone(),
+            did: session.did.clone(),
+            session_created_at: session.session_created_at,
+            atp_oauth_state: session.atp_oauth_state.clone(),
+            signing_key_jkt: session.signing_key_jkt.clone(),
+            dpop_key: session.dpop_key.clone(),
+            access_token: session.access_token.clone(),
+            refresh_token: session.refresh_token.clone(),
+            access_token_created_at: session.access_token_created_at,
+            access_token_expires_at: session.access_token_expires_at,
+            access_token_scopes: session.access_token_scopes.clone(),
+            session_exchanged_at: session.session_exchanged_at,
+            exchange_error: session.exchange_error.clone(),
+            iteration: session.iteration,
+        };
+
+        self.storage
+            .store_session(&storage_session)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+    }
+
+    async fn get_sessions(
+        &self,
+        did: &str,
+        session_id: &str,
+    ) -> Result<Vec<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>> {
+        let storage_sessions = self
+            .storage
+            .get_sessions(did, session_id)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        let oauth_sessions = storage_sessions
+            .into_iter()
+            .map(|s| AtpOAuthSession {
+                session_id: s.session_id,
+                did: s.did,
+                session_created_at: s.session_created_at,
+                atp_oauth_state: s.atp_oauth_state,
+                signing_key_jkt: s.signing_key_jkt,
+                dpop_key: s.dpop_key,
+                access_token: s.access_token,
+                refresh_token: s.refresh_token,
+                access_token_created_at: s.access_token_created_at,
+                access_token_expires_at: s.access_token_expires_at,
+                access_token_scopes: s.access_token_scopes,
+                session_exchanged_at: s.session_exchanged_at,
+                exchange_error: s.exchange_error,
+                iteration: s.iteration,
+            })
+            .collect();
+
+        Ok(oauth_sessions)
+    }
+
+    async fn get_session(
+        &self,
+        did: &str,
+        session_id: &str,
+        iteration: u32,
+    ) -> Result<Option<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>> {
+        let storage_session = self
+            .storage
+            .get_session(did, session_id, iteration)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        let oauth_session = storage_session.map(|s| AtpOAuthSession {
+            session_id: s.session_id,
+            did: s.did,
+            session_created_at: s.session_created_at,
+            atp_oauth_state: s.atp_oauth_state,
+            signing_key_jkt: s.signing_key_jkt,
+            dpop_key: s.dpop_key,
+            access_token: s.access_token,
+            refresh_token: s.refresh_token,
+            access_token_created_at: s.access_token_created_at,
+            access_token_expires_at: s.access_token_expires_at,
+            access_token_scopes: s.access_token_scopes,
+            session_exchanged_at: s.session_exchanged_at,
+            exchange_error: s.exchange_error,
+            iteration: s.iteration,
+        });
+
+        Ok(oauth_session)
+    }
+
+    async fn get_session_by_atp_state(
+        &self,
+        atp_state: &str,
+    ) -> Result<Option<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>> {
+        let storage_session = self
+            .storage
+            .get_session_by_atp_state(atp_state)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        let oauth_session = storage_session.map(|s| AtpOAuthSession {
+            session_id: s.session_id,
+            did: s.did,
+            session_created_at: s.session_created_at,
+            atp_oauth_state: s.atp_oauth_state,
+            signing_key_jkt: s.signing_key_jkt,
+            dpop_key: s.dpop_key,
+            access_token: s.access_token,
+            refresh_token: s.refresh_token,
+            access_token_created_at: s.access_token_created_at,
+            access_token_expires_at: s.access_token_expires_at,
+            access_token_scopes: s.access_token_scopes,
+            session_exchanged_at: s.session_exchanged_at,
+            exchange_error: s.exchange_error,
+            iteration: s.iteration,
+        });
+
+        Ok(oauth_session)
+    }
+
+    async fn update_session_tokens(
+        &self,
+        did: &str,
+        session_id: &str,
+        iteration: u32,
+        access_token: Option<String>,
+        refresh_token: Option<String>,
+        access_token_created_at: Option<DateTime<Utc>>,
+        access_token_expires_at: Option<DateTime<Utc>>,
+        access_token_scopes: Option<Vec<String>>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.storage
+            .update_session_tokens(
+                did,
+                session_id,
+                iteration,
+                access_token,
+                refresh_token,
+                access_token_created_at,
+                access_token_expires_at,
+                access_token_scopes,
+            )
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+    }
+
+    async fn remove_session(
+        &self,
+        did: &str,
+        session_id: &str,
+        iteration: u32,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.storage
+            .remove_session(did, session_id, iteration)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+    }
+}
+
+/// Adapter to bridge new unified AuthorizationRequestStorage to old oauth bridge trait
+pub struct UnifiedAuthorizationRequestStorageAdapter {
+    storage: Arc<dyn crate::storage::traits::AuthorizationRequestStorage>,
+}
+
+impl UnifiedAuthorizationRequestStorageAdapter {
+    pub fn new(storage: Arc<dyn crate::storage::traits::AuthorizationRequestStorage>) -> Self {
+        Self { storage }
+    }
+}
+
+#[async_trait::async_trait]
+impl AuthorizationRequestStorage for UnifiedAuthorizationRequestStorageAdapter {
+    async fn store_authorization_request(
+        &self,
+        session_id: &str,
+        request: &crate::oauth::types::AuthorizationRequest,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.storage
+            .store_authorization_request(session_id, request)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+    }
+
+    async fn get_authorization_request(
+        &self,
+        session_id: &str,
+    ) -> Result<
+        Option<crate::oauth::types::AuthorizationRequest>,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
+        self.storage
+            .get_authorization_request(session_id)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+    }
+
+    async fn remove_authorization_request(
+        &self,
+        session_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.storage
+            .remove_authorization_request(session_id)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1376,233 +1604,5 @@ mod tests {
                     || error_message.contains("OAuth init failed")
             );
         });
-    }
-}
-
-// ===== Adapter Implementations =====
-//
-// These adapters bridge from the new unified storage traits to the old oauth bridge traits
-
-/// Adapter to bridge new unified AtpOAuthSessionStorage to old oauth bridge trait
-pub struct UnifiedAtpOAuthSessionStorageAdapter {
-    storage: Arc<dyn crate::storage::traits::AtpOAuthSessionStorage>,
-}
-
-impl UnifiedAtpOAuthSessionStorageAdapter {
-    pub fn new(storage: Arc<dyn crate::storage::traits::AtpOAuthSessionStorage>) -> Self {
-        Self { storage }
-    }
-}
-
-#[async_trait::async_trait]
-impl AtpOAuthSessionStorage for UnifiedAtpOAuthSessionStorageAdapter {
-    async fn store_session(
-        &self,
-        session: &AtpOAuthSession,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Convert from oauth bridge AtpOAuthSession to storage traits AtpOAuthSession
-        let storage_session = crate::storage::traits::AtpOAuthSession {
-            session_id: session.session_id.clone(),
-            did: session.did.clone(),
-            session_created_at: session.session_created_at,
-            atp_oauth_state: session.atp_oauth_state.clone(),
-            signing_key_jkt: session.signing_key_jkt.clone(),
-            dpop_key: session.dpop_key.clone(),
-            access_token: session.access_token.clone(),
-            refresh_token: session.refresh_token.clone(),
-            access_token_created_at: session.access_token_created_at,
-            access_token_expires_at: session.access_token_expires_at,
-            access_token_scopes: session.access_token_scopes.clone(),
-            session_exchanged_at: session.session_exchanged_at,
-            exchange_error: session.exchange_error.clone(),
-            iteration: session.iteration,
-        };
-
-        self.storage
-            .store_session(&storage_session)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-    }
-
-    async fn get_sessions(
-        &self,
-        did: &str,
-        session_id: &str,
-    ) -> Result<Vec<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>> {
-        let storage_sessions = self
-            .storage
-            .get_sessions(did, session_id)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
-
-        let oauth_sessions = storage_sessions
-            .into_iter()
-            .map(|s| AtpOAuthSession {
-                session_id: s.session_id,
-                did: s.did,
-                session_created_at: s.session_created_at,
-                atp_oauth_state: s.atp_oauth_state,
-                signing_key_jkt: s.signing_key_jkt,
-                dpop_key: s.dpop_key,
-                access_token: s.access_token,
-                refresh_token: s.refresh_token,
-                access_token_created_at: s.access_token_created_at,
-                access_token_expires_at: s.access_token_expires_at,
-                access_token_scopes: s.access_token_scopes,
-                session_exchanged_at: s.session_exchanged_at,
-                exchange_error: s.exchange_error,
-                iteration: s.iteration,
-            })
-            .collect();
-
-        Ok(oauth_sessions)
-    }
-
-    async fn get_session(
-        &self,
-        did: &str,
-        session_id: &str,
-        iteration: u32,
-    ) -> Result<Option<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>> {
-        let storage_session = self
-            .storage
-            .get_session(did, session_id, iteration)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
-
-        let oauth_session = storage_session.map(|s| AtpOAuthSession {
-            session_id: s.session_id,
-            did: s.did,
-            session_created_at: s.session_created_at,
-            atp_oauth_state: s.atp_oauth_state,
-            signing_key_jkt: s.signing_key_jkt,
-            dpop_key: s.dpop_key,
-            access_token: s.access_token,
-            refresh_token: s.refresh_token,
-            access_token_created_at: s.access_token_created_at,
-            access_token_expires_at: s.access_token_expires_at,
-            access_token_scopes: s.access_token_scopes,
-            session_exchanged_at: s.session_exchanged_at,
-            exchange_error: s.exchange_error,
-            iteration: s.iteration,
-        });
-
-        Ok(oauth_session)
-    }
-
-    async fn get_session_by_atp_state(
-        &self,
-        atp_state: &str,
-    ) -> Result<Option<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>> {
-        let storage_session = self
-            .storage
-            .get_session_by_atp_state(atp_state)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
-
-        let oauth_session = storage_session.map(|s| AtpOAuthSession {
-            session_id: s.session_id,
-            did: s.did,
-            session_created_at: s.session_created_at,
-            atp_oauth_state: s.atp_oauth_state,
-            signing_key_jkt: s.signing_key_jkt,
-            dpop_key: s.dpop_key,
-            access_token: s.access_token,
-            refresh_token: s.refresh_token,
-            access_token_created_at: s.access_token_created_at,
-            access_token_expires_at: s.access_token_expires_at,
-            access_token_scopes: s.access_token_scopes,
-            session_exchanged_at: s.session_exchanged_at,
-            exchange_error: s.exchange_error,
-            iteration: s.iteration,
-        });
-
-        Ok(oauth_session)
-    }
-
-    async fn update_session_tokens(
-        &self,
-        did: &str,
-        session_id: &str,
-        iteration: u32,
-        access_token: Option<String>,
-        refresh_token: Option<String>,
-        access_token_created_at: Option<DateTime<Utc>>,
-        access_token_expires_at: Option<DateTime<Utc>>,
-        access_token_scopes: Option<Vec<String>>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.storage
-            .update_session_tokens(
-                did,
-                session_id,
-                iteration,
-                access_token,
-                refresh_token,
-                access_token_created_at,
-                access_token_expires_at,
-                access_token_scopes,
-            )
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-    }
-
-    async fn remove_session(
-        &self,
-        did: &str,
-        session_id: &str,
-        iteration: u32,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.storage
-            .remove_session(did, session_id, iteration)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-    }
-}
-
-/// Adapter to bridge new unified AuthorizationRequestStorage to old oauth bridge trait
-pub struct UnifiedAuthorizationRequestStorageAdapter {
-    storage: Arc<dyn crate::storage::traits::AuthorizationRequestStorage>,
-}
-
-impl UnifiedAuthorizationRequestStorageAdapter {
-    pub fn new(storage: Arc<dyn crate::storage::traits::AuthorizationRequestStorage>) -> Self {
-        Self { storage }
-    }
-}
-
-#[async_trait::async_trait]
-impl AuthorizationRequestStorage for UnifiedAuthorizationRequestStorageAdapter {
-    async fn store_authorization_request(
-        &self,
-        session_id: &str,
-        request: &crate::oauth::types::AuthorizationRequest,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.storage
-            .store_authorization_request(session_id, request)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-    }
-
-    async fn get_authorization_request(
-        &self,
-        session_id: &str,
-    ) -> Result<
-        Option<crate::oauth::types::AuthorizationRequest>,
-        Box<dyn std::error::Error + Send + Sync>,
-    > {
-        self.storage
-            .get_authorization_request(session_id)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-    }
-
-    async fn remove_authorization_request(
-        &self,
-        session_id: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.storage
-            .remove_authorization_request(session_id)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 }

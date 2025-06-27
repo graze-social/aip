@@ -88,8 +88,8 @@ cargo test
 # Run with specific features
 cargo test --features postgres,sqlite
 
-# Run integration tests
-cargo test --test oauth_integration
+# Run library tests
+cargo test --lib
 ```
 
 ### Code Quality
