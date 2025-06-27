@@ -21,7 +21,7 @@ use crate::oauth::{
 };
 
 /// PAR request parameters
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub(super) struct PushedAuthorizationRequest {
     pub response_type: String,
     pub client_id: String,
@@ -193,11 +193,6 @@ fn validate_and_convert_par_request(
 
         // First, validate against server's supported scopes
         if !requested_scopes.is_subset(&supported_scopes) {
-            tracing::warn!(
-                ?requested_scopes,
-                ?supported_scopes,
-                "Requested scope includes unsupported scopes"
-            );
             return Err(OAuthError::InvalidScope(
                 "One or more requested scopes are not supported by this server".to_string(),
             ));
@@ -208,11 +203,6 @@ fn validate_and_convert_par_request(
             let allowed_scopes = crate::oauth::types::parse_scope(client_scope);
 
             if !requested_scopes.is_subset(&allowed_scopes) {
-                tracing::warn!(
-                    ?requested_scopes,
-                    ?allowed_scopes,
-                    "Requested scope exceeds allowed scope"
-                );
                 return Err(OAuthError::InvalidScope(
                     "Requested scope exceeds allowed scope".to_string(),
                 ));
@@ -438,7 +428,9 @@ mod tests {
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), OAuthError::InvalidRequest(_)));
+        if let Err(error) = result {
+            assert!(matches!(error, OAuthError::InvalidRequest(_)));
+        }
     }
 
     #[test]
@@ -499,7 +491,9 @@ mod tests {
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), OAuthError::InvalidScope(_)));
+        if let Err(error) = result {
+            assert!(matches!(error, OAuthError::InvalidScope(_)));
+        }
     }
 
     #[test]

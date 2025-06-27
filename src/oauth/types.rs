@@ -46,7 +46,7 @@ pub enum ClientAuthMethod {
 }
 
 /// OAuth Client Registration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OAuthClient {
     /// Unique client identifier
     pub client_id: String,
@@ -83,7 +83,7 @@ pub enum ClientType {
 }
 
 /// OAuth Authorization Request
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AuthorizationRequest {
     /// Response type (can contain multiple space-separated values)
     pub response_type: Vec<ResponseType>,
@@ -106,7 +106,7 @@ pub struct AuthorizationRequest {
 }
 
 /// OAuth Authorization Code
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AuthorizationCode {
     /// The authorization code
     pub code: String,
@@ -136,7 +136,7 @@ pub struct AuthorizationCode {
 }
 
 /// OAuth Access Token
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AccessToken {
     /// The access token
     pub token: String,
@@ -165,7 +165,7 @@ pub struct AccessToken {
 }
 
 /// OAuth Refresh Token
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct RefreshToken {
     /// The refresh token
     pub token: String,
@@ -189,7 +189,7 @@ pub struct RefreshToken {
 }
 
 /// Token Exchange Request
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct TokenRequest {
     /// Grant type
     pub grant_type: GrantType,
@@ -210,7 +210,7 @@ pub struct TokenRequest {
 }
 
 /// Token Response
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct TokenResponse {
     /// Access token
     pub access_token: String,
@@ -287,7 +287,7 @@ pub struct ClientRegistrationRequest {
 }
 
 /// Client Registration Response (RFC 7591)
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct ClientRegistrationResponse {
     /// Client ID
     pub client_id: String,
@@ -316,7 +316,7 @@ pub struct ClientRegistrationResponse {
 }
 
 /// DPoP Token Claims
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DPoPTokenClaims {
     /// Token type
     pub typ: String,

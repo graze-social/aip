@@ -268,13 +268,11 @@ impl TryFrom<Option<String>> for PrivateKeys {
             None => {
                 // Generate a new P-256 private key if no keys are provided
                 let key = generate_key(KeyType::P256Private)?;
-                tracing::info!("Generated new P-256 OAuth signing key: {}", key);
                 Ok(Self(vec![key]))
             }
             Some(value) if value.is_empty() => {
                 // Generate a new P-256 private key if no keys are provided
                 let key = generate_key(KeyType::P256Private)?;
-                tracing::info!("Generated new P-256 OAuth signing key: {}", key);
                 Ok(Self(vec![key]))
             }
             Some(value) => {
@@ -288,10 +286,8 @@ impl TryFrom<Option<String>> for PrivateKeys {
                 if keys.is_empty() {
                     // Generate a new P-256 private key if parsing resulted in empty list
                     let key = generate_key(KeyType::P256Private)?;
-                    tracing::info!("Generated new P-256 OAuth signing key: {}", key);
                     Ok(Self(vec![key]))
                 } else {
-                    tracing::info!("Loaded {} OAuth signing keys from environment", keys.len());
                     Ok(Self(keys))
                 }
             }

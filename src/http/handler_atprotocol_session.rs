@@ -19,7 +19,7 @@ use atproto_identity::key::identify_key;
 use atproto_oauth::jwk::generate as generate_jwk;
 
 /// Query parameters for session endpoint
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct SessionQuery {
     /// Access token type - "oauth_session" (default) or "app_password_session"
     #[serde(default = "default_access_token_type")]
@@ -33,7 +33,7 @@ fn default_access_token_type() -> String {
 }
 
 /// ATProtocol session information response
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct AtpSessionResponse {
     /// ATProtocol DID
     pub did: String,

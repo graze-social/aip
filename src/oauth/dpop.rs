@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use time::{Duration, OffsetDateTime};
 
 /// DPoP JWT Header
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DPoPHeader {
     /// Token type (must be "dpop+jwt")
     pub typ: String,
@@ -27,7 +27,7 @@ pub struct DPoPHeader {
 }
 
 /// DPoP JWT Claims
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DPoPClaims {
     /// Unique JWT identifier
     pub jti: String,
@@ -46,7 +46,7 @@ pub struct DPoPClaims {
 }
 
 /// DPoP Proof
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DPoPProof {
     /// JWT header
     pub header: DPoPHeader,

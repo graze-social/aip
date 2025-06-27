@@ -91,11 +91,6 @@ impl AuthorizationServer {
                 let allowed_scopes = parse_scope(client_scope);
 
                 if !requested_scopes.is_subset(&allowed_scopes) {
-                    tracing::warn!(
-                        ?requested_scopes,
-                        ?allowed_scopes,
-                        "Requested scope exceeds allowed scope"
-                    );
                     return Err(OAuthError::InvalidScope(
                         "Requested scope exceeds allowed scope".to_string(),
                     ));
@@ -352,11 +347,6 @@ impl AuthorizationServer {
                 let allowed_scopes = parse_scope(client_scope);
 
                 if !requested_scopes.is_subset(&allowed_scopes) {
-                    tracing::warn!(
-                        ?requested_scopes,
-                        ?allowed_scopes,
-                        "Requested scope exceeds allowed scope"
-                    );
                     return Err(OAuthError::InvalidScope(
                         "Requested scope exceeds allowed scope".to_string(),
                     ));
@@ -564,7 +554,7 @@ impl AuthorizationServer {
 }
 
 /// Client Authentication extracted from request
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ClientAuthentication {
     pub client_id: String,
     pub client_secret: Option<String>,
@@ -578,7 +568,8 @@ pub enum AuthorizeResponse {
 }
 
 /// Query parameters for authorization endpoint
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
+#[cfg_attr(any(debug_assertions, test), derive(Debug))]
 pub struct AuthorizeQuery {
     pub response_type: Option<String>,
     pub client_id: String,
