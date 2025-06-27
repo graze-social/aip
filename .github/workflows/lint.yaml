@@ -1,0 +1,28 @@
+name: Lint/Fmt
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint_and_fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: toolchain_with_cache
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt,clippy
+          toolchain: "stable"
+          cache-shared-key: foobar
+
+      - name: rustfmt
+        uses: actions-rust-lang/rustfmt@v1
+
+      - name: lint
+        run: cargo clippy -- -D warnings

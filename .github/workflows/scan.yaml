@@ -1,0 +1,20 @@
+name: Scanner
+on:
+  pull_request:
+  push:
+jobs:
+  scanner:
+    name: Scan Repo
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: trivy_repo_scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          ignore-unfixed: true
+          format: "table"
+          severity: "CRITICAL,HIGH,MEDIUM"
+          github-pat: ${{ github.token }}

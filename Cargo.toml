@@ -29,13 +29,24 @@ minijinja-autoreload = { version = "2.7", optional = true }
 minijinja-embed = { version = "2.7", optional = true }
 rust-embed = { version = "8.5", optional = true }
 
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "chrono", "json"], optional = true }
+sqlx = { version = "0.8", features = [
+    "runtime-tokio-rustls",
+    "chrono",
+    "json",
+], optional = true }
 redis = { version = "0.27", optional = true }
 deadpool = { version = "0.12", optional = true }
 deadpool-redis = { version = "0.18", optional = true }
 anyhow = "1.0"
 thiserror = "1.0"
-tokio = { version = "1.41", features = ["macros", "rt", "rt-multi-thread", "fs", "signal", "sync"] }
+tokio = { version = "1.41", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "fs",
+    "signal",
+    "sync",
+] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -47,6 +58,7 @@ tower-http = { version = "0.5", features = ["fs", "cors"] }
 reqwest = { version = "0.12", features = ["json"] }
 async-trait = "0.1"
 http = "1.0"
+openssl = { version = "0.10", features = ["vendored"] }
 
 # OAuth 2.1 dependencies
 base64 = "0.22"
@@ -65,12 +77,16 @@ axum-test = "15"
 futures = "0.3"
 
 [build-dependencies]
-minijinja-embed = {version = "2.7", optional = true}
+minijinja-embed = { version = "2.7", optional = true }
 
 [features]
 default = ["reload", "redis", "postgres"]
 embed = ["dep:minijinja-embed", "dep:rust-embed"]
-reload = ["dep:minijinja-autoreload", "minijinja/loader", "axum-template/minijinja-autoreload"]
+reload = [
+    "dep:minijinja-autoreload",
+    "minijinja/loader",
+    "axum-template/minijinja-autoreload",
+]
 sqlite = ["dep:sqlx", "sqlx/sqlite"]
 postgres = ["dep:sqlx", "sqlx/postgres"]
 redis = ["dep:redis", "dep:deadpool", "dep:deadpool-redis"]

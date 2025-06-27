@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup_toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+        # just building default features as a test
+      - name: build_binary
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: both
+          target: x86_64-pc-windows-msvc
+          args: "--locked"
+          strip: true
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup_toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+        # default features again
+      - name: build_and_test_binary
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: both # build and test
+          target: x86_64-apple-darwin
+          args: "--locked"
+          strip: true
+  linux:
+    strategy:
+      matrix:
+        features:
+          - embed,sqlite,redis
+          - embed,postgres,redis
+          - reload,postgres,redis
+          - reload,sqlite,redis
+        platform:
+          - os-name: Linux-x86_64
+            runs-on: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - os-name: Linux-aarch64
+            runs-on: ubuntu-24.04
+            target: aarch64-unknown-linux-musl
+
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: setup_toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: build_and_test_binary
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: both
+          target: ${{ matrix.platform.target }}
+          toolchain: stable
+          args: "--locked --no-default-features --features ${{matrix.features}}"
+          strip: true
