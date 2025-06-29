@@ -424,10 +424,12 @@ mod tests {
 
         let result = service.register_client(request).await;
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            ClientRegistrationError::InvalidRedirectUri(_)
-        ));
+        if let Err(error) = result {
+            assert!(matches!(
+                error,
+                ClientRegistrationError::InvalidRedirectUri(_)
+            ));
+        }
     }
 
     #[tokio::test]
@@ -447,10 +449,12 @@ mod tests {
 
         let result = service.register_client(request).await;
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            ClientRegistrationError::RegistrationDisabled
-        ));
+        if let Err(error) = result {
+            assert!(matches!(
+                error,
+                ClientRegistrationError::RegistrationDisabled
+            ));
+        }
     }
 
     #[tokio::test]
@@ -494,9 +498,11 @@ mod tests {
             .register_client_with_supported_scopes(invalid_request, Some(&supported_scopes))
             .await;
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            ClientRegistrationError::InvalidClientMetadata(_)
-        ));
+        if let Err(error) = result {
+            assert!(matches!(
+                error,
+                ClientRegistrationError::InvalidClientMetadata(_)
+            ));
+        }
     }
 }

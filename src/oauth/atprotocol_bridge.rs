@@ -334,8 +334,6 @@ impl AtpBackedAuthorizationServer {
             "atproto transition:generic".to_string()
         };
 
-        tracing::info!(?filtered_scope, "filtered_scope");
-
         let atpoauth_request_state = OAuthRequestState {
             state: atpoauth_state.clone(),
             nonce: atpoauth_nonce.clone(),
@@ -353,9 +351,6 @@ impl AtpBackedAuthorizationServer {
             &atpoauth_request_state,
         )
         .await
-        .inspect_err(|err| {
-            tracing::error!(?err, "oauth_init error");
-        })
         .map_err(|e| OAuthError::AuthorizationFailed(format!("OAuth init failed: {:?}", e)))?;
 
         // Store OAuth request for callback handling

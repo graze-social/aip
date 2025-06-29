@@ -32,8 +32,6 @@ pub async fn handle_oauth_authorize(
             }
         };
 
-    tracing::info!(?request, ?original_query, "authorize request");
-
     let login_hint = {
         if let Some(value) = request
             .login_hint
@@ -41,10 +39,8 @@ pub async fn handle_oauth_authorize(
             .filter(|value| !value.trim().is_empty())
             .cloned()
         {
-            tracing::info!(?value, login_hint = ?request.login_hint, "using request login_form value");
             Some(value.clone())
         } else {
-            tracing::info!(login_hint = ?original_query.login_hint, "using original_query login_form value");
             original_query
                 .login_hint
                 .as_ref()
@@ -177,11 +173,6 @@ async fn process_authorization_query(
             crate::oauth::types::parse_scope(&config.oauth_supported_scopes.as_ref().join(" "));
 
         if !requested_scopes.is_subset(&supported_scopes) {
-            tracing::warn!(
-                ?requested_scopes,
-                ?supported_scopes,
-                "Requested scope includes unsupported scopes"
-            );
             return Err(serde_json::json!({
                 "error": "invalid_scope",
                 "error_description": "One or more requested scopes are not supported by this server"
@@ -411,8 +402,9 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert_eq!(error["error"], "invalid_request");
+        if let Err(error) = result {
+            assert_eq!(error["error"], "invalid_request");
+        }
     }
 
     #[tokio::test]
@@ -441,8 +433,9 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert_eq!(error["error"], "invalid_request");
+        if let Err(error) = result {
+            assert_eq!(error["error"], "invalid_request");
+        }
     }
 
     #[tokio::test]
@@ -471,7 +464,8 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert_eq!(error["error"], "invalid_request");
+        if let Err(error) = result {
+            assert_eq!(error["error"], "invalid_request");
+        }
     }
 }

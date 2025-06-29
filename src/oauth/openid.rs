@@ -1,12 +1,8 @@
 //! OpenID Connect support for ID token generation and validation.
 
-use anyhow::Result;
-use base64::Engine;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-use crate::errors::OAuthError;
 
 /// Unified OpenID Connect Claims structure for both ID tokens and UserInfo responses
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -73,7 +69,7 @@ pub struct OpenIDClaims {
 
 /// OpenID Connect ID Token Claims (deprecated - use OpenIDClaims instead)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IdTokenClaims {
+pub(crate) struct IdTokenClaims {
     /// Issuer - The URL of the authorization server
     pub iss: String,
     /// Subject - Unique identifier for the end user
@@ -200,92 +196,9 @@ impl OpenIDClaims {
     }
 }
 
-impl IdTokenClaims {
-    /// Create new ID token claims
-    pub fn new(issuer: String, subject: String, audience: String, expires_in_seconds: u64) -> Self {
-        let now = Utc::now();
-        let exp = (now + chrono::Duration::seconds(expires_in_seconds as i64)).timestamp();
-        let iat = now.timestamp();
-
-        Self {
-            iss: issuer,
-            sub: subject,
-            aud: audience,
-            exp,
-            iat,
-            auth_time: None,
-            nonce: None,
-            at_hash: None,
-            additional_claims: HashMap::new(),
-        }
-    }
-
-    /// Set authentication time
-    pub fn with_auth_time(mut self, auth_time: DateTime<Utc>) -> Self {
-        self.auth_time = Some(auth_time.timestamp());
-        self
-    }
-
-    /// Set nonce value
-    pub fn with_nonce(mut self, nonce: String) -> Self {
-        self.nonce = Some(nonce);
-        self
-    }
-
-    /// Set access token hash
-    pub fn with_at_hash(mut self, at_hash: String) -> Self {
-        self.at_hash = Some(at_hash);
-        self
-    }
-
-    /// Add additional claim
-    pub fn with_claim(mut self, key: String, value: serde_json::Value) -> Self {
-        self.additional_claims.insert(key, value);
-        self
-    }
-}
-
-/// Generate ID token from claims using manual JWT construction
-/// This is a simplified implementation - in production you'd want full JWT signing
-pub fn generate_id_token(
-    claims: &IdTokenClaims,
-    _signing_key: &atproto_identity::key::KeyData,
-) -> Result<String, OAuthError> {
-    // For now, create a simple unsigned JWT for testing purposes
-    // In production, this would use proper ES256 signing with the provided key
-
-    let header = serde_json::json!({
-        "alg": "ES256",
-        "typ": "JWT"
-    });
-
-    let header_encoded = base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(
-        serde_json::to_string(&header)
-            .map_err(|e| OAuthError::InvalidRequest(format!("Failed to encode header: {}", e)))?,
-    );
-
-    let payload_encoded = base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(
-        serde_json::to_string(claims)
-            .map_err(|e| OAuthError::InvalidRequest(format!("Failed to encode claims: {}", e)))?,
-    );
-
-    // TODO: Implement proper ES256 signature using the signing key
-    let signature = "PLACEHOLDER_SIGNATURE";
-
-    Ok(format!(
-        "{}.{}.{}",
-        header_encoded, payload_encoded, signature
-    ))
-}
-
-/// Calculate access token hash for at_hash claim (ES256)
-pub fn calculate_at_hash(access_token: &str) -> String {
-    calculate_hash(access_token)
-}
-
 /// Calculate hash for at_hash or c_hash claims (ES256)
 /// Uses the same implementation as atproto_oauth::pkce::challenge
-pub fn calculate_hash(input: &str) -> String {
+fn calculate_hash(input: &str) -> String {
     // This matches the implementation from atproto_oauth::pkce::challenge
     atproto_oauth::pkce::challenge(input)
 }
@@ -293,73 +206,6 @@ pub fn calculate_hash(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // Tests will use the existing atproto-oauth validation functionality
-
-    #[test]
-    fn test_id_token_claims_creation() {
-        let claims = IdTokenClaims::new(
-            "https://example.com".to_string(),
-            "user123".to_string(),
-            "client456".to_string(),
-            3600,
-        );
-
-        assert_eq!(claims.iss, "https://example.com");
-        assert_eq!(claims.sub, "user123");
-        assert_eq!(claims.aud, "client456");
-        assert!(claims.exp > claims.iat);
-        assert!(claims.auth_time.is_none());
-        assert!(claims.nonce.is_none());
-        assert!(claims.at_hash.is_none());
-    }
-
-    #[test]
-    fn test_id_token_claims_with_optional_fields() {
-        let auth_time = Utc::now();
-        let claims = IdTokenClaims::new(
-            "https://example.com".to_string(),
-            "user123".to_string(),
-            "client456".to_string(),
-            3600,
-        )
-        .with_auth_time(auth_time)
-        .with_nonce("test-nonce".to_string())
-        .with_at_hash("test-hash".to_string())
-        .with_claim(
-            "email".to_string(),
-            serde_json::Value::String("user@example.com".to_string()),
-        );
-
-        assert_eq!(claims.auth_time, Some(auth_time.timestamp()));
-        assert_eq!(claims.nonce, Some("test-nonce".to_string()));
-        assert_eq!(claims.at_hash, Some("test-hash".to_string()));
-        assert_eq!(
-            claims.additional_claims.get("email"),
-            Some(&serde_json::Value::String("user@example.com".to_string()))
-        );
-    }
-
-    #[test]
-    fn test_at_hash_calculation() {
-        let access_token = "test-access-token";
-        let hash = calculate_at_hash(access_token);
-
-        // Should produce a base64url-encoded string
-        assert!(!hash.is_empty());
-        assert!(!hash.contains('='));
-        assert!(!hash.contains('+'));
-        assert!(!hash.contains('/'));
-    }
-
-    #[test]
-    fn test_at_hash_consistency() {
-        let access_token = "test-access-token";
-        let hash1 = calculate_at_hash(access_token);
-        let hash2 = calculate_at_hash(access_token);
-
-        // Same input should produce same hash
-        assert_eq!(hash1, hash2);
-    }
 
     #[test]
     fn test_openid_claims_with_name_and_profile() {

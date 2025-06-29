@@ -102,7 +102,7 @@ pub trait KeyStore {
 }
 
 /// Stored PAR request
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct StoredPushedRequest {
     pub request_uri: String,
     pub authorization_request: AuthorizationRequest,
@@ -131,7 +131,8 @@ pub trait PARStorage {
 // ===== ATProtocol Bridge Storage Traits =====
 
 /// Session linking OAuth authorization requests to ATProtocol OAuth flows
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
+#[cfg_attr(any(debug_assertions, test), derive(Debug))]
 pub struct AtpOAuthSession {
     /// Unique session ID
     pub session_id: String,
@@ -250,7 +251,8 @@ pub trait NonceStorage: Send + Sync {
 // ===== App Password Storage Traits =====
 
 /// Stored app password
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
+#[cfg_attr(any(debug_assertions, test), derive(Debug))]
 pub struct AppPassword {
     /// OAuth client ID
     pub client_id: String,
@@ -265,7 +267,8 @@ pub struct AppPassword {
 }
 
 /// App password session
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
+#[cfg_attr(any(debug_assertions, test), derive(Debug))]
 pub struct AppPasswordSession {
     /// OAuth client ID
     pub client_id: String,

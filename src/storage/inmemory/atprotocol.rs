@@ -66,7 +66,6 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
         let session_iterations = self.session_iterations.read().await;
 
         let index_key = Self::session_index_key(did, session_id);
-        tracing::warn!(?did, ?session_id, "getting sessions");
 
         if let Some(iterations) = session_iterations.get(&index_key) {
             let mut result = Vec::new();
@@ -90,7 +89,6 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
     ) -> Result<Option<AtpOAuthSession>> {
         let sessions = self.sessions.read().await;
         let session_key = Self::session_key(did, session_id, iteration);
-        tracing::warn!(?did, ?session_id, ?iteration, "getting specific session");
         Ok(sessions.get(&session_key).cloned())
     }
 
@@ -144,7 +142,6 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
             session.access_token_created_at = access_token_created_at;
             session.access_token_expires_at = access_token_expires_at;
             session.access_token_scopes = access_token_scopes;
-            tracing::warn!(?did, ?session_id, ?iteration, "updating session tokens");
             Ok(())
         } else {
             Err(StorageError::QueryFailed("Session not found".to_string()))
@@ -173,7 +170,6 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
             }
         }
 
-        tracing::warn!(?did, ?session_id, ?iteration, "deleting session");
         Ok(())
     }
 
@@ -231,8 +227,6 @@ impl AuthorizationRequestStorage for MemoryAuthorizationRequestStorage {
     ) -> Result<()> {
         let mut requests = self.requests.write().await;
         requests.insert(session_id.to_string(), request.clone());
-
-        tracing::info!(?session_id, ?requests, "storing request");
         Ok(())
     }
 
@@ -241,9 +235,6 @@ impl AuthorizationRequestStorage for MemoryAuthorizationRequestStorage {
         session_id: &str,
     ) -> Result<Option<AuthorizationRequest>> {
         let requests = self.requests.read().await;
-
-        tracing::info!(?session_id, ?requests, "getting request");
-
         Ok(requests.get(session_id).cloned())
     }
 

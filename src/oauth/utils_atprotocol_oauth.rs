@@ -299,13 +299,11 @@ pub async fn build_openid_claims_with_document_info(
 
     // Early return if no relevant scopes are present
     if !has_profile_scope && !has_email_scope {
-        tracing::info!("!has_profile_scope && !has_email_scope");
         return Ok(claims);
     }
 
     // Check if we should proceed based on ATProtocol scope requirements
     if !has_atproto_scopes {
-        tracing::info!("options.require_atproto_for_profile && !has_atproto_scopes");
         return Ok(claims);
     }
 

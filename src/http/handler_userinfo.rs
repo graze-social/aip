@@ -20,8 +20,6 @@ pub async fn get_userinfo_handler(
     State(state): State<AppState>,
     ExtractedAuth(access_token): ExtractedAuth,
 ) -> Result<Json<OpenIDClaims>, (StatusCode, Json<Value>)> {
-    tracing::info!(?access_token, "get_userinfo_handler");
-
     // Get the user ID (DID) from the access token
     let user_id = match access_token.user_id {
         Some(ref uid) => uid.clone(),
