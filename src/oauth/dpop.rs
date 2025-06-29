@@ -98,7 +98,7 @@ impl DPoPHeader {
                     KeyType::P256Public | KeyType::P256Private => Ok("ES256".to_string()),
                     KeyType::K256Public | KeyType::K256Private => Ok("ES256K".to_string()),
                     _ => Err(DPoPError::InvalidProof(format!(
-                        "Unsupported key type: {:?}",
+                        "Unsupported key type: {}",
                         key_data.key_type()
                     ))),
                 }
