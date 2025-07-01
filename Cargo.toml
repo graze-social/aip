@@ -22,6 +22,7 @@ atproto-client = { version = "0.9.2" }
 atproto-identity = { version = "0.9.2", features = ["zeroize"] }
 atproto-oauth = { version = "0.9.2", features = ["zeroize"] }
 atproto-oauth-axum = { version = "0.9.2", features = ["zeroize"] }
+atproto-xrpcs = { version = "0.9.2" }
 
 axum-template = { version = "3.0", features = ["minijinja"] }
 minijinja = { version = "2.7", features = ["builtins"] }
@@ -59,6 +60,7 @@ time = { version = "0.3", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 metrohash = "1.0.7"
 crockford = "1.2.1"
+duration-str = "0.11"
 
 [dev-dependencies]
 axum-test = "15"

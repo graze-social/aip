@@ -30,6 +30,18 @@ pub struct PrivateKeys(Vec<KeyData>);
 #[derive(Clone)]
 pub struct OAuthSupportedScopes(Vec<String>);
 
+/// Client default access token expiration configuration
+#[derive(Clone)]
+pub struct ClientDefaultAccessTokenExpiration(chrono::Duration);
+
+/// Client default refresh token expiration configuration
+#[derive(Clone)]
+pub struct ClientDefaultRefreshTokenExpiration(chrono::Duration);
+
+/// Admin DIDs configuration
+#[derive(Clone)]
+pub struct AdminDids(Vec<String>);
+
 /// Main application configuration
 #[derive(Clone)]
 pub struct Config {
@@ -51,6 +63,9 @@ pub struct Config {
     pub database_url: Option<String>,
     pub redis_url: Option<String>,
     pub enable_client_api: bool,
+    pub client_default_access_token_expiration: ClientDefaultAccessTokenExpiration,
+    pub client_default_refresh_token_expiration: ClientDefaultRefreshTokenExpiration,
+    pub admin_dids: AdminDids,
 }
 
 impl Config {
@@ -86,6 +101,11 @@ impl Config {
         let enable_client_api = optional_env("ENABLE_CLIENT_API")
             .map(|v| v == "true")
             .unwrap_or(false);
+        let client_default_access_token_expiration: ClientDefaultAccessTokenExpiration = 
+            default_env("CLIENT_DEFAULT_ACCESS_TOKEN_EXPIRATION", "1d").try_into()?;
+        let client_default_refresh_token_expiration: ClientDefaultRefreshTokenExpiration = 
+            default_env("CLIENT_DEFAULT_REFRESH_TOKEN_EXPIRATION", "14d").try_into()?;
+        let admin_dids: AdminDids = optional_env("ADMIN_DIDS").try_into()?;
 
         Ok(Self {
             version: version()?,
@@ -106,6 +126,9 @@ impl Config {
             database_url,
             redis_url,
             enable_client_api,
+            client_default_access_token_expiration,
+            client_default_refresh_token_expiration,
+            admin_dids,
         })
     }
 }
@@ -332,6 +355,71 @@ impl TryFrom<String> for OAuthSupportedScopes {
 }
 
 impl AsRef<Vec<String>> for OAuthSupportedScopes {
+    fn as_ref(&self) -> &Vec<String> {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for ClientDefaultAccessTokenExpiration {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let duration = duration_str::parse(&value)
+            .map_err(|e| ConfigError::DurationParsingFailed(value, e.to_string()))?;
+        Ok(Self(chrono::Duration::from_std(duration)?))
+    }
+}
+
+impl AsRef<chrono::Duration> for ClientDefaultAccessTokenExpiration {
+    fn as_ref(&self) -> &chrono::Duration {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for ClientDefaultRefreshTokenExpiration {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let duration = duration_str::parse(&value)
+            .map_err(|e| ConfigError::DurationParsingFailed(value, e.to_string()))?;
+        Ok(Self(chrono::Duration::from_std(duration)?))
+    }
+}
+
+impl AsRef<chrono::Duration> for ClientDefaultRefreshTokenExpiration {
+    fn as_ref(&self) -> &chrono::Duration {
+        &self.0
+    }
+}
+
+impl TryFrom<Option<String>> for AdminDids {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Option<String>) -> Result<Self, Self::Error> {
+        let value = value.unwrap_or_default();
+        if value.is_empty() {
+            return Ok(Self(Vec::new()));
+        }
+
+        let dids = value
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<String>>();
+
+        Ok(Self(dids))
+    }
+}
+
+impl TryFrom<String> for AdminDids {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(Some(value))
+    }
+}
+
+impl AsRef<Vec<String>> for AdminDids {
     fn as_ref(&self) -> &Vec<String> {
         &self.0
     }

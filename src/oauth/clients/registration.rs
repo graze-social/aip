@@ -18,16 +18,26 @@ pub struct ClientRegistrationService {
     default_auth_method: ClientAuthMethod,
     /// Maximum number of redirect URIs per client
     max_redirect_uris: usize,
+    /// Default access token expiration duration
+    default_access_token_expiration: chrono::Duration,
+    /// Default refresh token expiration duration
+    default_refresh_token_expiration: chrono::Duration,
 }
 
 impl ClientRegistrationService {
     /// Create a new client registration service
-    pub fn new(storage: Arc<dyn OAuthStorage>) -> Self {
+    pub fn new(
+        storage: Arc<dyn OAuthStorage>,
+        default_access_token_expiration: chrono::Duration,
+        default_refresh_token_expiration: chrono::Duration,
+    ) -> Self {
         Self {
             storage,
             registration_enabled: true,
             default_auth_method: ClientAuthMethod::ClientSecretBasic,
             max_redirect_uris: 10,
+            default_access_token_expiration,
+            default_refresh_token_expiration,
         }
     }
 
@@ -103,6 +113,8 @@ impl ClientRegistrationService {
             created_at: now,
             updated_at: now,
             metadata: request.metadata,
+            access_token_expiration: self.default_access_token_expiration,
+            refresh_token_expiration: self.default_refresh_token_expiration,
         };
 
         // Store the client
@@ -387,7 +399,11 @@ mod tests {
     #[tokio::test]
     async fn test_client_registration() {
         let storage = Arc::new(MemoryOAuthStorage::new());
-        let service = ClientRegistrationService::new(storage);
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+        );
 
         let request = ClientRegistrationRequest {
             client_name: Some("Test Client".to_string()),
@@ -410,7 +426,11 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_redirect_uri() {
         let storage = Arc::new(MemoryOAuthStorage::new());
-        let service = ClientRegistrationService::new(storage);
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+        );
 
         let request = ClientRegistrationRequest {
             client_name: Some("Test Client".to_string()),
@@ -435,7 +455,12 @@ mod tests {
     #[tokio::test]
     async fn test_disabled_registration() {
         let storage = Arc::new(MemoryOAuthStorage::new());
-        let service = ClientRegistrationService::new(storage).disable_registration();
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+        )
+        .disable_registration();
 
         let request = ClientRegistrationRequest {
             client_name: Some("Test Client".to_string()),
@@ -460,7 +485,11 @@ mod tests {
     #[tokio::test]
     async fn test_scope_validation_with_supported_scopes() {
         let storage = Arc::new(MemoryOAuthStorage::new());
-        let service = ClientRegistrationService::new(storage);
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+        );
 
         // Test with supported scopes
         let supported_scopes =

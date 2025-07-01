@@ -244,8 +244,11 @@ async fn main() -> Result<()> {
     };
 
     // Create client registration service for dynamic client registration
-    let client_registration_service =
-        Arc::new(ClientRegistrationService::new(oauth_storage.clone()));
+    let client_registration_service = Arc::new(ClientRegistrationService::new(
+        oauth_storage.clone(),
+        *config.client_default_access_token_expiration.as_ref(),
+        *config.client_default_refresh_token_expiration.as_ref(),
+    ));
 
     // Create application context
     let app_context = AppState {

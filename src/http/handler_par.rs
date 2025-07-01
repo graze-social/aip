@@ -311,6 +311,8 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
+            access_token_expiration: chrono::Duration::days(1),
+            refresh_token_expiration: chrono::Duration::days(14),
         };
 
         auth_server.storage.store_client(&client).await.unwrap();
@@ -359,6 +361,9 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
+            client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
+            admin_dids: "".to_string().try_into().unwrap(),
         };
 
         let auth_request =
@@ -385,6 +390,8 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
+            access_token_expiration: chrono::Duration::days(1),
+            refresh_token_expiration: chrono::Duration::days(14),
         };
 
         let par_request = PushedAuthorizationRequest {
@@ -424,6 +431,9 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
+            client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
+            admin_dids: "".to_string().try_into().unwrap(),
         };
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);
@@ -448,6 +458,8 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
+            access_token_expiration: chrono::Duration::days(1),
+            refresh_token_expiration: chrono::Duration::days(14),
         };
 
         let par_request = PushedAuthorizationRequest {
@@ -487,6 +499,9 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
+            client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
+            admin_dids: "".to_string().try_into().unwrap(),
         };
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);

@@ -257,6 +257,9 @@ impl PostgresOAuthClientStore {
             created_at,
             updated_at,
             metadata,
+            // TODO: These should be stored in the database
+            access_token_expiration: chrono::Duration::days(1),
+            refresh_token_expiration: chrono::Duration::days(14),
         })
     }
 }

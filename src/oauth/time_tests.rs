@@ -112,6 +112,8 @@ mod tests {
             created_at: now,
             updated_at: now,
             metadata: serde_json::Value::Null,
+            access_token_expiration: chrono::Duration::days(1),
+            refresh_token_expiration: chrono::Duration::days(14),
         };
 
         assert_eq!(client.created_at.timezone(), Utc);

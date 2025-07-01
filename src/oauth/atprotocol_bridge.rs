@@ -610,11 +610,6 @@ impl AtpBackedAuthorizationServer {
     }
 }
 
-// ===== Adapter Implementations =====
-//
-// These adapters bridge from the new unified storage traits to the old oauth bridge traits
-
-/// Adapter to bridge new unified AtpOAuthSessionStorage to old oauth bridge trait
 pub struct UnifiedAtpOAuthSessionStorageAdapter {
     storage: Arc<dyn crate::storage::traits::AtpOAuthSessionStorage>,
 }
@@ -1078,6 +1073,8 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
+            access_token_expiration: chrono::Duration::days(1),
+            refresh_token_expiration: chrono::Duration::days(14),
         };
 
         server
@@ -1513,6 +1510,8 @@ mod tests {
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
                 metadata: serde_json::json!({}),
+                access_token_expiration: chrono::Duration::days(1),
+                refresh_token_expiration: chrono::Duration::days(14),
             };
 
             server

@@ -55,6 +55,33 @@ ENABLE_CLIENT_API=false
 
 **Security Note**: The client management API is disabled by default. Only enable it when dynamic client registration and management capabilities are required for your deployment.
 
+### Token Configuration
+
+AIP supports configurable token expiration times for OAuth clients:
+
+```bash
+# Default access token lifetime (supports duration format: 1d, 12h, 3600s)
+# Default: 1d
+CLIENT_DEFAULT_ACCESS_TOKEN_EXPIRATION=1d
+
+# Default refresh token lifetime (supports duration format: 14d, 336h, 1209600s)
+# Default: 14d
+CLIENT_DEFAULT_REFRESH_TOKEN_EXPIRATION=14d
+```
+
+### Admin Configuration
+
+AIP supports administrative access for client management via XRPC endpoints:
+
+```bash
+# Admin DIDs for XRPC management endpoints
+# Comma-separated list of DIDs authorized to manage clients via XRPC
+# Default: (empty - no admin access)
+ADMIN_DIDS=did:plc:admin1,did:plc:admin2
+```
+
+**Security Note**: Admin DIDs provide privileged access to client management operations. Only configure trusted DIDs with administrative privileges.
+
 ## Additional Build Arguments
 
 Refer to the project's `Dockerfile` for a comprehensive list of all supported build arguments and configuration options available during the container build process.

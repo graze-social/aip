@@ -144,6 +144,20 @@ OAUTH_SUPPORTED_SCOPES=atproto:atproto atproto:transition:generic atproto:transi
 # Default: false (disabled)
 ENABLE_CLIENT_API=false
 
+# Client token expiration configuration
+# Default access token lifetime (supports duration format: 1d, 12h, 3600s)
+# Default: 1d
+CLIENT_DEFAULT_ACCESS_TOKEN_EXPIRATION=1d
+
+# Default refresh token lifetime (supports duration format: 14d, 336h, 1209600s)
+# Default: 14d
+CLIENT_DEFAULT_REFRESH_TOKEN_EXPIRATION=14d
+
+# Admin DIDs for XRPC management endpoints
+# Comma-separated list of DIDs authorized to manage clients via XRPC
+# Default: (empty - no admin access)
+ADMIN_DIDS=did:plc:admin1,did:plc:admin2
+
 # ----------------------------------------------------------------------------
 # TLS/SSL CONFIGURATION
 # ----------------------------------------------------------------------------

@@ -49,6 +49,13 @@ export PORT=8080
 export STORAGE_BACKEND=postgres  # postgres, sqlite, or inmemory
 export DATABASE_URL=postgresql://user:pass@localhost/aip
 export LOG_LEVEL=info
+
+# Token Configuration
+export CLIENT_DEFAULT_ACCESS_TOKEN_EXPIRATION=1d   # Default access token lifetime
+export CLIENT_DEFAULT_REFRESH_TOKEN_EXPIRATION=14d # Default refresh token lifetime
+
+# Admin Configuration
+export ADMIN_DIDS=did:plc:admin1,did:plc:admin2    # Comma-separated list of admin DIDs
 ```
 
 see [CONFIGURATION.md](./CONFIGURATION.md) for more.

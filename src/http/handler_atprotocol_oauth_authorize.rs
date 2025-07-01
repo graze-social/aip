@@ -272,6 +272,9 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
+            client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
+            admin_dids: "".to_string().try_into().unwrap(),
         }
     }
 

@@ -22,11 +22,7 @@ pub struct AuthorizationServer {
     pub storage: Arc<dyn OAuthStorage>,
     dpop_validator: DPoPValidator,
     /// Authorization code lifetime
-    auth_code_lifetime: Duration,
-    /// Access token lifetime
-    access_token_lifetime: Duration,
-    /// Refresh token lifetime
-    refresh_token_lifetime: Duration,
+    auth_code_lifetime: Duration,    
     /// Server issuer URL (external base)
     issuer: String,
     /// Whether PKCE is required for public clients
@@ -43,8 +39,6 @@ impl AuthorizationServer {
             storage,
             dpop_validator,
             auth_code_lifetime: Duration::minutes(10),
-            access_token_lifetime: Duration::days(30),
-            refresh_token_lifetime: Duration::days(90),
             issuer,
             require_pkce: true,
         }
@@ -270,7 +264,7 @@ impl AuthorizationServer {
             scope: auth_code.scope.clone(),
             nonce: auth_code.nonce.clone(),
             created_at: now,
-            expires_at: now + self.access_token_lifetime,
+            expires_at: now + client.access_token_expiration,
             dpop_jkt,
         };
 
@@ -291,7 +285,7 @@ impl AuthorizationServer {
             scope: auth_code.scope.clone(),
             nonce: auth_code.nonce.clone(),
             created_at: now,
-            expires_at: Some(now + self.refresh_token_lifetime),
+            expires_at: Some(now + client.refresh_token_expiration),
         };
 
         self.storage
@@ -304,7 +298,7 @@ impl AuthorizationServer {
         Ok(TokenResponse::new(
             access_token,
             token_type,
-            self.access_token_lifetime.num_seconds() as u64,
+            client.access_token_expiration.num_seconds() as u64,
             Some(refresh_token),
             auth_code.scope,
         ))
@@ -369,14 +363,14 @@ impl AuthorizationServer {
         let access_token_record = AccessToken {
             token: access_token.clone(),
             token_type: TokenType::Bearer, // Client credentials doesn't use DPoP typically
-            client_id: client.client_id,
+            client_id: client.client_id.clone(),
             user_id: None, // No user for client credentials
             session_id: None,
             session_iteration: None, // No session for client credentials
             scope: granted_scope.clone(),
             nonce: None, // No nonce for client credentials grant
             created_at: now,
-            expires_at: now + self.access_token_lifetime,
+            expires_at: now + client.access_token_expiration,
             dpop_jkt: None,
         };
 
@@ -390,7 +384,7 @@ impl AuthorizationServer {
         Ok(TokenResponse::new(
             access_token,
             TokenType::Bearer,
-            self.access_token_lifetime.num_seconds() as u64,
+            client.access_token_expiration.num_seconds() as u64,
             None, // No refresh token for client credentials
             granted_scope,
         ))
@@ -443,7 +437,7 @@ impl AuthorizationServer {
             scope: refresh_token_record.scope.clone(),
             nonce: refresh_token_record.nonce.clone(),
             created_at: now,
-            expires_at: now + self.access_token_lifetime,
+            expires_at: now + client.access_token_expiration,
             dpop_jkt: None, // TODO: Handle DPoP binding
         };
 
@@ -464,7 +458,7 @@ impl AuthorizationServer {
             scope: refresh_token_record.scope.clone(),
             nonce: refresh_token_record.nonce.clone(),
             created_at: now,
-            expires_at: Some(now + self.refresh_token_lifetime),
+            expires_at: Some(now + client.refresh_token_expiration),
         };
 
         self.storage
@@ -477,7 +471,7 @@ impl AuthorizationServer {
         Ok(TokenResponse::new(
             new_access_token,
             TokenType::Bearer,
-            self.access_token_lifetime.num_seconds() as u64,
+            client.access_token_expiration.num_seconds() as u64,
             Some(new_refresh_token),
             refresh_token_record.scope,
         ))
@@ -767,6 +761,8 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
+            access_token_expiration: chrono::Duration::days(1),
+            refresh_token_expiration: chrono::Duration::days(14),
         };
 
         storage.store_client(&client).await.unwrap();
