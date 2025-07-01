@@ -183,9 +183,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "atproto-client"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf7e2807d26032716b41884b7b1299867642cb2aecc267917eaf7027f54d5d8b"
+checksum = "b1807b75d7b072f4feb4ffe5d6f749369b40f255b5bddf19fc0024392e360853"
 dependencies = [
  "anyhow",
  "atproto-identity",
@@ -205,9 +205,9 @@ dependencies = [
 
 [[package]]
 name = "atproto-identity"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36e6939755038bd48f684906090039ea2244d779325f35f714976a154e632c9f"
+checksum = "39e8b6d8136cc72cc76fc081e2389758761dd4018b04408d55a71281aa310fe2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -229,13 +229,14 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]
 name = "atproto-oauth"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3da2c74d22f8a30561e632743f523eb38f376d896f27164a4f2fd77ef77f5ae"
+checksum = "e835ee92d505a6edc794943067af4e0922e4b9e8d54f4df4eaaab15d1ea51687"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -263,13 +264,14 @@ dependencies = [
  "tokio",
  "tracing",
  "ulid",
+ "zeroize",
 ]
 
 [[package]]
 name = "atproto-oauth-axum"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6255a1ca35e4dadc48a6e286f161354b89099e56e2bc92d65643626c895416f"
+checksum = "a62c892f8191e3a20f51d41bf69540b0f73ca9b9f60495b3ce791b613c9de94a"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -291,13 +293,14 @@ dependencies = [
  "tokio",
  "tracing",
  "urlencoding",
+ "zeroize",
 ]
 
 [[package]]
 name = "atproto-record"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "348b3cbe6a68288358949fc1c643549795d156ab218c2c145d4ba32aa9d1b93f"
+checksum = "c8fd0584e562083f5fe4cde960debbe45ee7a43c18e312d4c260e26892f3a945"
 dependencies = [
  "anyhow",
  "atproto-identity",
@@ -4315,6 +4318,20 @@ name = "zeroize"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "zerotrie"

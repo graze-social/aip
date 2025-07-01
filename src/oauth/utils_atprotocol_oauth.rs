@@ -203,8 +203,8 @@ pub async fn refresh_session(
             {
                 Ok(token_response) => {
                     // Update session with new tokens
-                    new_session.access_token = Some(token_response.access_token);
-                    new_session.refresh_token = Some(token_response.refresh_token);
+                    new_session.access_token = Some(token_response.access_token.clone());
+                    new_session.refresh_token = Some(token_response.refresh_token.clone());
                     new_session.access_token_created_at = Some(now);
                     new_session.access_token_expires_at =
                         Some(now + Duration::seconds(token_response.expires_in as i64));
