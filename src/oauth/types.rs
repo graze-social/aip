@@ -46,7 +46,7 @@ pub enum ClientAuthMethod {
 }
 
 /// OAuth Client Registration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OAuthClient {
     /// Unique client identifier
     pub client_id: String,
@@ -83,7 +83,7 @@ pub enum ClientType {
 }
 
 /// OAuth Authorization Request
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AuthorizationRequest {
     /// Response type (can contain multiple space-separated values)
     pub response_type: Vec<ResponseType>,
@@ -106,7 +106,7 @@ pub struct AuthorizationRequest {
 }
 
 /// OAuth Authorization Code
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AuthorizationCode {
     /// The authorization code
     pub code: String,
@@ -136,7 +136,7 @@ pub struct AuthorizationCode {
 }
 
 /// OAuth Access Token
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AccessToken {
     /// The access token
     pub token: String,
@@ -165,7 +165,7 @@ pub struct AccessToken {
 }
 
 /// OAuth Refresh Token
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct RefreshToken {
     /// The refresh token
     pub token: String,
@@ -189,7 +189,7 @@ pub struct RefreshToken {
 }
 
 /// Token Exchange Request
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct TokenRequest {
     /// Grant type
     pub grant_type: GrantType,
@@ -210,7 +210,7 @@ pub struct TokenRequest {
 }
 
 /// Token Response
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct TokenResponse {
     /// Access token
     pub access_token: String,
@@ -287,7 +287,7 @@ pub struct ClientRegistrationRequest {
 }
 
 /// Client Registration Response (RFC 7591)
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct ClientRegistrationResponse {
     /// Client ID
     pub client_id: String,
@@ -316,7 +316,7 @@ pub struct ClientRegistrationResponse {
 }
 
 /// DPoP Token Claims
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DPoPTokenClaims {
     /// Token type
     pub typ: String,
@@ -340,7 +340,7 @@ pub struct DPoPTokenClaims {
 pub const STANDARD_SCOPES: &[&str] = &["openid", "profile", "email", "offline_access"];
 
 /// Generate a secure random token
-pub fn generate_token() -> String {
+pub(crate) fn generate_token() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     let bytes: [u8; 32] = rng.r#gen();
@@ -348,12 +348,12 @@ pub fn generate_token() -> String {
 }
 
 /// Generate a client ID
-pub fn generate_client_id() -> String {
+pub(crate) fn generate_client_id() -> String {
     Uuid::new_v4().to_string()
 }
 
 /// Validate scope string
-pub fn validate_scope(scope: &str) -> bool {
+pub(crate) fn validate_scope(scope: &str) -> bool {
     // Basic scope validation - contains only valid characters
     scope.split_whitespace().all(|s| {
         s.chars()
@@ -366,30 +366,8 @@ pub fn parse_scope(scope: &str) -> HashSet<String> {
     scope.split_whitespace().map(|s| s.to_string()).collect()
 }
 
-/// Join scopes into a space-separated string
-pub fn join_scopes(scopes: &HashSet<String>) -> String {
-    let mut scopes: Vec<_> = scopes.iter().collect();
-    scopes.sort();
-    scopes.into_iter().cloned().collect::<Vec<_>>().join(" ")
-}
-
-/// Check if OpenID scope is requested
-pub fn has_openid_scope(scope: &Option<String>) -> bool {
-    match scope {
-        Some(scope_str) => parse_scope(scope_str).contains("openid"),
-        None => false,
-    }
-}
-
-/// Check if response type requires ID token
-pub fn requires_id_token(response_types: &[ResponseType]) -> bool {
-    response_types
-        .iter()
-        .any(|rt| matches!(rt, ResponseType::IdToken))
-}
-
 /// Parse response type string into a vector of ResponseType
-pub fn parse_response_type(response_type_str: &str) -> Result<Vec<ResponseType>, String> {
+pub(crate) fn parse_response_type(response_type_str: &str) -> Result<Vec<ResponseType>, String> {
     let mut response_types = Vec::new();
 
     for part in response_type_str.split_whitespace() {

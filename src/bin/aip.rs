@@ -72,8 +72,6 @@ async fn main() -> Result<()> {
 
     let config = Config::new()?;
 
-    tracing::info!(config.enable_client_api, "Feature: Client Registration");
-
     // Build HTTP client with certificate bundles
     let mut client_builder = reqwest::Client::builder();
     for ca_certificate in config.certificate_bundles.as_ref() {

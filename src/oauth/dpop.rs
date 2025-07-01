@@ -6,7 +6,7 @@ use crate::errors::DPoPError;
 use crate::storage::traits::NonceStorage;
 use atproto_identity::key::{KeyData, KeyType};
 use atproto_oauth::{
-    dpop::{DpopValidationConfig, extract_jwk_thumbprint, validate_dpop_jwt},
+    dpop::{DpopValidationConfig, validate_dpop_jwt},
     jwk::{WrappedJsonWebKey, to_key_data as jwk_to_key_data_impl},
     jwt,
 };
@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use time::{Duration, OffsetDateTime};
 
 /// DPoP JWT Header
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DPoPHeader {
     /// Token type (must be "dpop+jwt")
     pub typ: String,
@@ -27,7 +27,7 @@ pub struct DPoPHeader {
 }
 
 /// DPoP JWT Claims
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DPoPClaims {
     /// Unique JWT identifier
     pub jti: String,
@@ -46,7 +46,7 @@ pub struct DPoPClaims {
 }
 
 /// DPoP Proof
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DPoPProof {
     /// JWT header
     pub header: DPoPHeader,
@@ -98,7 +98,7 @@ impl DPoPHeader {
                     KeyType::P256Public | KeyType::P256Private => Ok("ES256".to_string()),
                     KeyType::K256Public | KeyType::K256Private => Ok("ES256K".to_string()),
                     _ => Err(DPoPError::InvalidProof(format!(
-                        "Unsupported key type: {:?}",
+                        "Unsupported key type: {}",
                         key_data.key_type()
                     ))),
                 }
@@ -314,41 +314,6 @@ pub fn compute_jwk_thumbprint(jwk: &WrappedJsonWebKey) -> Result<String, DPoPErr
     atproto_oauth::jwk::thumbprint(jwk).map_err(|err| DPoPError::Thumbprint(err.to_string()))
 }
 
-/// Extract JWK thumbprint from a DPoP JWT using standardized implementation
-pub fn extract_dpop_jwk_thumbprint(dpop_jwt: &str) -> Result<String, DPoPError> {
-    extract_jwk_thumbprint(dpop_jwt)
-        .map_err(|e| DPoPError::InvalidProof(format!("Failed to extract JWK thumbprint: {}", e)))
-}
-
-/// Validate a DPoP JWT using standardized atproto-oauth validation
-///
-/// This is a convenience function that wraps the standardized validation
-/// with our error types.
-pub fn validate_dpop_proof(
-    dpop_jwt: &str,
-    http_method: &str,
-    http_uri: &str,
-    require_access_token_hash: bool,
-) -> Result<String, DPoPError> {
-    let config = DpopValidationConfig {
-        expected_http_method: Some(http_method.to_string()),
-        expected_http_uri: Some(http_uri.to_string()),
-        expected_access_token_hash: if require_access_token_hash {
-            Some("".to_string())
-        } else {
-            None
-        },
-        max_age_seconds: 300, // 5 minutes
-        allow_future_iat: false,
-        clock_skew_tolerance_seconds: 30,
-        now: chrono::Utc::now().timestamp(),
-        expected_nonce_values: Vec::new(),
-    };
-
-    validate_dpop_jwt(dpop_jwt, &config)
-        .map_err(|e| DPoPError::InvalidProof(format!("DPoP validation failed: {}", e)))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -379,23 +344,6 @@ mod tests {
 
         // Test thumbprint computation with standardized function
         let thumbprint = compute_jwk_thumbprint(&public_jwk).unwrap();
-        assert!(!thumbprint.is_empty());
-        assert_eq!(thumbprint.len(), 43); // Standard SHA-256 base64url length
-    }
-
-    #[test]
-    fn test_dpop_jwk_thumbprint_extraction() {
-        use atproto_identity::key::{KeyType, generate_key};
-        use atproto_oauth::dpop::auth_dpop;
-
-        // Generate a key and create a DPoP token
-        let key_data = generate_key(KeyType::P256Private).unwrap();
-        let (dpop_token, _, _) = auth_dpop(&key_data, "POST", "/oauth/token").unwrap();
-
-        // Test extracting JWK thumbprint from DPoP JWT
-        let thumbprint = extract_dpop_jwk_thumbprint(&dpop_token);
-        assert!(thumbprint.is_ok());
-        let thumbprint = thumbprint.unwrap();
         assert!(!thumbprint.is_empty());
         assert_eq!(thumbprint.len(), 43); // Standard SHA-256 base64url length
     }
@@ -462,23 +410,6 @@ mod tests {
             *key_data.key_type(),
             atproto_identity::key::KeyType::K256Public
         );
-    }
-
-    #[test]
-    fn test_standardized_dpop_validation() {
-        use atproto_identity::key::{KeyType, generate_key};
-        use atproto_oauth::dpop::auth_dpop;
-
-        // Generate a key and create a DPoP token
-        let key_data = generate_key(KeyType::P256Private).unwrap();
-        let (dpop_token, _, _) = auth_dpop(&key_data, "POST", "/oauth/token").unwrap();
-
-        // Test standalone validation function
-        let result = validate_dpop_proof(&dpop_token, "POST", "/oauth/token", false);
-        assert!(result.is_ok());
-        let thumbprint = result.unwrap();
-        assert!(!thumbprint.is_empty());
-        assert_eq!(thumbprint.len(), 43);
     }
 
     #[tokio::test]

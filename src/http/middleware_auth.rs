@@ -224,17 +224,7 @@ where
                 }
             };
 
-            // let uri_str = match OriginalUri::from_request_parts(parts, state).await {
-            //     Ok(value) => value.0.path().to_owned(),
-            //     Err(err) => {
-            //         tracing::warn!(?err, "unable to get OriginalUri from request parts");
-            //         parts.uri.to_string()
-            //     }
-            // };
-            // let uri_str = parts.uri.to_string();
-            // let uri_str = original_uri.0.path().to_owned();
             let http_method = parts.method.to_string();
-            // let http_method = &parts.method.to_string();
 
             // Step 4c: Get valid nonces for replay protection
             // Server maintains rolling window of valid nonces
@@ -314,41 +304,3 @@ pub async fn set_dpop_headers<B>(
     );
     response
 }
-
-// # Code Style and Conventions
-//
-// ## Error Handling
-// - Always return OAuth 2.0 standard error codes
-// - Use `invalid_request` for malformed requests
-// - Use `invalid_token` for expired or non-existent tokens
-// - Use `invalid_dpop_proof` for DPoP validation failures
-// - Include descriptive `error_description` for debugging
-//
-// ## Security Considerations
-// - Never log sensitive token values
-// - Always validate token type consistency
-// - Enforce DPoP binding when token was issued with DPoP
-// - Use server-generated nonces for replay protection
-//
-// ## Performance Tips
-// - Token lookups are async and may hit external storage
-// - DPoP validation involves cryptographic operations
-// - Consider caching validated tokens for high-traffic endpoints
-//
-// ## Testing
-// ```no_run
-// // Test with Bearer token
-// let response = client
-//     .get("/api/protected")
-//     .header("Authorization", "Bearer test-token-123")
-//     .send()
-//     .await;
-//
-// // Test with DPoP token
-// let response = client
-//     .get("/api/protected")
-//     .header("Authorization", "DPoP test-token-456")
-//     .header("DPoP", dpop_proof_jwt)
-//     .send()
-//     .await;
-// ```
