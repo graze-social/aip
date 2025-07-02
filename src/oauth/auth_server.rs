@@ -22,7 +22,7 @@ pub struct AuthorizationServer {
     pub storage: Arc<dyn OAuthStorage>,
     dpop_validator: DPoPValidator,
     /// Authorization code lifetime
-    auth_code_lifetime: Duration,    
+    auth_code_lifetime: Duration,
     /// Server issuer URL (external base)
     issuer: String,
     /// Whether PKCE is required for public clients
@@ -65,11 +65,12 @@ impl AuthorizationServer {
             client.redirect_uris.contains(&request.redirect_uri)
         } else {
             // Prefix matching
-            client.redirect_uris.iter().any(|registered_uri| {
-                request.redirect_uri.starts_with(registered_uri)
-            })
+            client
+                .redirect_uris
+                .iter()
+                .any(|registered_uri| request.redirect_uri.starts_with(registered_uri))
         };
-        
+
         if !redirect_uri_valid {
             return Err(OAuthError::InvalidRequest(
                 "Invalid redirect URI".to_string(),
@@ -270,7 +271,7 @@ impl AuthorizationServer {
             client_id: client.client_id.clone(),
             user_id: Some(auth_code.user_id.clone()),
             session_id: auth_code.session_id.clone(),
-            session_iteration: None, // TODO: Get from AtpOAuth session if available
+            session_iteration: Some(1),
             scope: auth_code.scope.clone(),
             nonce: auth_code.nonce.clone(),
             created_at: now,
@@ -431,6 +432,15 @@ impl AuthorizationServer {
         // Authenticate client
         self.authenticate_client(&client, client_auth, &request)?;
 
+        let old_access_token = self
+            .storage
+            .get_token(&refresh_token_record.access_token)
+            .await
+            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .ok_or_else(|| OAuthError::InvalidGrant("Invalid refresh token".to_string()))?;
+    
+        let session_iteration = old_access_token.session_iteration.ok_or_else(|| OAuthError::InvalidGrant("Invalid refresh token".to_string()))?;
+
         // Generate new tokens
         let new_access_token = generate_token();
         let new_refresh_token = generate_token();
@@ -439,16 +449,16 @@ impl AuthorizationServer {
         // Store new access token
         let access_token_record = AccessToken {
             token: new_access_token.clone(),
-            token_type: TokenType::Bearer, // TODO: Handle DPoP for refresh
+            token_type: old_access_token.token_type,
             client_id: client.client_id.clone(),
             user_id: Some(refresh_token_record.user_id.clone()),
             session_id: refresh_token_record.session_id.clone(),
-            session_iteration: None, // TODO: Get from original token if available
+            session_iteration: Some(session_iteration + 1),
             scope: refresh_token_record.scope.clone(),
             nonce: refresh_token_record.nonce.clone(),
             created_at: now,
             expires_at: now + client.access_token_expiration,
-            dpop_jkt: None, // TODO: Handle DPoP binding
+            dpop_jkt: old_access_token.dpop_jkt,
         };
 
         self.storage
