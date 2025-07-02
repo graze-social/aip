@@ -103,6 +103,16 @@ impl PostgresOAuthClientStore {
         }
     }
 
+    /// Convert chrono::Duration to seconds as i64
+    fn duration_to_seconds(duration: &chrono::Duration) -> i64 {
+        duration.num_seconds()
+    }
+
+    /// Convert seconds (i64) to chrono::Duration
+    fn seconds_to_duration(seconds: i64) -> chrono::Duration {
+        chrono::Duration::seconds(seconds)
+    }
+
     /// Serialize grant types to JSON value
     fn serialize_grant_types(grant_types: &[GrantType]) -> serde_json::Value {
         let strings: Vec<&str> = grant_types.iter().map(Self::grant_type_to_string).collect();
@@ -244,6 +254,16 @@ impl PostgresOAuthClientStore {
             .try_get("scope")
             .map_err(|e| StorageError::DatabaseError(format!("Failed to get scope: {}", e)))?;
 
+        let access_token_expiration_seconds: i64 = row
+            .try_get("access_token_expiration")
+            .map_err(|e| StorageError::DatabaseError(format!("Failed to get access_token_expiration: {}", e)))?;
+        let access_token_expiration = Self::seconds_to_duration(access_token_expiration_seconds);
+
+        let refresh_token_expiration_seconds: i64 = row
+            .try_get("refresh_token_expiration")
+            .map_err(|e| StorageError::DatabaseError(format!("Failed to get refresh_token_expiration: {}", e)))?;
+        let refresh_token_expiration = Self::seconds_to_duration(refresh_token_expiration_seconds);
+
         Ok(OAuthClient {
             client_id,
             client_secret,
@@ -257,9 +277,8 @@ impl PostgresOAuthClientStore {
             created_at,
             updated_at,
             metadata,
-            // TODO: These should be stored in the database
-            access_token_expiration: chrono::Duration::days(1),
-            refresh_token_expiration: chrono::Duration::days(14),
+            access_token_expiration,
+            refresh_token_expiration,
         })
     }
 }
@@ -279,14 +298,16 @@ impl OAuthClientStore for PostgresOAuthClientStore {
         let response_types_json = Self::serialize_response_types(&client.response_types);
         let auth_method_str = Self::auth_method_to_string(&client.token_endpoint_auth_method);
         let client_type_str = Self::client_type_to_string(&client.client_type);
+        let access_token_expiration_seconds = Self::duration_to_seconds(&client.access_token_expiration);
+        let refresh_token_expiration_seconds = Self::duration_to_seconds(&client.refresh_token_expiration);
 
         sqlx::query(
             r#"
             INSERT INTO oauth_clients (
                 client_id, client_secret, client_name, redirect_uris, grant_types, 
                 response_types, scope, token_endpoint_auth_method, client_type,
-                created_at, updated_at, metadata
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                created_at, updated_at, metadata, access_token_expiration, refresh_token_expiration
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             "#,
         )
         .bind(&client.client_id)
@@ -301,6 +322,8 @@ impl OAuthClientStore for PostgresOAuthClientStore {
         .bind(client.created_at)
         .bind(client.updated_at)
         .bind(&client.metadata)
+        .bind(access_token_expiration_seconds)
+        .bind(refresh_token_expiration_seconds)
         .execute(&self.pool)
         .await
         .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
@@ -337,13 +360,15 @@ impl OAuthClientStore for PostgresOAuthClientStore {
         let response_types_json = Self::serialize_response_types(&client.response_types);
         let auth_method_str = Self::auth_method_to_string(&client.token_endpoint_auth_method);
         let client_type_str = Self::client_type_to_string(&client.client_type);
+        let access_token_expiration_seconds = Self::duration_to_seconds(&client.access_token_expiration);
+        let refresh_token_expiration_seconds = Self::duration_to_seconds(&client.refresh_token_expiration);
 
         let result = sqlx::query(
             r#"
             UPDATE oauth_clients SET 
                 client_secret = $2, client_name = $3, redirect_uris = $4, grant_types = $5,
                 response_types = $6, scope = $7, token_endpoint_auth_method = $8, 
-                client_type = $9, updated_at = $10, metadata = $11
+                client_type = $9, updated_at = $10, metadata = $11, access_token_expiration = $12, refresh_token_expiration = $13
             WHERE client_id = $1
             "#,
         )
@@ -358,6 +383,8 @@ impl OAuthClientStore for PostgresOAuthClientStore {
         .bind(client_type_str)
         .bind(client.updated_at)
         .bind(&client.metadata)
+        .bind(access_token_expiration_seconds)
+        .bind(refresh_token_expiration_seconds)
         .execute(&self.pool)
         .await
         .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
