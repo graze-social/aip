@@ -76,6 +76,10 @@ pub struct OAuthClient {
     pub access_token_expiration: chrono::Duration,
     /// Refresh token expiration duration
     pub refresh_token_expiration: chrono::Duration,
+    /// Whether to require exact redirect URI matching (true) or prefix matching (false)
+    pub require_redirect_exact: bool,
+    /// Registration access token for client management operations
+    pub registration_access_token: Option<String>,
 }
 
 /// Client Type

@@ -42,6 +42,10 @@ pub struct ClientDefaultRefreshTokenExpiration(chrono::Duration);
 #[derive(Clone)]
 pub struct AdminDids(Vec<String>);
 
+/// Client default redirect exact matching configuration
+#[derive(Clone)]
+pub struct ClientDefaultRedirectExact(bool);
+
 /// Main application configuration
 #[derive(Clone)]
 pub struct Config {
@@ -66,6 +70,7 @@ pub struct Config {
     pub client_default_access_token_expiration: ClientDefaultAccessTokenExpiration,
     pub client_default_refresh_token_expiration: ClientDefaultRefreshTokenExpiration,
     pub admin_dids: AdminDids,
+    pub client_default_redirect_exact: ClientDefaultRedirectExact,
 }
 
 impl Config {
@@ -106,6 +111,8 @@ impl Config {
         let client_default_refresh_token_expiration: ClientDefaultRefreshTokenExpiration = 
             default_env("CLIENT_DEFAULT_REFRESH_TOKEN_EXPIRATION", "14d").try_into()?;
         let admin_dids: AdminDids = optional_env("ADMIN_DIDS").try_into()?;
+        let client_default_redirect_exact: ClientDefaultRedirectExact = 
+            default_env("CLIENT_DEFAULT_REDIRECT_EXACT", "true").try_into()?;
 
         Ok(Self {
             version: version()?,
@@ -129,6 +136,7 @@ impl Config {
             client_default_access_token_expiration,
             client_default_refresh_token_expiration,
             admin_dids,
+            client_default_redirect_exact,
         })
     }
 }
@@ -421,6 +429,24 @@ impl TryFrom<String> for AdminDids {
 
 impl AsRef<Vec<String>> for AdminDids {
     fn as_ref(&self) -> &Vec<String> {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for ClientDefaultRedirectExact {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "true" | "1" | "yes" | "on" => Ok(Self(true)),
+            "false" | "0" | "no" | "off" => Ok(Self(false)),
+            _ => Err(ConfigError::BoolParsingFailed(value).into()),
+        }
+    }
+}
+
+impl AsRef<bool> for ClientDefaultRedirectExact {
+    fn as_ref(&self) -> &bool {
         &self.0
     }
 }

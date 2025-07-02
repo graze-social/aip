@@ -179,7 +179,17 @@ fn validate_and_convert_par_request(
     }
 
     // Validate redirect URI
-    if !client.redirect_uris.contains(&request.redirect_uri) {
+    let redirect_uri_valid = if client.require_redirect_exact {
+        // Exact matching
+        client.redirect_uris.contains(&request.redirect_uri)
+    } else {
+        // Prefix matching
+        client.redirect_uris.iter().any(|registered_uri| {
+            request.redirect_uri.starts_with(registered_uri)
+        })
+    };
+    
+    if !redirect_uri_valid {
         return Err(OAuthError::InvalidRequest(
             "Invalid redirect URI".to_string(),
         ));
@@ -313,6 +323,8 @@ mod tests {
             metadata: serde_json::Value::Null,
             access_token_expiration: chrono::Duration::days(1),
             refresh_token_expiration: chrono::Duration::days(14),
+            require_redirect_exact: true,
+            registration_access_token: Some("test-registration-token".to_string()),
         };
 
         auth_server.storage.store_client(&client).await.unwrap();
@@ -364,6 +376,7 @@ mod tests {
             client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),
+            client_default_redirect_exact: "true".to_string().try_into().unwrap(),
         };
 
         let auth_request =
@@ -392,6 +405,8 @@ mod tests {
             metadata: serde_json::Value::Null,
             access_token_expiration: chrono::Duration::days(1),
             refresh_token_expiration: chrono::Duration::days(14),
+            require_redirect_exact: true,
+            registration_access_token: Some("test-registration-token".to_string()),
         };
 
         let par_request = PushedAuthorizationRequest {
@@ -434,6 +449,7 @@ mod tests {
             client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),
+            client_default_redirect_exact: "true".to_string().try_into().unwrap(),
         };
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);
@@ -460,6 +476,8 @@ mod tests {
             metadata: serde_json::Value::Null,
             access_token_expiration: chrono::Duration::days(1),
             refresh_token_expiration: chrono::Duration::days(14),
+            require_redirect_exact: true,
+            registration_access_token: Some("test-registration-token".to_string()),
         };
 
         let par_request = PushedAuthorizationRequest {
@@ -502,6 +520,7 @@ mod tests {
             client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),
+            client_default_redirect_exact: "true".to_string().try_into().unwrap(),
         };
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);

@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use crate::{
     errors::ClientRegistrationError,
     http::context::AppState,
-    oauth::types::{ClientRegistrationRequest, ClientRegistrationResponse, FilteredClientRegistrationResponse},
+    oauth::{clients::registration::ClientServiceAuth, types::{ClientRegistrationRequest, ClientRegistrationResponse, FilteredClientRegistrationResponse}},
 };
 
 /// Extract bearer token from Authorization header
@@ -106,7 +106,8 @@ pub async fn app_get_client_handler(
     let service = state.client_registration_service.clone();
     let registration_token = extract_bearer_token(&headers)?;
 
-    match service.get_client(&client_id, &registration_token).await {
+    let client_service_auth = ClientServiceAuth::RegistrationToken(registration_token);
+    match service.get_client(&client_id, &client_service_auth).await {
         Ok(response) => {
             let filtered_response = FilteredClientRegistrationResponse::from(response);
             Ok(ResponseJson(filtered_response))
@@ -146,10 +147,11 @@ pub async fn app_update_client_handler(
     let service = state.client_registration_service.clone();
     let registration_token = extract_bearer_token(&headers)?;
 
+    let client_service_auth = ClientServiceAuth::RegistrationToken(registration_token);
     match service
         .update_client_with_supported_scopes(
             &client_id,
-            &registration_token,
+            &client_service_auth,
             request,
             Some(&state.config.oauth_supported_scopes),
         )
@@ -203,7 +205,8 @@ pub async fn app_delete_client_handler(
     let service = state.client_registration_service.clone();
     let registration_token = extract_bearer_token(&headers)?;
 
-    match service.delete_client(&client_id, &registration_token).await {
+    let client_service_auth = ClientServiceAuth::RegistrationToken(registration_token);
+    match service.delete_client(&client_id, &client_service_auth).await {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
             let (status, error_code, description) = match &e {

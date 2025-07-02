@@ -60,7 +60,17 @@ impl AuthorizationServer {
             .ok_or_else(|| OAuthError::InvalidClient("Client not found".to_string()))?;
 
         // Validate redirect URI
-        if !client.redirect_uris.contains(&request.redirect_uri) {
+        let redirect_uri_valid = if client.require_redirect_exact {
+            // Exact matching
+            client.redirect_uris.contains(&request.redirect_uri)
+        } else {
+            // Prefix matching
+            client.redirect_uris.iter().any(|registered_uri| {
+                request.redirect_uri.starts_with(registered_uri)
+            })
+        };
+        
+        if !redirect_uri_valid {
             return Err(OAuthError::InvalidRequest(
                 "Invalid redirect URI".to_string(),
             ));
@@ -763,6 +773,8 @@ mod tests {
             metadata: serde_json::Value::Null,
             access_token_expiration: chrono::Duration::days(1),
             refresh_token_expiration: chrono::Duration::days(14),
+            require_redirect_exact: true,
+            registration_access_token: Some("test-registration-token".to_string()),
         };
 
         storage.store_client(&client).await.unwrap();

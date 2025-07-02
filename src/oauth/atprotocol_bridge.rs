@@ -1075,6 +1075,8 @@ mod tests {
             metadata: serde_json::Value::Null,
             access_token_expiration: chrono::Duration::days(1),
             refresh_token_expiration: chrono::Duration::days(14),
+            require_redirect_exact: true,
+            registration_access_token: Some("test-registration-token".to_string()),
         };
 
         server
@@ -1512,6 +1514,8 @@ mod tests {
                 metadata: serde_json::json!({}),
                 access_token_expiration: chrono::Duration::days(1),
                 refresh_token_expiration: chrono::Duration::days(14),
+                require_redirect_exact: true,
+                registration_access_token: Some("test-registration-token".to_string()),
             };
 
             server

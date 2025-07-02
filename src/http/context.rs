@@ -1,9 +1,7 @@
 //! Application state and request context management.
 
 use atproto_identity::{
-    key::{KeyData, KeyProvider},
-    resolve::IdentityResolver,
-    storage::DidDocumentStorage,
+    axum::state::DidDocumentStorageExtractor, key::{KeyData, KeyProvider}, resolve::IdentityResolver, storage::DidDocumentStorage
 };
 use atproto_oauth::storage::OAuthRequestStorage;
 use axum::extract::FromRef;
@@ -65,5 +63,13 @@ pub struct AppState {
 impl FromRef<AppState> for Arc<dyn DPoPNonceProvider> {
     fn from_ref(app_state: &AppState) -> Self {
         app_state.dpop_nonce_provider.clone()
+    }
+}
+
+impl FromRef<AppState> for DidDocumentStorageExtractor {
+    fn from_ref(app_state: &AppState) -> Self {
+        atproto_identity::axum::state::DidDocumentStorageExtractor(
+            app_state.document_storage.clone(),
+        )
     }
 }

@@ -248,6 +248,7 @@ async fn main() -> Result<()> {
         oauth_storage.clone(),
         *config.client_default_access_token_expiration.as_ref(),
         *config.client_default_refresh_token_expiration.as_ref(),
+        *config.client_default_redirect_exact.as_ref(),
     ));
 
     // Create application context
