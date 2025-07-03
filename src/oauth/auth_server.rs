@@ -23,10 +23,6 @@ pub struct AuthorizationServer {
     dpop_validator: DPoPValidator,
     /// Authorization code lifetime
     auth_code_lifetime: Duration,
-    /// Access token lifetime
-    access_token_lifetime: Duration,
-    /// Refresh token lifetime
-    refresh_token_lifetime: Duration,
     /// Server issuer URL (external base)
     issuer: String,
     /// Whether PKCE is required for public clients
@@ -43,8 +39,6 @@ impl AuthorizationServer {
             storage,
             dpop_validator,
             auth_code_lifetime: Duration::minutes(10),
-            access_token_lifetime: Duration::days(30),
-            refresh_token_lifetime: Duration::days(90),
             issuer,
             require_pkce: true,
         }
@@ -66,7 +60,18 @@ impl AuthorizationServer {
             .ok_or_else(|| OAuthError::InvalidClient("Client not found".to_string()))?;
 
         // Validate redirect URI
-        if !client.redirect_uris.contains(&request.redirect_uri) {
+        let redirect_uri_valid = if client.require_redirect_exact {
+            // Exact matching
+            client.redirect_uris.contains(&request.redirect_uri)
+        } else {
+            // Prefix matching
+            client
+                .redirect_uris
+                .iter()
+                .any(|registered_uri| request.redirect_uri.starts_with(registered_uri))
+        };
+
+        if !redirect_uri_valid {
             return Err(OAuthError::InvalidRequest(
                 "Invalid redirect URI".to_string(),
             ));
@@ -266,11 +271,11 @@ impl AuthorizationServer {
             client_id: client.client_id.clone(),
             user_id: Some(auth_code.user_id.clone()),
             session_id: auth_code.session_id.clone(),
-            session_iteration: None, // TODO: Get from AtpOAuth session if available
+            session_iteration: Some(1),
             scope: auth_code.scope.clone(),
             nonce: auth_code.nonce.clone(),
             created_at: now,
-            expires_at: now + self.access_token_lifetime,
+            expires_at: now + client.access_token_expiration,
             dpop_jkt,
         };
 
@@ -291,7 +296,7 @@ impl AuthorizationServer {
             scope: auth_code.scope.clone(),
             nonce: auth_code.nonce.clone(),
             created_at: now,
-            expires_at: Some(now + self.refresh_token_lifetime),
+            expires_at: Some(now + client.refresh_token_expiration),
         };
 
         self.storage
@@ -304,7 +309,7 @@ impl AuthorizationServer {
         Ok(TokenResponse::new(
             access_token,
             token_type,
-            self.access_token_lifetime.num_seconds() as u64,
+            client.access_token_expiration.num_seconds() as u64,
             Some(refresh_token),
             auth_code.scope,
         ))
@@ -369,14 +374,14 @@ impl AuthorizationServer {
         let access_token_record = AccessToken {
             token: access_token.clone(),
             token_type: TokenType::Bearer, // Client credentials doesn't use DPoP typically
-            client_id: client.client_id,
+            client_id: client.client_id.clone(),
             user_id: None, // No user for client credentials
             session_id: None,
             session_iteration: None, // No session for client credentials
             scope: granted_scope.clone(),
             nonce: None, // No nonce for client credentials grant
             created_at: now,
-            expires_at: now + self.access_token_lifetime,
+            expires_at: now + client.access_token_expiration,
             dpop_jkt: None,
         };
 
@@ -390,7 +395,7 @@ impl AuthorizationServer {
         Ok(TokenResponse::new(
             access_token,
             TokenType::Bearer,
-            self.access_token_lifetime.num_seconds() as u64,
+            client.access_token_expiration.num_seconds() as u64,
             None, // No refresh token for client credentials
             granted_scope,
         ))
@@ -427,6 +432,15 @@ impl AuthorizationServer {
         // Authenticate client
         self.authenticate_client(&client, client_auth, &request)?;
 
+        let old_access_token = self
+            .storage
+            .get_token(&refresh_token_record.access_token)
+            .await
+            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .ok_or_else(|| OAuthError::InvalidGrant("Invalid refresh token".to_string()))?;
+    
+        let session_iteration = old_access_token.session_iteration.ok_or_else(|| OAuthError::InvalidGrant("Invalid refresh token".to_string()))?;
+
         // Generate new tokens
         let new_access_token = generate_token();
         let new_refresh_token = generate_token();
@@ -435,16 +449,16 @@ impl AuthorizationServer {
         // Store new access token
         let access_token_record = AccessToken {
             token: new_access_token.clone(),
-            token_type: TokenType::Bearer, // TODO: Handle DPoP for refresh
+            token_type: old_access_token.token_type,
             client_id: client.client_id.clone(),
             user_id: Some(refresh_token_record.user_id.clone()),
             session_id: refresh_token_record.session_id.clone(),
-            session_iteration: None, // TODO: Get from original token if available
+            session_iteration: Some(session_iteration + 1),
             scope: refresh_token_record.scope.clone(),
             nonce: refresh_token_record.nonce.clone(),
             created_at: now,
-            expires_at: now + self.access_token_lifetime,
-            dpop_jkt: None, // TODO: Handle DPoP binding
+            expires_at: now + client.access_token_expiration,
+            dpop_jkt: old_access_token.dpop_jkt,
         };
 
         self.storage
@@ -464,7 +478,7 @@ impl AuthorizationServer {
             scope: refresh_token_record.scope.clone(),
             nonce: refresh_token_record.nonce.clone(),
             created_at: now,
-            expires_at: Some(now + self.refresh_token_lifetime),
+            expires_at: Some(now + client.refresh_token_expiration),
         };
 
         self.storage
@@ -477,7 +491,7 @@ impl AuthorizationServer {
         Ok(TokenResponse::new(
             new_access_token,
             TokenType::Bearer,
-            self.access_token_lifetime.num_seconds() as u64,
+            client.access_token_expiration.num_seconds() as u64,
             Some(new_refresh_token),
             refresh_token_record.scope,
         ))
@@ -767,6 +781,10 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
+            access_token_expiration: chrono::Duration::days(1),
+            refresh_token_expiration: chrono::Duration::days(14),
+            require_redirect_exact: true,
+            registration_access_token: Some("test-registration-token".to_string()),
         };
 
         storage.store_client(&client).await.unwrap();

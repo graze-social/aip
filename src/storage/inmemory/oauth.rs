@@ -935,6 +935,10 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
+            access_token_expiration: chrono::Duration::days(1),
+            refresh_token_expiration: chrono::Duration::days(14),
+            require_redirect_exact: true,
+            registration_access_token: Some("test-registration-token".to_string()),
         };
 
         // Store client

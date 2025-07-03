@@ -72,6 +72,14 @@ pub struct OAuthClient {
     pub updated_at: DateTime<Utc>,
     /// Client metadata
     pub metadata: serde_json::Value,
+    /// Access token expiration duration
+    pub access_token_expiration: chrono::Duration,
+    /// Refresh token expiration duration
+    pub refresh_token_expiration: chrono::Duration,
+    /// Whether to require exact redirect URI matching (true) or prefix matching (false)
+    pub require_redirect_exact: bool,
+    /// Registration access token for client management operations
+    pub registration_access_token: Option<String>,
 }
 
 /// Client Type
@@ -313,6 +321,63 @@ pub struct ClientRegistrationResponse {
     pub client_id_issued_at: i64,
     /// Client secret expires at (optional)
     pub client_secret_expires_at: Option<i64>,
+}
+
+/// XRPC Client Update Request
+#[derive(Deserialize)]
+pub struct UpdateClientRequest {
+    pub client_id: String,
+    pub client_name: Option<String>,
+    pub redirect_uris: Option<Vec<String>>,
+    pub grant_types: Option<Vec<GrantType>>,
+    pub response_types: Option<Vec<ResponseType>>,
+    pub scope: Option<String>,
+    pub token_endpoint_auth_method: Option<ClientAuthMethod>,
+    #[serde(flatten)]
+    pub metadata: serde_json::Value,
+}
+
+/// Filtered Client Registration Response (for get/update operations)
+/// Excludes sensitive fields: registration_access_token, registration_client_uri
+#[derive(Serialize)]
+pub struct FilteredClientRegistrationResponse {
+    /// Client ID
+    pub client_id: String,
+    /// Client secret (for confidential clients)
+    pub client_secret: Option<String>,
+    /// Client name
+    pub client_name: Option<String>,
+    /// Redirect URIs
+    pub redirect_uris: Vec<String>,
+    /// Grant types
+    pub grant_types: Vec<GrantType>,
+    /// Response types
+    pub response_types: Vec<ResponseType>,
+    /// Scope
+    pub scope: Option<String>,
+    /// Token endpoint authentication method
+    pub token_endpoint_auth_method: ClientAuthMethod,
+    /// Client ID issued at
+    pub client_id_issued_at: i64,
+    /// Client secret expires at (optional)
+    pub client_secret_expires_at: Option<i64>,
+}
+
+impl From<ClientRegistrationResponse> for FilteredClientRegistrationResponse {
+    fn from(response: ClientRegistrationResponse) -> Self {
+        Self {
+            client_id: response.client_id,
+            client_secret: response.client_secret,
+            client_name: response.client_name,
+            redirect_uris: response.redirect_uris,
+            grant_types: response.grant_types,
+            response_types: response.response_types,
+            scope: response.scope,
+            token_endpoint_auth_method: response.token_endpoint_auth_method,
+            client_id_issued_at: response.client_id_issued_at,
+            client_secret_expires_at: response.client_secret_expires_at,
+        }
+    }
 }
 
 /// DPoP Token Claims

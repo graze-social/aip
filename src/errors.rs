@@ -26,6 +26,14 @@ pub enum ConfigError {
     /// Error when HTTP client timeout cannot be parsed
     #[error("error-aip-config-5 Failed to parse HTTP client timeout: {0}")]
     TimeoutParsingFailed(std::num::ParseIntError),
+
+    /// Error when duration string cannot be parsed
+    #[error("error-aip-config-6 Failed to parse duration '{0}': {1}")]
+    DurationParsingFailed(String, String),
+
+    /// Error when boolean string cannot be parsed
+    #[error("error-aip-config-7 Failed to parse boolean '{0}': expected true/false/1/0/yes/no/on/off")]
+    BoolParsingFailed(String),
 }
 
 /// HTTP server errors

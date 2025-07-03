@@ -203,8 +203,8 @@ pub async fn refresh_session(
             {
                 Ok(token_response) => {
                     // Update session with new tokens
-                    new_session.access_token = Some(token_response.access_token);
-                    new_session.refresh_token = Some(token_response.refresh_token);
+                    new_session.access_token = Some(token_response.access_token.clone());
+                    new_session.refresh_token = Some(token_response.refresh_token.clone());
                     new_session.access_token_created_at = Some(now);
                     new_session.access_token_expires_at =
                         Some(now + Duration::seconds(token_response.expires_in as i64));
@@ -451,6 +451,10 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
+            client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
+            admin_dids: "".to_string().try_into().unwrap(),
+            client_default_redirect_exact: "true".to_string().try_into().unwrap(),
         });
 
         let atp_session_storage = Arc::new(
@@ -461,6 +465,9 @@ mod tests {
         );
         let client_registration_service = Arc::new(crate::oauth::ClientRegistrationService::new(
             oauth_storage.clone(),
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+            true,
         ));
 
         AppState {
@@ -522,6 +529,10 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
+            client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
+            admin_dids: "".to_string().try_into().unwrap(),
+            client_default_redirect_exact: "true".to_string().try_into().unwrap(),
         });
 
         app_state.config = custom_config;

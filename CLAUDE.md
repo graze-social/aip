@@ -31,6 +31,23 @@ AIP includes optional client management API endpoints for dynamic client registr
 
 The core OAuth endpoints (authorize, token, PAR) remain available regardless of this setting.
 
+### XRPC Client Management
+
+AIP includes an XRPC endpoint for administrative client management:
+
+- `POST /xrpc/tools.graze.aip.clients.Update` - Update client configuration via XRPC
+
+This endpoint requires authorization with a DID that is included in the `ADMIN_DIDS` configuration.
+
+### Client Token Expiration
+
+Client token expiration durations can be configured globally using environment variables:
+
+- `CLIENT_DEFAULT_ACCESS_TOKEN_EXPIRATION` - Default access token lifetime (default: "1d")
+- `CLIENT_DEFAULT_REFRESH_TOKEN_EXPIRATION` - Default refresh token lifetime (default: "14d")
+
+These values use the `duration_str` format (e.g., "1d", "12h", "3600s").
+
 ## Common Development Commands
 
 ### Build Commands
