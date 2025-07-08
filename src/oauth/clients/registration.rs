@@ -18,16 +18,35 @@ pub struct ClientRegistrationService {
     default_auth_method: ClientAuthMethod,
     /// Maximum number of redirect URIs per client
     max_redirect_uris: usize,
+    /// Default access token expiration duration
+    default_access_token_expiration: chrono::Duration,
+    /// Default refresh token expiration duration
+    default_refresh_token_expiration: chrono::Duration,
+    /// Default redirect URI exact matching requirement
+    default_require_redirect_exact: bool,
+}
+
+pub(crate) enum ClientServiceAuth {
+    DID,
+    RegistrationToken(String),
 }
 
 impl ClientRegistrationService {
     /// Create a new client registration service
-    pub fn new(storage: Arc<dyn OAuthStorage>) -> Self {
+    pub fn new(
+        storage: Arc<dyn OAuthStorage>,
+        default_access_token_expiration: chrono::Duration,
+        default_refresh_token_expiration: chrono::Duration,
+        default_require_redirect_exact: bool,
+    ) -> Self {
         Self {
             storage,
             registration_enabled: true,
             default_auth_method: ClientAuthMethod::ClientSecretBasic,
             max_redirect_uris: 10,
+            default_access_token_expiration,
+            default_refresh_token_expiration,
+            default_require_redirect_exact,
         }
     }
 
@@ -89,6 +108,9 @@ impl ClientRegistrationService {
 
         let now = Utc::now();
 
+        // Generate registration access token
+        let registration_access_token = generate_token();
+
         // Create the OAuth client
         let client = OAuthClient {
             client_id: client_id.clone(),
@@ -103,6 +125,10 @@ impl ClientRegistrationService {
             created_at: now,
             updated_at: now,
             metadata: request.metadata,
+            access_token_expiration: self.default_access_token_expiration,
+            refresh_token_expiration: self.default_refresh_token_expiration,
+            require_redirect_exact: self.default_require_redirect_exact,
+            registration_access_token: Some(registration_access_token.clone()),
         };
 
         // Store the client
@@ -112,9 +138,6 @@ impl ClientRegistrationService {
                 e
             ))
         })?;
-
-        // Generate registration access token
-        let registration_access_token = generate_token();
 
         // Build registration client URI
         let registration_client_uri = format!("/oauth/clients/{}", client_id_for_uri);
@@ -139,10 +162,10 @@ impl ClientRegistrationService {
     }
 
     /// Get client configuration
-    pub async fn get_client(
+    pub(crate) async fn get_client(
         &self,
         client_id: &str,
-        _registration_token: &str, // TODO: Validate registration token
+        client_service_auth: &ClientServiceAuth,
     ) -> Result<ClientRegistrationResponse, ClientRegistrationError> {
         let client = self
             .storage
@@ -152,6 +175,24 @@ impl ClientRegistrationService {
                 ClientRegistrationError::InvalidClientMetadata(format!("Storage error: {:?}", e))
             })?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
+
+        if let ClientServiceAuth::RegistrationToken(registration_token) = client_service_auth {
+            match &client.registration_access_token {
+                Some(stored_token) if stored_token == registration_token => {
+                    // Token matches, continue
+                }
+                Some(_) => {
+                    return Err(ClientRegistrationError::InvalidRegistrationToken(
+                        "Registration access token does not match".to_string(),
+                    ));
+                }
+                None => {
+                    return Err(ClientRegistrationError::InvalidRegistrationToken(
+                        "Client has no registration access token".to_string(),
+                    ));
+                }
+            }
+        }
 
         // Convert to response format
         let client_id_for_uri = client.client_id.clone();
@@ -173,22 +214,11 @@ impl ClientRegistrationService {
         Ok(response)
     }
 
-    /// Update client configuration
-    pub async fn update_client(
-        &self,
-        client_id: &str,
-        _registration_token: &str, // TODO: Validate registration token
-        request: ClientRegistrationRequest,
-    ) -> Result<ClientRegistrationResponse, ClientRegistrationError> {
-        self.update_client_with_supported_scopes(client_id, _registration_token, request, None)
-            .await
-    }
-
     /// Update client configuration with supported scopes validation
-    pub async fn update_client_with_supported_scopes(
+    pub(crate) async fn update_client_with_supported_scopes(
         &self,
         client_id: &str,
-        _registration_token: &str, // TODO: Validate registration token
+        client_service_auth: &ClientServiceAuth,
         request: ClientRegistrationRequest,
         supported_scopes: Option<&crate::config::OAuthSupportedScopes>,
     ) -> Result<ClientRegistrationResponse, ClientRegistrationError> {
@@ -201,6 +231,24 @@ impl ClientRegistrationService {
                 ClientRegistrationError::InvalidClientMetadata(format!("Storage error: {:?}", e))
             })?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
+
+        if let ClientServiceAuth::RegistrationToken(registration_token) = client_service_auth {
+            match &client.registration_access_token {
+                Some(stored_token) if stored_token == registration_token => {
+                    // Token matches, continue
+                }
+                Some(_) => {
+                    return Err(ClientRegistrationError::InvalidRegistrationToken(
+                        "Registration access token does not match".to_string(),
+                    ));
+                }
+                None => {
+                    return Err(ClientRegistrationError::InvalidRegistrationToken(
+                        "Client has no registration access token".to_string(),
+                    ));
+                }
+            }
+        }
 
         // Validate the update request
         self.validate_registration_request_with_supported_scopes(&request, supported_scopes)?;
@@ -237,17 +285,17 @@ impl ClientRegistrationService {
         })?;
 
         // Return updated configuration
-        self.get_client(client_id, _registration_token).await
+        self.get_client(client_id, client_service_auth).await
     }
 
     /// Delete client registration
-    pub async fn delete_client(
+    pub(crate) async fn delete_client(
         &self,
         client_id: &str,
-        _registration_token: &str, // TODO: Validate registration token
+        client_service_auth: &ClientServiceAuth,
     ) -> Result<(), ClientRegistrationError> {
         // Verify client exists
-        self.storage
+        let client = self.storage
             .get_client(client_id)
             .await
             .map_err(|e| {
@@ -255,6 +303,24 @@ impl ClientRegistrationService {
             })?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
+        if let ClientServiceAuth::RegistrationToken(registration_token) = client_service_auth {
+            match &client.registration_access_token {
+                Some(stored_token) if stored_token == registration_token => {
+                    // Token matches, continue
+                }
+                Some(_) => {
+                    return Err(ClientRegistrationError::InvalidRegistrationToken(
+                        "Registration access token does not match".to_string(),
+                    ));
+                }
+                None => {
+                    return Err(ClientRegistrationError::InvalidRegistrationToken(
+                        "Client has no registration access token".to_string(),
+                    ));
+                }
+            }
+        }
+            
         // Delete the client
         self.storage.delete_client(client_id).await.map_err(|e| {
             ClientRegistrationError::InvalidClientMetadata(format!(
@@ -387,7 +453,12 @@ mod tests {
     #[tokio::test]
     async fn test_client_registration() {
         let storage = Arc::new(MemoryOAuthStorage::new());
-        let service = ClientRegistrationService::new(storage);
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+            true,
+        );
 
         let request = ClientRegistrationRequest {
             client_name: Some("Test Client".to_string()),
@@ -410,7 +481,12 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_redirect_uri() {
         let storage = Arc::new(MemoryOAuthStorage::new());
-        let service = ClientRegistrationService::new(storage);
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+            true,
+        );
 
         let request = ClientRegistrationRequest {
             client_name: Some("Test Client".to_string()),
@@ -435,7 +511,13 @@ mod tests {
     #[tokio::test]
     async fn test_disabled_registration() {
         let storage = Arc::new(MemoryOAuthStorage::new());
-        let service = ClientRegistrationService::new(storage).disable_registration();
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+            true,
+        )
+        .disable_registration();
 
         let request = ClientRegistrationRequest {
             client_name: Some("Test Client".to_string()),
@@ -460,7 +542,12 @@ mod tests {
     #[tokio::test]
     async fn test_scope_validation_with_supported_scopes() {
         let storage = Arc::new(MemoryOAuthStorage::new());
-        let service = ClientRegistrationService::new(storage);
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+            true,
+        );
 
         // Test with supported scopes
         let supported_scopes =

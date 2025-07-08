@@ -91,7 +91,7 @@ impl DPoPHeader {
     pub fn detect_algorithm_from_key(&self, key_data: &KeyData) -> Result<String, DPoPError> {
         let header: Result<jwt::Header, _> = key_data.clone().try_into();
         match header {
-            Ok(jwt_header) => Ok(jwt_header.algorithm.unwrap_or_else(|| "ES256".to_string())),
+            Ok(jwt_header) => Ok(jwt_header.algorithm.clone().unwrap_or_else(|| "ES256".to_string())),
             Err(_) => {
                 // Fallback to manual detection based on key type
                 match *key_data.key_type() {

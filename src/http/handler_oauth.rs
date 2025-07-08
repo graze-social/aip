@@ -174,6 +174,10 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
+            client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
+            admin_dids: "".to_string().try_into().unwrap(),
+            client_default_redirect_exact: "true".to_string().try_into().unwrap(),
         });
 
         let atp_session_storage = Arc::new(
@@ -184,6 +188,9 @@ mod tests {
         );
         let client_registration_service = Arc::new(crate::oauth::ClientRegistrationService::new(
             oauth_storage.clone(),
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+            true,
         ));
 
         AppState {

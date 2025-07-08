@@ -45,6 +45,7 @@ impl SqliteOAuthClientStore {
     fn response_type_to_string(response_type: &ResponseType) -> &'static str {
         match response_type {
             ResponseType::Code => "code",
+            ResponseType::IdToken => "id_token",
         }
     }
 
@@ -52,6 +53,7 @@ impl SqliteOAuthClientStore {
     fn string_to_response_type(s: &str) -> Result<ResponseType> {
         match s {
             "code" => Ok(ResponseType::Code),
+            "id_token" => Ok(ResponseType::IdToken),
             _ => Err(StorageError::InvalidData(format!(
                 "Unknown response type: {}",
                 s
@@ -138,6 +140,16 @@ impl SqliteOAuthClientStore {
             .collect()
     }
 
+    /// Convert chrono::Duration to seconds as i64
+    fn duration_to_seconds(duration: &chrono::Duration) -> i64 {
+        duration.num_seconds()
+    }
+
+    /// Convert seconds (i64) to chrono::Duration
+    fn seconds_to_duration(seconds: i64) -> chrono::Duration {
+        chrono::Duration::seconds(seconds)
+    }
+
     /// Convert SQLite row to OAuthClient
     fn row_to_oauth_client(row: &SqliteRow) -> Result<OAuthClient> {
         let redirect_uris_json: String = row.try_get("redirect_uris").map_err(|e| {
@@ -199,6 +211,25 @@ impl SqliteOAuthClientStore {
             .try_get("scope")
             .map_err(|e| StorageError::DatabaseError(format!("Failed to get scope: {}", e)))?;
 
+        let access_token_expiration_seconds: i64 = row
+            .try_get("access_token_expiration")
+            .map_err(|e| StorageError::DatabaseError(format!("Failed to get access_token_expiration: {}", e)))?;
+        let access_token_expiration = Self::seconds_to_duration(access_token_expiration_seconds);
+
+        let refresh_token_expiration_seconds: i64 = row
+            .try_get("refresh_token_expiration")
+            .map_err(|e| StorageError::DatabaseError(format!("Failed to get refresh_token_expiration: {}", e)))?;
+        let refresh_token_expiration = Self::seconds_to_duration(refresh_token_expiration_seconds);
+
+        let require_redirect_exact: i64 = row
+            .try_get("require_redirect_exact")
+            .map_err(|e| StorageError::DatabaseError(format!("Failed to get require_redirect_exact: {}", e)))?;
+        let require_redirect_exact = require_redirect_exact != 0;
+
+        let registration_access_token: Option<String> = row
+            .try_get("registration_access_token")
+            .map_err(|e| StorageError::DatabaseError(format!("Failed to get registration_access_token: {}", e)))?;
+
         Ok(OAuthClient {
             client_id,
             client_secret,
@@ -212,6 +243,10 @@ impl SqliteOAuthClientStore {
             created_at,
             updated_at,
             metadata,
+            access_token_expiration,
+            refresh_token_expiration,
+            require_redirect_exact,
+            registration_access_token,
         })
     }
 }
@@ -230,14 +265,17 @@ impl OAuthClientStore for SqliteOAuthClientStore {
         let updated_at_str = client.updated_at.to_rfc3339();
         let metadata_json = serde_json::to_string(&client.metadata)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+        let access_token_expiration_seconds = Self::duration_to_seconds(&client.access_token_expiration);
+        let refresh_token_expiration_seconds = Self::duration_to_seconds(&client.refresh_token_expiration);
 
         sqlx::query(
             r#"
             INSERT INTO oauth_clients (
                 client_id, client_secret, client_name, redirect_uris, grant_types, 
                 response_types, scope, token_endpoint_auth_method, client_type,
-                created_at, updated_at, metadata
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                created_at, updated_at, metadata, access_token_expiration, refresh_token_expiration,
+                require_redirect_exact, registration_access_token
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&client.client_id)
@@ -252,6 +290,10 @@ impl OAuthClientStore for SqliteOAuthClientStore {
         .bind(&created_at_str)
         .bind(&updated_at_str)
         .bind(&metadata_json)
+        .bind(access_token_expiration_seconds)
+        .bind(refresh_token_expiration_seconds)
+        .bind(if client.require_redirect_exact { 1i64 } else { 0i64 })
+        .bind(&client.registration_access_token)
         .execute(&self.pool)
         .await
         .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
@@ -286,13 +328,16 @@ impl OAuthClientStore for SqliteOAuthClientStore {
         let updated_at_str = client.updated_at.to_rfc3339();
         let metadata_json = serde_json::to_string(&client.metadata)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+        let access_token_expiration_seconds = Self::duration_to_seconds(&client.access_token_expiration);
+        let refresh_token_expiration_seconds = Self::duration_to_seconds(&client.refresh_token_expiration);
 
         let result = sqlx::query(
             r#"
             UPDATE oauth_clients SET 
                 client_secret = ?, client_name = ?, redirect_uris = ?, grant_types = ?,
                 response_types = ?, scope = ?, token_endpoint_auth_method = ?, 
-                client_type = ?, updated_at = ?, metadata = ?
+                client_type = ?, updated_at = ?, metadata = ?, access_token_expiration = ?, 
+                refresh_token_expiration = ?, require_redirect_exact = ?, registration_access_token = ?
             WHERE client_id = ?
             "#,
         )
@@ -306,6 +351,10 @@ impl OAuthClientStore for SqliteOAuthClientStore {
         .bind(client_type_str)
         .bind(&updated_at_str)
         .bind(&metadata_json)
+        .bind(access_token_expiration_seconds)
+        .bind(refresh_token_expiration_seconds)
+        .bind(if client.require_redirect_exact { 1i64 } else { 0i64 })
+        .bind(&client.registration_access_token)
         .bind(&client.client_id)
         .execute(&self.pool)
         .await
