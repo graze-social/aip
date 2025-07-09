@@ -6,6 +6,7 @@ use crate::oauth::{
     types::*,
 };
 use atproto_identity::key::{KeyType, generate_key, identify_key, to_public};
+use atproto_oauth::resources::{oauth_authorization_server, oauth_protected_resource};
 use atproto_oauth::{
     jwk::generate as generate_jwk,
     pkce, resources,
@@ -190,37 +191,84 @@ impl AtpBackedAuthorizationServer {
         let session_id = Ulid::new().to_string();
         let atpoauth_state = Uuid::new_v4().to_string();
 
-        // Resolve ATProtocol identity document
-        let atpoauth_document = self
-            .identity_resolver
-            .resolve(&atpoauth_subject)
-            .await
-            .map_err(|e| {
-                OAuthError::AuthorizationFailed(format!(
-                    "Failed to resolve subject '{}': {:?}",
-                    atpoauth_subject, e
-                ))
-            })?;
+        let (did, atpoauth_auth_server) = if atpoauth_subject.starts_with("https://") {
+            let authorization_server =
+                match oauth_authorization_server(&self.http_client, &atpoauth_subject).await {
+                    Ok(value) => value,
+                    _ => {
+                        return Err(OAuthError::AuthorizationFailed(
+                            "No authorization server found".to_string(),
+                        ));
+                    }
+                };
 
-        // Store the resolved document for later use
-        self.document_storage
-            .store_document(atpoauth_document.clone())
-            .await
-            .map_err(|e| {
-                OAuthError::ServerError(format!("Failed to store resolved document: {:?}", e))
-            })?;
-
-        // Discover PDS resources and authorization server
-        let (_, atpoauth_auth_server) = match atpoauth_document.pds_endpoints().first() {
-            Some(endpoint) => resources::pds_resources(&self.http_client, endpoint)
+            ("".to_string(), authorization_server)
+        } else {
+            // Resolve ATProtocol identity document
+            let atpoauth_document = self
+                .identity_resolver
+                .resolve(&atpoauth_subject)
                 .await
                 .map_err(|e| {
-                    OAuthError::AuthorizationFailed(format!("PDS discovery failed: {:?}", e))
-                }),
-            None => Err(OAuthError::AuthorizationFailed(
-                "No PDS endpoint found".to_string(),
-            )),
-        }?;
+                    OAuthError::AuthorizationFailed(format!(
+                        "Failed to resolve subject '{}': {:?}",
+                        atpoauth_subject, e
+                    ))
+                })?;
+
+            // Store the resolved document for later use
+            self.document_storage
+                .store_document(atpoauth_document.clone())
+                .await
+                .map_err(|e| {
+                    OAuthError::ServerError(format!("Failed to store resolved document: {:?}", e))
+                })?;
+
+            let pds_endpoint = match atpoauth_document.pds_endpoints().first() {
+                Some(value) => value.to_string(),
+                None => {
+                    return Err(OAuthError::AuthorizationFailed(
+                        "No PDS endpoint found".to_string(),
+                    ));
+                }
+            };
+
+            let protected_resource =
+                match oauth_protected_resource(&self.http_client, &pds_endpoint).await {
+                    Ok(value) => value,
+                    _ => {
+                        return Err(OAuthError::AuthorizationFailed(
+                            "No oauth protected resource found".to_string(),
+                        ));
+                    }
+                };
+
+            let first_authorization_server = match protected_resource.authorization_servers.first()
+            {
+                Some(value) => value.to_string(),
+                None => {
+                    return Err(OAuthError::AuthorizationFailed(
+                        "No authorization server found".to_string(),
+                    ));
+                }
+            };
+
+            let authorization_server =
+                match oauth_authorization_server(&self.http_client, &first_authorization_server)
+                    .await
+                {
+                    Ok(value) => value,
+                    _ => {
+                        return Err(OAuthError::AuthorizationFailed(
+                            "No authorization server found".to_string(),
+                        ));
+                    }
+                };
+
+            (atpoauth_document.id.clone(), authorization_server)
+
+            // (atpoauth_document.id.clone(), value.to_string())
+        };
 
         // Generate PKCE parameters for ATProtocol OAuth
         let (atpoauth_pkce_verifier, atpoauth_code_challenge) = pkce::generate();
@@ -265,7 +313,7 @@ impl AtpBackedAuthorizationServer {
         let now = Utc::now();
         let session = AtpOAuthSession {
             session_id: session_id.clone(),
-            did: atpoauth_document.id.clone(),
+            did: did.clone(),
             session_created_at: now,
             atp_oauth_state: atpoauth_state.clone(),
             signing_key_jkt,
@@ -341,12 +389,18 @@ impl AtpBackedAuthorizationServer {
             scope: filtered_scope,
         };
 
+        let login_hint = if atpoauth_subject.starts_with("https://") {
+            None
+        } else {
+            Some(atpoauth_subject.as_str())
+        };
+
         // Use atproto-oauth workflow to initiate the flow
         let atpoauth_par_response = oauth_init(
             &self.http_client,
             &oauth_client,
             &atpoauth_dpop_key,
-            &atpoauth_subject,
+            login_hint,
             &atpoauth_auth_server,
             &atpoauth_request_state,
         )
@@ -363,7 +417,7 @@ impl AtpBackedAuthorizationServer {
         let atpoauth_request = OAuthRequest {
             oauth_state: atpoauth_state.clone(),
             issuer: atpoauth_auth_server.issuer.clone(),
-            did: atpoauth_document.id,
+            did,
             nonce: atpoauth_nonce.clone(),
             pkce_verifier: atpoauth_pkce_verifier,
             signing_public_key: atpoauth_public_signing_key.to_string(),
