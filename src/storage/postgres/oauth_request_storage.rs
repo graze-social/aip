@@ -29,7 +29,7 @@ impl OAuthRequestStorage for PostgresOAuthRequestStorage {
             SELECT 
                 oauth_state,
                 issuer,
-                did,
+                authorization_server,
                 nonce,
                 pkce_verifier,
                 signing_public_key,
@@ -54,7 +54,7 @@ impl OAuthRequestStorage for PostgresOAuthRequestStorage {
             INSERT INTO oauth_requests (
                 oauth_state, 
                 issuer, 
-                did, 
+                authorization_server,
                 nonce, 
                 pkce_verifier, 
                 signing_public_key,
@@ -66,7 +66,7 @@ impl OAuthRequestStorage for PostgresOAuthRequestStorage {
             ON CONFLICT (oauth_state) 
             DO UPDATE SET
                 issuer = EXCLUDED.issuer,
-                did = EXCLUDED.did,
+                authorization_server = EXCLUDED.authorization_server,
                 nonce = EXCLUDED.nonce,
                 pkce_verifier = EXCLUDED.pkce_verifier,
                 signing_public_key = EXCLUDED.signing_public_key,
@@ -78,7 +78,7 @@ impl OAuthRequestStorage for PostgresOAuthRequestStorage {
         sqlx::query(query)
             .bind(&request.oauth_state)
             .bind(&request.issuer)
-            .bind(&request.did)
+            .bind(&request.authorization_server)
             .bind(&request.nonce)
             .bind(&request.pkce_verifier)
             .bind(&request.signing_public_key)
@@ -115,7 +115,7 @@ impl OAuthRequestStorage for PostgresOAuthRequestStorage {
 struct OAuthRequestRow {
     oauth_state: String,
     issuer: String,
-    did: String,
+    authorization_server: String,
     nonce: String,
     pkce_verifier: String,
     signing_public_key: String,
@@ -130,7 +130,7 @@ impl OAuthRequestRow {
         Self {
             oauth_state: row.get("oauth_state"),
             issuer: row.get("issuer"),
-            did: row.get("did"),
+            authorization_server: row.get("authorization_server"),
             nonce: row.get("nonce"),
             pkce_verifier: row.get("pkce_verifier"),
             signing_public_key: row.get("signing_public_key"),
@@ -145,7 +145,7 @@ impl OAuthRequestRow {
         OAuthRequest {
             oauth_state: self.oauth_state,
             issuer: self.issuer,
-            did: self.did,
+            authorization_server: self.authorization_server,
             nonce: self.nonce,
             pkce_verifier: self.pkce_verifier,
             signing_public_key: self.signing_public_key,
@@ -178,7 +178,7 @@ mod tests {
         let request = OAuthRequest {
             oauth_state: "test-state-123".to_string(),
             issuer: "https://pds.example.com".to_string(),
-            did: "did:plc:test123".to_string(),
+            authorization_server: "https://pds.example.com".to_string(),
             nonce: "test-nonce".to_string(),
             pkce_verifier: "test-verifier".to_string(),
             signing_public_key: "test-public-key".to_string(),
@@ -222,7 +222,7 @@ mod tests {
         let expired_request = OAuthRequest {
             oauth_state: "expired-state-456".to_string(),
             issuer: "https://pds.example.com".to_string(),
-            did: "did:plc:test456".to_string(),
+            authorization_server: "https://pds.example.com".to_string(),
             nonce: "expired-nonce".to_string(),
             pkce_verifier: "expired-verifier".to_string(),
             signing_public_key: "expired-public-key".to_string(),
@@ -254,7 +254,7 @@ mod tests {
         let expired_request = OAuthRequest {
             oauth_state: "expired-clear-test".to_string(),
             issuer: "https://pds.example.com".to_string(),
-            did: "did:plc:testexpired".to_string(),
+            authorization_server: "https://pds.example.com".to_string(),
             nonce: "expired-nonce".to_string(),
             pkce_verifier: "expired-verifier".to_string(),
             signing_public_key: "expired-public-key".to_string(),
@@ -267,7 +267,7 @@ mod tests {
         let valid_request = OAuthRequest {
             oauth_state: "valid-clear-test".to_string(),
             issuer: "https://pds.example.com".to_string(),
-            did: "did:plc:testvalid".to_string(),
+            authorization_server: "https://pds.example.com".to_string(),
             nonce: "valid-nonce".to_string(),
             pkce_verifier: "valid-verifier".to_string(),
             signing_public_key: "valid-public-key".to_string(),

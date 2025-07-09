@@ -101,9 +101,7 @@ impl SqliteAtpOAuthSessionStorage {
             session_id: row.try_get("session_id").map_err(|e| {
                 StorageError::DatabaseError(format!("Failed to get session_id: {}", e))
             })?,
-            did: row
-                .try_get("did")
-                .map_err(|e| StorageError::DatabaseError(format!("Failed to get did: {}", e)))?,
+            did: row.try_get("did").ok(),
             session_created_at,
             atp_oauth_state: row.try_get("atp_oauth_state").map_err(|e| {
                 StorageError::DatabaseError(format!("Failed to get atp_oauth_state: {}", e))
@@ -306,7 +304,7 @@ impl AtpOAuthSessionStorage for SqliteAtpOAuthSessionStorage {
 
         if result.rows_affected() == 0 {
             return Err(StorageError::NotFound(format!(
-                "Session not found: did={}, session_id={}, iteration={}",
+                "Session not found: did={:?}, session_id={}, iteration={}",
                 session.did, session.session_id, session.iteration
             )));
         }

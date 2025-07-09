@@ -24,9 +24,9 @@ impl MemoryAtpOAuthSessionStorage {
         Self::default()
     }
 
-    /// Generate a unique session key from DID, session_id, and iteration
-    fn session_key(did: &str, session_id: &str, iteration: u32) -> String {
-        format!("{}:{}:{}", did, session_id, iteration)
+    /// Generate a unique session key from session_id and iteration
+    fn session_key(session_id: &str, iteration: u32) -> String {
+        format!("{}:{}", session_id, iteration)
     }
 
     /// Generate a session index key from DID and session_id
@@ -42,8 +42,9 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
         let mut state_index = self.state_index.write().await;
         let mut session_iterations = self.session_iterations.write().await;
 
-        let session_key = Self::session_key(&session.did, &session.session_id, session.iteration);
-        let index_key = Self::session_index_key(&session.did, &session.session_id);
+        let session_key = Self::session_key(&session.session_id, session.iteration);
+        let index_key = session.did.as_ref()
+            .map(|did| Self::session_index_key(did, &session.session_id));
 
         // Store the session
         sessions.insert(session_key.clone(), session.clone());
@@ -51,11 +52,13 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
         // Update state index
         state_index.insert(session.atp_oauth_state.clone(), session_key);
 
-        // Update iterations index
-        let iterations = session_iterations.entry(index_key).or_insert_with(Vec::new);
-        if !iterations.contains(&session.iteration) {
-            iterations.push(session.iteration);
-            iterations.sort_by(|a, b| b.cmp(a)); // Sort highest to lowest
+        // Update iterations index if DID is present
+        if let Some(index_key) = index_key {
+            let iterations = session_iterations.entry(index_key).or_insert_with(Vec::new);
+            if !iterations.contains(&session.iteration) {
+                iterations.push(session.iteration);
+                iterations.sort_by(|a, b| b.cmp(a)); // Sort highest to lowest
+            }
         }
 
         Ok(())
@@ -70,7 +73,7 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
         if let Some(iterations) = session_iterations.get(&index_key) {
             let mut result = Vec::new();
             for &iteration in iterations {
-                let session_key = Self::session_key(did, session_id, iteration);
+                let session_key = Self::session_key(session_id, iteration);
                 if let Some(session) = sessions.get(&session_key) {
                     result.push(session.clone());
                 }
@@ -83,27 +86,27 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
 
     async fn get_session(
         &self,
-        did: &str,
+        _did: &str,
         session_id: &str,
         iteration: u32,
     ) -> Result<Option<AtpOAuthSession>> {
         let sessions = self.sessions.read().await;
-        let session_key = Self::session_key(did, session_id, iteration);
+        let session_key = Self::session_key(session_id, iteration);
         Ok(sessions.get(&session_key).cloned())
     }
 
     async fn get_latest_session(
         &self,
-        did: &str,
+        _did: &str,
         session_id: &str,
     ) -> Result<Option<AtpOAuthSession>> {
-        let sessions = self.get_sessions(did, session_id).await?;
+        let sessions = self.get_sessions(_did, session_id).await?;
         Ok(sessions.into_iter().next()) // Already sorted highest to lowest
     }
 
     async fn update_session(&self, session: &AtpOAuthSession) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        let session_key = Self::session_key(&session.did, &session.session_id, session.iteration);
+        let session_key = Self::session_key(&session.session_id, session.iteration);
 
         if let std::collections::hash_map::Entry::Occupied(mut e) = sessions.entry(session_key) {
             e.insert(session.clone());
@@ -125,7 +128,7 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
 
     async fn update_session_tokens(
         &self,
-        did: &str,
+        _did: &str,
         session_id: &str,
         iteration: u32,
         access_token: Option<String>,
@@ -135,7 +138,7 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
         access_token_scopes: Option<Vec<String>>,
     ) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        let session_key = Self::session_key(did, session_id, iteration);
+        let session_key = Self::session_key(session_id, iteration);
         if let Some(session) = sessions.get_mut(&session_key) {
             session.access_token = access_token;
             session.refresh_token = refresh_token;
@@ -153,7 +156,7 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
         let mut state_index = self.state_index.write().await;
         let mut session_iterations = self.session_iterations.write().await;
 
-        let session_key = Self::session_key(did, session_id, iteration);
+        let session_key = Self::session_key(session_id, iteration);
         let index_key = Self::session_index_key(did, session_id);
 
         if let Some(session) = sessions.remove(&session_key) {
@@ -193,11 +196,13 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
             sessions.remove(key);
             state_index.remove(&session.atp_oauth_state);
 
-            let index_key = Self::session_index_key(&session.did, &session.session_id);
-            if let Some(iterations) = session_iterations.get_mut(&index_key) {
-                iterations.retain(|&i| i != session.iteration);
-                if iterations.is_empty() {
-                    session_iterations.remove(&index_key);
+            if let Some(did) = session.did.as_ref() {
+                let index_key = Self::session_index_key(did, &session.session_id);
+                if let Some(iterations) = session_iterations.get_mut(&index_key) {
+                    iterations.retain(|&i| i != session.iteration);
+                    if iterations.is_empty() {
+                        session_iterations.remove(&index_key);
+                    }
                 }
             }
         }

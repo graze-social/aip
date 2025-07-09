@@ -10,6 +10,7 @@ mod authorization_codes;
 mod authorization_requests;
 mod keys;
 mod oauth_clients;
+mod oauth_request_storage;
 mod par_requests;
 mod refresh_tokens;
 
@@ -26,6 +27,7 @@ pub use authorization_codes::SqliteAuthorizationCodeStore;
 pub use authorization_requests::SqliteAuthorizationRequestStorage;
 pub use keys::SqliteKeyStore;
 pub use oauth_clients::SqliteOAuthClientStore;
+pub use oauth_request_storage::SqliteOAuthRequestStorage;
 pub use par_requests::SqlitePARStorage;
 pub use refresh_tokens::SqliteRefreshTokenStore;
 

@@ -57,7 +57,7 @@ use serde_json::json;
 /// - Enforces token type consistency (Bearer vs DPoP)
 /// - For DPoP: validates proof JWT, nonce, access token binding, and key thumbprint
 /// - Returns appropriate OAuth 2.0 error responses on failure
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ExtractedAuth(pub AccessToken);
 
 /// Create a standard OAuth 2.0 error response

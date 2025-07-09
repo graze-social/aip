@@ -9,10 +9,10 @@ use atproto_identity::key::{KeyType, generate_key, identify_key, to_public};
 use atproto_oauth::resources::{oauth_authorization_server, oauth_protected_resource};
 use atproto_oauth::{
     jwk::generate as generate_jwk,
-    pkce, resources,
+    pkce,
     workflow::{OAuthClient, OAuthRequest, OAuthRequestState, oauth_complete, oauth_init},
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use std::sync::Arc;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -51,19 +51,6 @@ pub trait AtpOAuthSessionStorage: Send + Sync {
         &self,
         atp_state: &str,
     ) -> Result<Option<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>>;
-
-    /// Update session with access and refresh tokens
-    async fn update_session_tokens(
-        &self,
-        did: &str,
-        session_id: &str,
-        iteration: u32,
-        access_token: Option<String>,
-        refresh_token: Option<String>,
-        access_token_created_at: Option<DateTime<Utc>>,
-        access_token_expires_at: Option<DateTime<Utc>>,
-        access_token_scopes: Option<Vec<String>>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     /// Remove session by DID, session ID, and iteration
     async fn remove_session(
@@ -191,20 +178,12 @@ impl AtpBackedAuthorizationServer {
         let session_id = Ulid::new().to_string();
         let atpoauth_state = Uuid::new_v4().to_string();
 
-        let (did, atpoauth_auth_server) = if atpoauth_subject.starts_with("https://") {
-            let authorization_server =
-                match oauth_authorization_server(&self.http_client, &atpoauth_subject).await {
-                    Ok(value) => value,
-                    _ => {
-                        return Err(OAuthError::AuthorizationFailed(
-                            "No authorization server found".to_string(),
-                        ));
-                    }
-                };
-
-            ("".to_string(), authorization_server)
+        //
+        let (did_option, authorization_server_endpoint) = if atpoauth_subject
+            .starts_with("https://")
+        {
+            (None, atpoauth_subject.clone())
         } else {
-            // Resolve ATProtocol identity document
             let atpoauth_document = self
                 .identity_resolver
                 .resolve(&atpoauth_subject)
@@ -243,32 +222,27 @@ impl AtpBackedAuthorizationServer {
                     }
                 };
 
-            let first_authorization_server = match protected_resource.authorization_servers.first()
-            {
-                Some(value) => value.to_string(),
+            match protected_resource.authorization_servers.first() {
+                Some(value) => (Some(atpoauth_document.id.clone()), value.to_string()),
                 None => {
                     return Err(OAuthError::AuthorizationFailed(
                         "No authorization server found".to_string(),
                     ));
                 }
-            };
-
-            let authorization_server =
-                match oauth_authorization_server(&self.http_client, &first_authorization_server)
-                    .await
-                {
-                    Ok(value) => value,
-                    _ => {
-                        return Err(OAuthError::AuthorizationFailed(
-                            "No authorization server found".to_string(),
-                        ));
-                    }
-                };
-
-            (atpoauth_document.id.clone(), authorization_server)
-
-            // (atpoauth_document.id.clone(), value.to_string())
+            }
         };
+
+        let authorization_server =
+            match oauth_authorization_server(&self.http_client, &authorization_server_endpoint)
+                .await
+            {
+                Ok(value) => value,
+                _ => {
+                    return Err(OAuthError::AuthorizationFailed(
+                        "No authorization server found".to_string(),
+                    ));
+                }
+            };
 
         // Generate PKCE parameters for ATProtocol OAuth
         let (atpoauth_pkce_verifier, atpoauth_code_challenge) = pkce::generate();
@@ -313,7 +287,7 @@ impl AtpBackedAuthorizationServer {
         let now = Utc::now();
         let session = AtpOAuthSession {
             session_id: session_id.clone(),
-            did: did.clone(),
+            did: did_option.clone(), // Will be updated after token exchange
             session_created_at: now,
             atp_oauth_state: atpoauth_state.clone(),
             signing_key_jkt,
@@ -401,7 +375,7 @@ impl AtpBackedAuthorizationServer {
             &oauth_client,
             &atpoauth_dpop_key,
             login_hint,
-            &atpoauth_auth_server,
+            &authorization_server,
             &atpoauth_request_state,
         )
         .await
@@ -416,8 +390,8 @@ impl AtpBackedAuthorizationServer {
         let now = Utc::now();
         let atpoauth_request = OAuthRequest {
             oauth_state: atpoauth_state.clone(),
-            issuer: atpoauth_auth_server.issuer.clone(),
-            did,
+            issuer: authorization_server.issuer.clone(),
+            authorization_server: authorization_server_endpoint,
             nonce: atpoauth_nonce.clone(),
             pkce_verifier: atpoauth_pkce_verifier,
             signing_public_key: atpoauth_public_signing_key.to_string(),
@@ -436,7 +410,7 @@ impl AtpBackedAuthorizationServer {
         // Build authorization URL
         let atp_auth_url = format!(
             "{}?client_id={}&request_uri={}",
-            atpoauth_auth_server.authorization_endpoint,
+            authorization_server.authorization_endpoint,
             oauth_client.client_id,
             atpoauth_par_response.request_uri
         );
@@ -533,14 +507,17 @@ impl AtpBackedAuthorizationServer {
             private_signing_key_data: signing_key,
         };
 
-        // Re-resolve the DID document using the identity resolver
-        let did_document = self
-            .identity_resolver
-            .resolve(&oauth_request.did)
-            .await
-            .map_err(|e| {
-                OAuthError::ServerError(format!("Failed to resolve DID document: {}", e))
-            })?;
+        // Use the issuer from the OAuth request as the authorization server endpoint
+        // The issuer contains the authorization server issuer URL
+        let authorization_server =
+            oauth_authorization_server(&self.http_client, &oauth_request.authorization_server)
+                .await
+                .map_err(|e| {
+                    OAuthError::ServerError(format!(
+                        "Failed to retrieve authorization server from issuer: {}",
+                        e
+                    ))
+                })?;
 
         // Use oauth_complete to properly handle the token exchange with PKCE
         let token_response = oauth_complete(
@@ -549,7 +526,7 @@ impl AtpBackedAuthorizationServer {
             &dpop_key,
             &code,
             &oauth_request,
-            &did_document,
+            &authorization_server,
         )
         .await
         .map_err(|e| OAuthError::ServerError(format!("OAuth completion failed: {}", e)))?;
@@ -564,20 +541,42 @@ impl AtpBackedAuthorizationServer {
         // Calculate expiration time
         let expires_at = now + Duration::seconds(token_response.expires_in as i64);
 
-        // Update session with tokens from the token response
-        self.session_storage
-            .update_session_tokens(
-                &session.did,
-                &session.session_id,
-                session.iteration,
-                Some(token_response.access_token.clone()),
-                Some(token_response.refresh_token.clone()),
-                Some(now),
-                Some(expires_at),
-                Some(parsed_scopes),
-            )
+        // Get the actual DID from the token response
+        let token_subject = token_response.sub.clone().ok_or(OAuthError::InvalidState(
+            "Token response does not contain subject".to_string(),
+        ))?;
+
+        let atpoauth_document = self
+            .identity_resolver
+            .resolve(&token_subject)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Session token update error: {}", e)))?;
+            .map_err(|e| {
+                OAuthError::AuthorizationFailed(format!(
+                    "Failed to resolve subject '{}': {:?}",
+                    token_subject, e
+                ))
+            })?;
+
+        // Store the resolved document for later use
+        self.document_storage
+            .store_document(atpoauth_document.clone())
+            .await
+            .map_err(|e| {
+                OAuthError::ServerError(format!("Failed to store resolved document: {:?}", e))
+            })?;
+
+        let mut updated_session = session.clone();
+        updated_session.access_token = Some(token_response.access_token.clone());
+        updated_session.refresh_token = Some(token_response.refresh_token.clone());
+        updated_session.access_token_created_at = Some(now);
+        updated_session.access_token_expires_at = Some(expires_at);
+        updated_session.access_token_scopes = Some(parsed_scopes);
+        updated_session.did = Some(token_subject.clone());
+
+        self.session_storage
+            .store_session(&updated_session)
+            .await
+            .map_err(|e| OAuthError::ServerError(format!("Failed to update session: {}", e)))?;
 
         // Retrieve the original authorization request from storage
         let authorization_request = self
@@ -599,7 +598,7 @@ impl AtpBackedAuthorizationServer {
             .base_auth_server
             .authorize(
                 authorization_request,
-                did_document.id,
+                token_subject,
                 Some(session.session_id),
             )
             .await?;
@@ -798,32 +797,6 @@ impl AtpOAuthSessionStorage for UnifiedAtpOAuthSessionStorageAdapter {
         });
 
         Ok(oauth_session)
-    }
-
-    async fn update_session_tokens(
-        &self,
-        did: &str,
-        session_id: &str,
-        iteration: u32,
-        access_token: Option<String>,
-        refresh_token: Option<String>,
-        access_token_created_at: Option<DateTime<Utc>>,
-        access_token_expires_at: Option<DateTime<Utc>>,
-        access_token_scopes: Option<Vec<String>>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.storage
-            .update_session_tokens(
-                did,
-                session_id,
-                iteration,
-                access_token,
-                refresh_token,
-                access_token_created_at,
-                access_token_expires_at,
-                access_token_scopes,
-            )
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     async fn remove_session(
@@ -1031,7 +1004,7 @@ mod tests {
 
         let session = AtpOAuthSession {
             session_id: "session-1".to_string(),
-            did: "did:plc:alice123".to_string(),
+            did: Some("did:plc:alice123".to_string()),
             session_created_at: Utc::now(),
             atp_oauth_state: "atp-state-123".to_string(),
             signing_key_jkt: "test-jkt-123".to_string(),
@@ -1056,7 +1029,7 @@ mod tests {
         assert_eq!(retrieved_sessions.len(), 1);
         let retrieved = &retrieved_sessions[0];
         assert_eq!(retrieved.session_id, "session-1");
-        assert_eq!(retrieved.did, "did:plc:alice123");
+        assert_eq!(retrieved.did, Some("did:plc:alice123".to_string()));
 
         // Test retrieve by ATProtocol state
         let retrieved_by_state = storage
@@ -1179,7 +1152,7 @@ mod tests {
         // Create a mock session first
         let session = AtpOAuthSession {
             session_id: "test-session".to_string(),
-            did: "did:plc:alice123".to_string(),
+            did: Some("did:plc:alice123".to_string()),
             session_created_at: Utc::now(),
             atp_oauth_state: "atp-state-123".to_string(),
             signing_key_jkt: "test-jkt-456".to_string(),
@@ -1226,7 +1199,7 @@ mod tests {
             // Test session storage and retrieval by state
             let session = AtpOAuthSession {
                 session_id: "session-1".to_string(),
-                did: "did:plc:alice123".to_string(),
+                did: Some("did:plc:alice123".to_string()),
                 session_created_at: Utc::now(),
                 atp_oauth_state: "atp-state-123".to_string(),
                 signing_key_jkt: "test-jkt-789".to_string(),

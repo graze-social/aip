@@ -20,6 +20,9 @@ pub async fn get_userinfo_handler(
     State(state): State<AppState>,
     ExtractedAuth(access_token): ExtractedAuth,
 ) -> Result<Json<OpenIDClaims>, (StatusCode, Json<Value>)> {
+
+    tracing::debug!(?access_token, "get_userinfo_handler access_token");
+
     // Get the user ID (DID) from the access token
     let user_id = match access_token.user_id {
         Some(ref uid) => uid.clone(),
@@ -36,6 +39,7 @@ pub async fn get_userinfo_handler(
     let document = match state.document_storage.get_document_by_did(&user_id).await {
         Ok(Some(value)) => value,
         _ => {
+            tracing::warn!("no document found for user id");
             let error_response = json!({
                 "error": "internal_error",
                 "error_description": "Internal error generating response"
@@ -56,6 +60,7 @@ pub async fn get_userinfo_handler(
     let session_id = match access_token.session_id {
         Some(value) => value,
         _ => {
+            tracing::warn!("no session_id associated with access token");
             let error_response = json!({
                 "error": "internal_error",
                 "error_description": "Internal error generating response"
@@ -66,7 +71,7 @@ pub async fn get_userinfo_handler(
 
     let session = match get_atprotocol_session_with_refresh(&state, &document, &session_id).await {
         Ok(value) => value,
-        _ => {
+        Err(_) => {
             let error_response = json!({
                 "error": "internal_error",
                 "error_description": "Internal error generating response"
@@ -264,7 +269,7 @@ mod tests {
         // Create and store a test ATProtocol OAuth session
         let test_session = AtpOAuthSession {
             session_id: "test-session".to_string(),
-            did: "did:plc:test123".to_string(),
+            did: Some("did:plc:test123".to_string()),
             session_created_at: Utc::now(),
             atp_oauth_state: "test-atp-state".to_string(),
             signing_key_jkt: "test-jkt".to_string(),
@@ -380,7 +385,7 @@ mod tests {
         // Create and store a test ATProtocol OAuth session
         let test_session = AtpOAuthSession {
             session_id: "test-session".to_string(),
-            did: "did:plc:user123".to_string(),
+            did: Some("did:plc:user123".to_string()),
             session_created_at: Utc::now(),
             atp_oauth_state: "test-atp-state".to_string(),
             signing_key_jkt: "test-jkt".to_string(),

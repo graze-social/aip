@@ -136,8 +136,8 @@ pub trait PARStorage {
 pub struct AtpOAuthSession {
     /// Unique session ID
     pub session_id: String,
-    /// DID being authenticated
-    pub did: String,
+    /// DID being authenticated (nullable until token exchange)
+    pub did: Option<String>,
     /// Session creation time (UTC)
     pub session_created_at: DateTime<Utc>,
     /// ATProtocol OAuth state for tracking
