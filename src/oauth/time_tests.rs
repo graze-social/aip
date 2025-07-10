@@ -16,7 +16,7 @@ mod tests {
         // Test AtpOAuthSession uses UTC
         let session = AtpOAuthSession {
             session_id: "test-session".to_string(),
-            did: "did:plc:test123".to_string(),
+            did: Some("did:plc:test123".to_string()),
             session_created_at: now,
             atp_oauth_state: "test-state".to_string(),
             signing_key_jkt: "test-jkt".to_string(),
@@ -209,7 +209,7 @@ mod tests {
         // Create sessions with different creation times
         let old_session = AtpOAuthSession {
             session_id: "old-session".to_string(),
-            did: "did:plc:test123".to_string(),
+            did: Some("did:plc:test123".to_string()),
             session_created_at: now - Duration::hours(2),
             atp_oauth_state: "old-state".to_string(),
             signing_key_jkt: "test-jkt-old".to_string(),
@@ -226,7 +226,7 @@ mod tests {
 
         let new_session = AtpOAuthSession {
             session_id: "new-session".to_string(),
-            did: "did:plc:test123".to_string(),
+            did: Some("did:plc:test123".to_string()),
             session_created_at: now,
             atp_oauth_state: "new-state".to_string(),
             signing_key_jkt: "test-jkt-new".to_string(),
@@ -257,7 +257,7 @@ mod tests {
 
         let session = AtpOAuthSession {
             session_id: "test-session".to_string(),
-            did: "did:plc:test123".to_string(),
+            did: Some("did:plc:test123".to_string()),
             session_created_at: now,
             atp_oauth_state: "test-state".to_string(),
             signing_key_jkt: "test-jkt".to_string(),

@@ -654,7 +654,6 @@ impl TryFrom<TokenForm> for TokenRequest {
 pub async fn authorize_handler(
     State(auth_server): State<Arc<AuthorizationServer>>,
     Query(query): Query<AuthorizeQuery>,
-    // TODO: Extract authenticated user from session
 ) -> Result<Redirect, (StatusCode, Json<Value>)> {
     // For now, assume user is authenticated with a dummy user ID
     let user_id = "dummy-user".to_string();

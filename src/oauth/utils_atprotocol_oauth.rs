@@ -160,9 +160,10 @@ pub async fn refresh_session(
     };
 
     // TODO: Re-resolve the DID when refreshing tokens.
+    let did = session.did.as_ref().ok_or("Session does not have a DID")?;
     let document = match atp_auth_server
         .document_storage()
-        .get_document_by_did(&session.did)
+        .get_document_by_did(did)
         .await
     {
         Ok(Some(doc)) => doc,

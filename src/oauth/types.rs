@@ -144,7 +144,7 @@ pub struct AuthorizationCode {
 }
 
 /// OAuth Access Token
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct AccessToken {
     /// The access token
     pub token: String,

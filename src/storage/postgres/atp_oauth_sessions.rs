@@ -72,9 +72,7 @@ impl PostgresAtpOAuthSessionStorage {
             session_id: row.try_get("session_id").map_err(|e| {
                 StorageError::DatabaseError(format!("Failed to get session_id: {}", e))
             })?,
-            did: row
-                .try_get("did")
-                .map_err(|e| StorageError::DatabaseError(format!("Failed to get did: {}", e)))?,
+            did: row.try_get("did").ok(),
             session_created_at,
             atp_oauth_state: row.try_get("atp_oauth_state").map_err(|e| {
                 StorageError::DatabaseError(format!("Failed to get atp_oauth_state: {}", e))
@@ -124,8 +122,9 @@ impl AtpOAuthSessionStorage for PostgresAtpOAuthSessionStorage {
                 access_token_created_at, access_token_expires_at, access_token_scopes,
                 metadata
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            ON CONFLICT (session_id, did, iteration)
+            ON CONFLICT (session_id, iteration)
             DO UPDATE SET
+                did = EXCLUDED.did,
                 session_created_at = EXCLUDED.session_created_at,
                 atp_oauth_state = EXCLUDED.atp_oauth_state,
                 signing_key_jkt = EXCLUDED.signing_key_jkt,
@@ -235,11 +234,12 @@ impl AtpOAuthSessionStorage for PostgresAtpOAuthSessionStorage {
 
         let result = sqlx::query(
             r#"
-            UPDATE atp_oauth_sessions SET 
+            UPDATE atp_oauth_sessions SET
+                did = $1,
                 session_created_at = $4, atp_oauth_state = $5, signing_key_jkt = $6,
                 dpop_key = $7, access_token = $8, refresh_token = $9,
                 access_token_created_at = $10, access_token_expires_at = $11, access_token_scopes = $12
-            WHERE did = $1 AND session_id = $2 AND iteration = $3
+            WHERE session_id = $2 AND iteration = $3
             "#,
         )
         .bind(&session.did)
@@ -260,7 +260,7 @@ impl AtpOAuthSessionStorage for PostgresAtpOAuthSessionStorage {
 
         if result.rows_affected() == 0 {
             return Err(StorageError::NotFound(format!(
-                "Session not found: did={}, session_id={}, iteration={}",
+                "Session not found: did={:?}, session_id={}, iteration={}",
                 session.did, session.session_id, session.iteration
             )));
         }
