@@ -46,6 +46,22 @@ pub struct AdminDids(Vec<String>);
 #[derive(Clone)]
 pub struct ClientDefaultRedirectExact(bool);
 
+/// ATProtocol client name configuration
+#[derive(Clone)]
+pub struct AtprotoClientName(String);
+
+/// ATProtocol client logo configuration
+#[derive(Clone)]
+pub struct AtprotoClientLogo(Option<String>);
+
+/// ATProtocol client terms of service configuration
+#[derive(Clone)]
+pub struct AtprotoClientTos(Option<String>);
+
+/// ATProtocol client policy configuration
+#[derive(Clone)]
+pub struct AtprotoClientPolicy(Option<String>);
+
 /// Main application configuration
 #[derive(Clone)]
 pub struct Config {
@@ -71,6 +87,10 @@ pub struct Config {
     pub client_default_refresh_token_expiration: ClientDefaultRefreshTokenExpiration,
     pub admin_dids: AdminDids,
     pub client_default_redirect_exact: ClientDefaultRedirectExact,
+    pub atproto_client_name: AtprotoClientName,
+    pub atproto_client_logo: AtprotoClientLogo,
+    pub atproto_client_tos: AtprotoClientTos,
+    pub atproto_client_policy: AtprotoClientPolicy,
 }
 
 impl Config {
@@ -113,6 +133,14 @@ impl Config {
         let admin_dids: AdminDids = optional_env("ADMIN_DIDS").try_into()?;
         let client_default_redirect_exact: ClientDefaultRedirectExact = 
             default_env("CLIENT_DEFAULT_REDIRECT_EXACT", "true").try_into()?;
+        let atproto_client_name: AtprotoClientName = 
+            default_env("ATPROTO_CLIENT_NAME", "AIP OAuth Server").try_into()?;
+        let atproto_client_logo: AtprotoClientLogo = 
+            optional_env("ATPROTO_CLIENT_LOGO").try_into()?;
+        let atproto_client_tos: AtprotoClientTos = 
+            optional_env("ATPROTO_CLIENT_TOS").try_into()?;
+        let atproto_client_policy: AtprotoClientPolicy = 
+            optional_env("ATPROTO_CLIENT_POLICY").try_into()?;
 
         Ok(Self {
             version: version()?,
@@ -137,6 +165,10 @@ impl Config {
             client_default_refresh_token_expiration,
             admin_dids,
             client_default_redirect_exact,
+            atproto_client_name,
+            atproto_client_logo,
+            atproto_client_tos,
+            atproto_client_policy,
         })
     }
 }
@@ -447,6 +479,62 @@ impl TryFrom<String> for ClientDefaultRedirectExact {
 
 impl AsRef<bool> for ClientDefaultRedirectExact {
     fn as_ref(&self) -> &bool {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for AtprotoClientName {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Ok(Self(value))
+    }
+}
+
+impl AsRef<String> for AtprotoClientName {
+    fn as_ref(&self) -> &String {
+        &self.0
+    }
+}
+
+impl TryFrom<Option<String>> for AtprotoClientLogo {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Option<String>) -> Result<Self, Self::Error> {
+        Ok(Self(value.filter(|s| !s.is_empty())))
+    }
+}
+
+impl AsRef<Option<String>> for AtprotoClientLogo {
+    fn as_ref(&self) -> &Option<String> {
+        &self.0
+    }
+}
+
+impl TryFrom<Option<String>> for AtprotoClientTos {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Option<String>) -> Result<Self, Self::Error> {
+        Ok(Self(value.filter(|s| !s.is_empty())))
+    }
+}
+
+impl AsRef<Option<String>> for AtprotoClientTos {
+    fn as_ref(&self) -> &Option<String> {
+        &self.0
+    }
+}
+
+impl TryFrom<Option<String>> for AtprotoClientPolicy {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Option<String>) -> Result<Self, Self::Error> {
+        Ok(Self(value.filter(|s| !s.is_empty())))
+    }
+}
+
+impl AsRef<Option<String>> for AtprotoClientPolicy {
+    fn as_ref(&self) -> &Option<String> {
         &self.0
     }
 }

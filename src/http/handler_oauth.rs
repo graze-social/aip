@@ -178,6 +178,10 @@ mod tests {
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),
             client_default_redirect_exact: "true".to_string().try_into().unwrap(),
+            atproto_client_name: "AIP OAuth Server".to_string().try_into().unwrap(),
+            atproto_client_logo: None::<String>.try_into().unwrap(),
+            atproto_client_tos: None::<String>.try_into().unwrap(),
+            atproto_client_policy: None::<String>.try_into().unwrap(),
         });
 
         let atp_session_storage = Arc::new(
