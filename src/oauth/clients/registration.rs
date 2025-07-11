@@ -295,7 +295,8 @@ impl ClientRegistrationService {
         client_service_auth: &ClientServiceAuth,
     ) -> Result<(), ClientRegistrationError> {
         // Verify client exists
-        let client = self.storage
+        let client = self
+            .storage
             .get_client(client_id)
             .await
             .map_err(|e| {
@@ -320,7 +321,7 @@ impl ClientRegistrationService {
                 }
             }
         }
-            
+
         // Delete the client
         self.storage.delete_client(client_id).await.map_err(|e| {
             ClientRegistrationError::InvalidClientMetadata(format!(

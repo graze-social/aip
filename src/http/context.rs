@@ -1,7 +1,10 @@
 //! Application state and request context management.
 
 use atproto_identity::{
-    axum::state::DidDocumentStorageExtractor, key::{KeyData, KeyProvider}, resolve::IdentityResolver, storage::DidDocumentStorage
+    axum::state::DidDocumentStorageExtractor,
+    key::{KeyData, KeyProvider},
+    resolve::IdentityResolver,
+    storage::DidDocumentStorage,
 };
 use atproto_oauth::storage::OAuthRequestStorage;
 use axum::extract::FromRef;

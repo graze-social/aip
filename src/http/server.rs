@@ -115,7 +115,10 @@ pub fn build_router(ctx: AppState) -> Router {
         .nest("/api", protected_api_routes)
         .nest("/oauth", oauth_routes)
         .nest("/.well-known", well_known_routes)
-        .route("/xrpc/tools.graze.aip.clients.Update", post(xrpc_clients_update_handler))
+        .route(
+            "/xrpc/tools.graze.aip.clients.Update",
+            post(xrpc_clients_update_handler),
+        )
         .nest_service("/static", ServeDir::new(&ctx.config.http_static_path))
         .layer(cors)
         .with_state(ctx)
@@ -194,6 +197,10 @@ mod tests {
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),
             client_default_redirect_exact: "true".to_string().try_into().unwrap(),
+            atproto_client_name: "AIP OAuth Server".to_string().try_into().unwrap(),
+            atproto_client_logo: None::<String>.try_into().unwrap(),
+            atproto_client_tos: None::<String>.try_into().unwrap(),
+            atproto_client_policy: None::<String>.try_into().unwrap(),
         });
 
         let atp_session_storage = Arc::new(

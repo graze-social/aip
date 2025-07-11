@@ -255,23 +255,32 @@ impl PostgresOAuthClientStore {
             .try_get("scope")
             .map_err(|e| StorageError::DatabaseError(format!("Failed to get scope: {}", e)))?;
 
-        let access_token_expiration_seconds: i64 = row
-            .try_get("access_token_expiration")
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get access_token_expiration: {}", e)))?;
+        let access_token_expiration_seconds: i64 =
+            row.try_get("access_token_expiration").map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to get access_token_expiration: {}", e))
+            })?;
         let access_token_expiration = Self::seconds_to_duration(access_token_expiration_seconds);
 
-        let refresh_token_expiration_seconds: i64 = row
-            .try_get("refresh_token_expiration")
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get refresh_token_expiration: {}", e)))?;
+        let refresh_token_expiration_seconds: i64 =
+            row.try_get("refresh_token_expiration").map_err(|e| {
+                StorageError::DatabaseError(format!(
+                    "Failed to get refresh_token_expiration: {}",
+                    e
+                ))
+            })?;
         let refresh_token_expiration = Self::seconds_to_duration(refresh_token_expiration_seconds);
 
-        let require_redirect_exact: bool = row
-            .try_get("require_redirect_exact")
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get require_redirect_exact: {}", e)))?;
+        let require_redirect_exact: bool = row.try_get("require_redirect_exact").map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get require_redirect_exact: {}", e))
+        })?;
 
-        let registration_access_token: Option<String> = row
-            .try_get("registration_access_token")
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get registration_access_token: {}", e)))?;
+        let registration_access_token: Option<String> =
+            row.try_get("registration_access_token").map_err(|e| {
+                StorageError::DatabaseError(format!(
+                    "Failed to get registration_access_token: {}",
+                    e
+                ))
+            })?;
 
         Ok(OAuthClient {
             client_id,
@@ -309,8 +318,10 @@ impl OAuthClientStore for PostgresOAuthClientStore {
         let response_types_json = Self::serialize_response_types(&client.response_types);
         let auth_method_str = Self::auth_method_to_string(&client.token_endpoint_auth_method);
         let client_type_str = Self::client_type_to_string(&client.client_type);
-        let access_token_expiration_seconds = Self::duration_to_seconds(&client.access_token_expiration);
-        let refresh_token_expiration_seconds = Self::duration_to_seconds(&client.refresh_token_expiration);
+        let access_token_expiration_seconds =
+            Self::duration_to_seconds(&client.access_token_expiration);
+        let refresh_token_expiration_seconds =
+            Self::duration_to_seconds(&client.refresh_token_expiration);
 
         sqlx::query(
             r#"
@@ -374,8 +385,10 @@ impl OAuthClientStore for PostgresOAuthClientStore {
         let response_types_json = Self::serialize_response_types(&client.response_types);
         let auth_method_str = Self::auth_method_to_string(&client.token_endpoint_auth_method);
         let client_type_str = Self::client_type_to_string(&client.client_type);
-        let access_token_expiration_seconds = Self::duration_to_seconds(&client.access_token_expiration);
-        let refresh_token_expiration_seconds = Self::duration_to_seconds(&client.refresh_token_expiration);
+        let access_token_expiration_seconds =
+            Self::duration_to_seconds(&client.access_token_expiration);
+        let refresh_token_expiration_seconds =
+            Self::duration_to_seconds(&client.refresh_token_expiration);
 
         let result = sqlx::query(
             r#"

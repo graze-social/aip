@@ -2,8 +2,106 @@
 
 use std::sync::Arc;
 
+use atproto_identity::validation::{
+    is_valid_did_method_plc, is_valid_did_method_web, is_valid_hostname, strip_handle_prefixes,
+};
+
 use super::context::AppState;
+use crate::errors::OAuthError;
 use crate::oauth::auth_server::AuthorizationServer;
+
+/// Normalize login_hint values to ensure consistent format
+///
+/// Accepts handle, DID, or HTTPS URL values and normalizes them:
+/// - Handle inputs may have `@` or `at://` prefix which will be stripped
+/// - DID inputs may have `at://` prefix which will be stripped
+/// - HTTPS URLs must only contain protocol, hostname, and optional port
+///
+/// # Examples
+/// ```ignore
+/// normalize_login_hint("ngerakines.me") -> Ok("ngerakines.me")
+/// normalize_login_hint("@ngerakines.me") -> Ok("ngerakines.me")
+/// normalize_login_hint("at://ngerakines.me") -> Ok("ngerakines.me")
+/// normalize_login_hint("did:plc:7iza6de2dwap2sbkpav7c6c6") -> Ok("did:plc:7iza6de2dwap2sbkpav7c6c6")
+/// normalize_login_hint("at://did:plc:7iza6de2dwap2sbkpav7c6c6") -> Ok("did:plc:7iza6de2dwap2sbkpav7c6c6")
+/// normalize_login_hint("https://example.com") -> Ok("https://example.com")
+/// ```
+pub fn normalize_login_hint(login_hint: &str) -> Result<String, OAuthError> {
+    let trimmed = login_hint.trim();
+
+    if trimmed.is_empty() {
+        return Err(OAuthError::InvalidRequest(
+            "Login hint cannot be empty".to_string(),
+        ));
+    }
+
+    let trimmed = strip_handle_prefixes(trimmed);
+
+    // Check if it's an HTTPS URL
+    if trimmed.starts_with("https://") {
+        // Parse URL to ensure it's valid and extract only protocol + hostname + port
+        match url::Url::parse(trimmed) {
+            Ok(url) => {
+                if url.scheme() != "https" {
+                    return Err(OAuthError::InvalidRequest(
+                        "Only HTTPS URLs are allowed".to_string(),
+                    ));
+                }
+
+                // Build URL with only scheme, host, and optional port
+                let mut normalized = String::from("https://");
+                if let Some(host) = url.host_str() {
+                    normalized.push_str(host);
+                    if let Some(port) = url.port() {
+                        normalized.push(':');
+                        normalized.push_str(&port.to_string());
+                    }
+                    Ok(normalized)
+                } else {
+                    Err(OAuthError::InvalidRequest(
+                        "Invalid HTTPS URL: missing host".to_string(),
+                    ))
+                }
+            }
+            Err(_) => Err(OAuthError::InvalidRequest(
+                "Invalid HTTPS URL format".to_string(),
+            )),
+        }
+    }
+    // Check if it's a DID
+    else if trimmed.starts_with("did:") {
+        // Validate DIDs using atproto_identity validation functions
+        if trimmed.starts_with("did:plc:") {
+            if !is_valid_did_method_plc(trimmed) {
+                return Err(OAuthError::InvalidRequest(
+                    "Invalid DID PLC format".to_string(),
+                ));
+            }
+        } else if trimmed.starts_with("did:web:") {
+            if !is_valid_did_method_web(trimmed, true) {
+                return Err(OAuthError::InvalidRequest(
+                    "Invalid DID Web format".to_string(),
+                ));
+            }
+        } else {
+            return Err(OAuthError::InvalidRequest(
+                "Unsupported DID method".to_string(),
+            ));
+        }
+
+        Ok(trimmed.to_string())
+    }
+    // Otherwise, treat it as a handle
+    else {
+        if !(is_valid_hostname(trimmed) && trimmed.contains('.')) {
+            return Err(OAuthError::InvalidRequest(
+                "Invalid handle format".to_string(),
+            ));
+        }
+
+        Ok(trimmed.to_string())
+    }
+}
 
 /// Create base authorization server
 pub async fn create_base_auth_server(
@@ -82,6 +180,10 @@ mod tests {
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),
             client_default_redirect_exact: "true".to_string().try_into().unwrap(),
+            atproto_client_name: "AIP OAuth Server".to_string().try_into().unwrap(),
+            atproto_client_logo: None::<String>.try_into().unwrap(),
+            atproto_client_tos: None::<String>.try_into().unwrap(),
+            atproto_client_policy: None::<String>.try_into().unwrap(),
         });
 
         let atp_session_storage = Arc::new(
@@ -161,11 +263,150 @@ mod tests {
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),
             client_default_redirect_exact: "true".to_string().try_into().unwrap(),
+            atproto_client_name: "AIP OAuth Server".to_string().try_into().unwrap(),
+            atproto_client_logo: None::<String>.try_into().unwrap(),
+            atproto_client_tos: None::<String>.try_into().unwrap(),
+            atproto_client_policy: None::<String>.try_into().unwrap(),
         });
 
         app_state.config = custom_config;
 
         let result = create_base_auth_server(&app_state).await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_normalize_login_hint_handle() {
+        // Basic handle without prefix
+        assert_eq!(
+            normalize_login_hint("ngerakines.me").unwrap(),
+            "ngerakines.me"
+        );
+
+        // Handle with @ prefix
+        assert_eq!(
+            normalize_login_hint("@ngerakines.me").unwrap(),
+            "ngerakines.me"
+        );
+
+        // Handle with at:// prefix
+        assert_eq!(
+            normalize_login_hint("at://ngerakines.me").unwrap(),
+            "ngerakines.me"
+        );
+
+        // Handle with multiple dots
+        assert_eq!(
+            normalize_login_hint("sub.domain.example.com").unwrap(),
+            "sub.domain.example.com"
+        );
+
+        // Handle with @ and spaces (trimmed)
+        assert_eq!(
+            normalize_login_hint("  @example.com  ").unwrap(),
+            "example.com"
+        );
+    }
+
+    #[test]
+    fn test_normalize_login_hint_did() {
+        // Valid DID PLC without prefix
+        assert_eq!(
+            normalize_login_hint("did:plc:7iza6de2dwap2sbkpav7c6c6").unwrap(),
+            "did:plc:7iza6de2dwap2sbkpav7c6c6"
+        );
+
+        // Valid DID PLC with at:// prefix
+        assert_eq!(
+            normalize_login_hint("at://did:plc:7iza6de2dwap2sbkpav7c6c6").unwrap(),
+            "did:plc:7iza6de2dwap2sbkpav7c6c6"
+        );
+
+        // Valid DID Web
+        assert_eq!(
+            normalize_login_hint("did:web:example.com").unwrap(),
+            "did:web:example.com"
+        );
+
+        // DID with spaces (trimmed)
+        assert_eq!(
+            normalize_login_hint("  did:plc:7iza6de2dwap2sbkpav7c6c6  ").unwrap(),
+            "did:plc:7iza6de2dwap2sbkpav7c6c6"
+        );
+    }
+
+    #[test]
+    fn test_normalize_login_hint_https_url() {
+        // Basic HTTPS URL
+        assert_eq!(
+            normalize_login_hint("https://example.com").unwrap(),
+            "https://example.com"
+        );
+
+        // HTTPS URL with port
+        assert_eq!(
+            normalize_login_hint("https://example.com:8080").unwrap(),
+            "https://example.com:8080"
+        );
+
+        // HTTPS URL with path (should be stripped)
+        assert_eq!(
+            normalize_login_hint("https://example.com/path/to/resource").unwrap(),
+            "https://example.com"
+        );
+
+        // HTTPS URL with query parameters (should be stripped)
+        assert_eq!(
+            normalize_login_hint("https://example.com?foo=bar").unwrap(),
+            "https://example.com"
+        );
+
+        // HTTPS URL with fragment (should be stripped)
+        assert_eq!(
+            normalize_login_hint("https://example.com#section").unwrap(),
+            "https://example.com"
+        );
+
+        // HTTPS URL with everything (port 443 is default for HTTPS so won't be included)
+        assert_eq!(
+            normalize_login_hint("https://example.com:443/path?query=value#fragment").unwrap(),
+            "https://example.com"
+        );
+    }
+
+    #[test]
+    fn test_normalize_login_hint_errors() {
+        // Empty string
+        assert!(normalize_login_hint("").is_err());
+
+        // Only whitespace
+        assert!(normalize_login_hint("   ").is_err());
+
+        // Invalid handle (no dot) - ATProtocol validation will catch these
+        assert!(normalize_login_hint("invalid").is_err());
+        assert!(normalize_login_hint("@invalid").is_err());
+        assert!(normalize_login_hint("at://invalid").is_err());
+
+        // Invalid DID PLC (wrong format)
+        assert!(normalize_login_hint("did:plc:invalid").is_err());
+        assert!(normalize_login_hint("did:plc:").is_err());
+        assert!(normalize_login_hint("at://did:plc:invalid").is_err());
+
+        // Invalid DID Web (wrong format)
+        assert!(normalize_login_hint("did:web:").is_err());
+        assert!(normalize_login_hint("did:web:invalid..domain").is_err());
+
+        // Invalid DID (too short or malformed)
+        assert!(normalize_login_hint("did:").is_err());
+        assert!(normalize_login_hint("did:x").is_err());
+        assert!(normalize_login_hint("at://did:").is_err());
+
+        // Non-HTTPS URLs
+        assert!(normalize_login_hint("http://example.com").is_err());
+        assert!(normalize_login_hint("ftp://example.com").is_err());
+
+        // Invalid URL format
+        assert!(normalize_login_hint("https://").is_err());
+        assert!(normalize_login_hint("https://[invalid").is_err());
     }
 }

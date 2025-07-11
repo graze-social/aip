@@ -10,7 +10,13 @@ use serde_json::{Value, json};
 use crate::{
     errors::ClientRegistrationError,
     http::context::AppState,
-    oauth::{clients::registration::ClientServiceAuth, types::{ClientRegistrationRequest, ClientRegistrationResponse, FilteredClientRegistrationResponse}},
+    oauth::{
+        clients::registration::ClientServiceAuth,
+        types::{
+            ClientRegistrationRequest, ClientRegistrationResponse,
+            FilteredClientRegistrationResponse,
+        },
+    },
 };
 
 /// Extract bearer token from Authorization header
@@ -111,7 +117,7 @@ pub async fn app_get_client_handler(
         Ok(response) => {
             let filtered_response = FilteredClientRegistrationResponse::from(response);
             Ok(ResponseJson(filtered_response))
-        },
+        }
         Err(e) => {
             let (status, error_code, description) = match &e {
                 ClientRegistrationError::ClientNotFound(_) => {
@@ -160,7 +166,7 @@ pub async fn app_update_client_handler(
         Ok(response) => {
             let filtered_response = FilteredClientRegistrationResponse::from(response);
             Ok(ResponseJson(filtered_response))
-        },
+        }
         Err(e) => {
             let (status, error_code, description) = match &e {
                 ClientRegistrationError::ClientNotFound(_) => {
@@ -206,7 +212,10 @@ pub async fn app_delete_client_handler(
     let registration_token = extract_bearer_token(&headers)?;
 
     let client_service_auth = ClientServiceAuth::RegistrationToken(registration_token);
-    match service.delete_client(&client_id, &client_service_auth).await {
+    match service
+        .delete_client(&client_id, &client_service_auth)
+        .await
+    {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
             let (status, error_code, description) = match &e {
