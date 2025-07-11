@@ -79,7 +79,7 @@ impl OAuthRequestStorage for SqliteOAuthRequestStorage {
         // Use the issuer as the authorization server endpoint
         // This is a temporary solution until we can properly pass the authorization_server_endpoint
         let authorization_server = &request.issuer;
-        
+
         sqlx::query(query)
             .bind(&request.oauth_state)
             .bind(&request.issuer)

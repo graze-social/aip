@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 use super::context::AppState;
+use super::utils_oauth::normalize_login_hint;
 use crate::oauth::{
     auth_server::AuthorizeQuery, types::AuthorizationRequest,
     utils_atprotocol_oauth::create_atp_backed_server,
@@ -154,6 +155,25 @@ async fn process_authorization_query(
         }));
     }
 
+    // Normalize login_hint if present and not empty
+    let normalized_login_hint = if let Some(ref hint) = query.login_hint {
+        if !hint.trim().is_empty() {
+            match normalize_login_hint(hint) {
+                Ok(normalized) => Some(normalized),
+                Err(e) => {
+                    return Err(json!({
+                        "error": "invalid_request",
+                        "error_description": e.to_string()
+                    }));
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let request = AuthorizationRequest {
         response_type: vec![crate::oauth::types::ResponseType::Code],
         client_id: query.client_id.clone(),
@@ -162,7 +182,7 @@ async fn process_authorization_query(
         state: query.state.clone(),
         code_challenge: query.code_challenge.clone(),
         code_challenge_method: query.code_challenge_method.clone(),
-        login_hint: query.login_hint.clone(),
+        login_hint: normalized_login_hint,
         nonce: query.nonce.clone(),
     };
 

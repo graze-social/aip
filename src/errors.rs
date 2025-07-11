@@ -32,7 +32,9 @@ pub enum ConfigError {
     DurationParsingFailed(String, String),
 
     /// Error when boolean string cannot be parsed
-    #[error("error-aip-config-7 Failed to parse boolean '{0}': expected true/false/1/0/yes/no/on/off")]
+    #[error(
+        "error-aip-config-7 Failed to parse boolean '{0}': expected true/false/1/0/yes/no/on/off"
+    )]
     BoolParsingFailed(String),
 }
 

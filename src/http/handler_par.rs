@@ -14,6 +14,7 @@ use std::sync::Arc;
 use ulid::Ulid;
 
 use super::context::AppState;
+use super::utils_oauth::normalize_login_hint;
 use crate::errors::OAuthError;
 use crate::oauth::{
     auth_server::{AuthorizationServer, ClientAuthentication},
@@ -184,11 +185,12 @@ fn validate_and_convert_par_request(
         client.redirect_uris.contains(&request.redirect_uri)
     } else {
         // Prefix matching
-        client.redirect_uris.iter().any(|registered_uri| {
-            request.redirect_uri.starts_with(registered_uri)
-        })
+        client
+            .redirect_uris
+            .iter()
+            .any(|registered_uri| request.redirect_uri.starts_with(registered_uri))
     };
-    
+
     if !redirect_uri_valid {
         return Err(OAuthError::InvalidRequest(
             "Invalid redirect URI".to_string(),
@@ -227,6 +229,17 @@ fn validate_and_convert_par_request(
         ));
     }
 
+    // Normalize login_hint if present and not empty
+    let normalized_login_hint = if let Some(ref hint) = request.login_hint {
+        if !hint.trim().is_empty() {
+            Some(normalize_login_hint(hint)?)
+        } else {
+            request.subject.clone()
+        }
+    } else {
+        request.subject.clone()
+    };
+
     Ok(AuthorizationRequest {
         response_type: response_types,
         client_id: request.client_id.clone(),
@@ -235,7 +248,7 @@ fn validate_and_convert_par_request(
         state: request.state.clone(),
         code_challenge: request.code_challenge.clone(),
         code_challenge_method: request.code_challenge_method.clone(),
-        login_hint: request.login_hint.clone().or(request.subject.clone()),
+        login_hint: normalized_login_hint,
         nonce: request.nonce.clone(),
     })
 }

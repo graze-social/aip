@@ -20,7 +20,6 @@ pub async fn get_userinfo_handler(
     State(state): State<AppState>,
     ExtractedAuth(access_token): ExtractedAuth,
 ) -> Result<Json<OpenIDClaims>, (StatusCode, Json<Value>)> {
-
     tracing::debug!(?access_token, "get_userinfo_handler access_token");
 
     // Get the user ID (DID) from the access token

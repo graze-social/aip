@@ -115,7 +115,10 @@ pub fn build_router(ctx: AppState) -> Router {
         .nest("/api", protected_api_routes)
         .nest("/oauth", oauth_routes)
         .nest("/.well-known", well_known_routes)
-        .route("/xrpc/tools.graze.aip.clients.Update", post(xrpc_clients_update_handler))
+        .route(
+            "/xrpc/tools.graze.aip.clients.Update",
+            post(xrpc_clients_update_handler),
+        )
         .nest_service("/static", ServeDir::new(&ctx.config.http_static_path))
         .layer(cors)
         .with_state(ctx)

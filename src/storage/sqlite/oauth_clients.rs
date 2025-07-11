@@ -211,24 +211,33 @@ impl SqliteOAuthClientStore {
             .try_get("scope")
             .map_err(|e| StorageError::DatabaseError(format!("Failed to get scope: {}", e)))?;
 
-        let access_token_expiration_seconds: i64 = row
-            .try_get("access_token_expiration")
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get access_token_expiration: {}", e)))?;
+        let access_token_expiration_seconds: i64 =
+            row.try_get("access_token_expiration").map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to get access_token_expiration: {}", e))
+            })?;
         let access_token_expiration = Self::seconds_to_duration(access_token_expiration_seconds);
 
-        let refresh_token_expiration_seconds: i64 = row
-            .try_get("refresh_token_expiration")
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get refresh_token_expiration: {}", e)))?;
+        let refresh_token_expiration_seconds: i64 =
+            row.try_get("refresh_token_expiration").map_err(|e| {
+                StorageError::DatabaseError(format!(
+                    "Failed to get refresh_token_expiration: {}",
+                    e
+                ))
+            })?;
         let refresh_token_expiration = Self::seconds_to_duration(refresh_token_expiration_seconds);
 
-        let require_redirect_exact: i64 = row
-            .try_get("require_redirect_exact")
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get require_redirect_exact: {}", e)))?;
+        let require_redirect_exact: i64 = row.try_get("require_redirect_exact").map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get require_redirect_exact: {}", e))
+        })?;
         let require_redirect_exact = require_redirect_exact != 0;
 
-        let registration_access_token: Option<String> = row
-            .try_get("registration_access_token")
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get registration_access_token: {}", e)))?;
+        let registration_access_token: Option<String> =
+            row.try_get("registration_access_token").map_err(|e| {
+                StorageError::DatabaseError(format!(
+                    "Failed to get registration_access_token: {}",
+                    e
+                ))
+            })?;
 
         Ok(OAuthClient {
             client_id,
@@ -265,8 +274,10 @@ impl OAuthClientStore for SqliteOAuthClientStore {
         let updated_at_str = client.updated_at.to_rfc3339();
         let metadata_json = serde_json::to_string(&client.metadata)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        let access_token_expiration_seconds = Self::duration_to_seconds(&client.access_token_expiration);
-        let refresh_token_expiration_seconds = Self::duration_to_seconds(&client.refresh_token_expiration);
+        let access_token_expiration_seconds =
+            Self::duration_to_seconds(&client.access_token_expiration);
+        let refresh_token_expiration_seconds =
+            Self::duration_to_seconds(&client.refresh_token_expiration);
 
         sqlx::query(
             r#"
@@ -292,7 +303,11 @@ impl OAuthClientStore for SqliteOAuthClientStore {
         .bind(&metadata_json)
         .bind(access_token_expiration_seconds)
         .bind(refresh_token_expiration_seconds)
-        .bind(if client.require_redirect_exact { 1i64 } else { 0i64 })
+        .bind(if client.require_redirect_exact {
+            1i64
+        } else {
+            0i64
+        })
         .bind(&client.registration_access_token)
         .execute(&self.pool)
         .await
@@ -328,8 +343,10 @@ impl OAuthClientStore for SqliteOAuthClientStore {
         let updated_at_str = client.updated_at.to_rfc3339();
         let metadata_json = serde_json::to_string(&client.metadata)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        let access_token_expiration_seconds = Self::duration_to_seconds(&client.access_token_expiration);
-        let refresh_token_expiration_seconds = Self::duration_to_seconds(&client.refresh_token_expiration);
+        let access_token_expiration_seconds =
+            Self::duration_to_seconds(&client.access_token_expiration);
+        let refresh_token_expiration_seconds =
+            Self::duration_to_seconds(&client.refresh_token_expiration);
 
         let result = sqlx::query(
             r#"

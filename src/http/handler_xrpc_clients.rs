@@ -1,15 +1,17 @@
 //! Handles XRPC requests to /xrpc/tools.graze.aip.clients.Update
 
-use atproto_xrpcs::authorization::{Authorization};
+use atproto_xrpcs::authorization::Authorization;
 use axum::{
     extract::{Json, State},
-    http::{StatusCode},
+    http::StatusCode,
     response::Json as ResponseJson,
 };
 use serde_json::{Value, json};
 
 use crate::{
-    errors::ClientRegistrationError, http::context::AppState, oauth::{clients::registration::ClientServiceAuth, types::UpdateClientRequest},
+    errors::ClientRegistrationError,
+    http::context::AppState,
+    oauth::{clients::registration::ClientServiceAuth, types::UpdateClientRequest},
 };
 
 pub(crate) fn match_lxm(authorization: &Authorization, lxm: &str) -> bool {
@@ -139,7 +141,7 @@ pub async fn xrpc_clients_update_handler(
                     })),
                 )),
             }
-        },
+        }
         Err(e) => {
             let (status, error_code, description) = match &e {
                 ClientRegistrationError::InvalidClientMetadata(_) => (

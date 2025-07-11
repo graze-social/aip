@@ -126,20 +126,19 @@ impl Config {
         let enable_client_api = optional_env("ENABLE_CLIENT_API")
             .map(|v| v == "true")
             .unwrap_or(false);
-        let client_default_access_token_expiration: ClientDefaultAccessTokenExpiration = 
+        let client_default_access_token_expiration: ClientDefaultAccessTokenExpiration =
             default_env("CLIENT_DEFAULT_ACCESS_TOKEN_EXPIRATION", "1d").try_into()?;
-        let client_default_refresh_token_expiration: ClientDefaultRefreshTokenExpiration = 
+        let client_default_refresh_token_expiration: ClientDefaultRefreshTokenExpiration =
             default_env("CLIENT_DEFAULT_REFRESH_TOKEN_EXPIRATION", "14d").try_into()?;
         let admin_dids: AdminDids = optional_env("ADMIN_DIDS").try_into()?;
-        let client_default_redirect_exact: ClientDefaultRedirectExact = 
+        let client_default_redirect_exact: ClientDefaultRedirectExact =
             default_env("CLIENT_DEFAULT_REDIRECT_EXACT", "true").try_into()?;
-        let atproto_client_name: AtprotoClientName = 
+        let atproto_client_name: AtprotoClientName =
             default_env("ATPROTO_CLIENT_NAME", "AIP OAuth Server").try_into()?;
-        let atproto_client_logo: AtprotoClientLogo = 
+        let atproto_client_logo: AtprotoClientLogo =
             optional_env("ATPROTO_CLIENT_LOGO").try_into()?;
-        let atproto_client_tos: AtprotoClientTos = 
-            optional_env("ATPROTO_CLIENT_TOS").try_into()?;
-        let atproto_client_policy: AtprotoClientPolicy = 
+        let atproto_client_tos: AtprotoClientTos = optional_env("ATPROTO_CLIENT_TOS").try_into()?;
+        let atproto_client_policy: AtprotoClientPolicy =
             optional_env("ATPROTO_CLIENT_POLICY").try_into()?;
 
         Ok(Self {

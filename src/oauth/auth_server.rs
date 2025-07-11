@@ -438,8 +438,10 @@ impl AuthorizationServer {
             .await
             .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
             .ok_or_else(|| OAuthError::InvalidGrant("Invalid refresh token".to_string()))?;
-    
-        let session_iteration = old_access_token.session_iteration.ok_or_else(|| OAuthError::InvalidGrant("Invalid refresh token".to_string()))?;
+
+        let session_iteration = old_access_token
+            .session_iteration
+            .ok_or_else(|| OAuthError::InvalidGrant("Invalid refresh token".to_string()))?;
 
         // Generate new tokens
         let new_access_token = generate_token();

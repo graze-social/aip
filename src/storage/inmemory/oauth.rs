@@ -386,7 +386,9 @@ impl AtpOAuthSessionStorage for MemoryOAuthStorage {
         let mut session_iterations = self.atp_session_iterations.write().await;
 
         let session_key = Self::session_key(&session.session_id, session.iteration);
-        let index_key = session.did.as_ref()
+        let index_key = session
+            .did
+            .as_ref()
             .map(|did| Self::session_index_key(did, &session.session_id));
 
         // Store the session
