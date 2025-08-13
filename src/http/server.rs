@@ -4,7 +4,7 @@ use axum::{
     Router, middleware,
     routing::{get, post},
 };
-use tower_http::{cors::CorsLayer, services::ServeDir};
+use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 
 use super::{
     context::AppState,
@@ -121,6 +121,7 @@ pub fn build_router(ctx: AppState) -> Router {
         )
         .nest_service("/static", ServeDir::new(&ctx.config.http_static_path))
         .layer(cors)
+        .layer(TraceLayer::new_for_http())
         .with_state(ctx)
 }
 
