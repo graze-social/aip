@@ -159,7 +159,6 @@ impl OAuthRequestRow {
             oauth_state: self.oauth_state,
             issuer: self.issuer,
             authorization_server: self.authorization_server,
-            did: String::new(), // Empty string - field will be ignored
             nonce: self.nonce,
             pkce_verifier: self.pkce_verifier,
             signing_public_key: self.signing_public_key,
