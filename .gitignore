@@ -3,3 +3,4 @@ target/
 .env.dev
 .vscode
 sites/
+*.db
