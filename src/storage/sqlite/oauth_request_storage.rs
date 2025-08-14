@@ -192,7 +192,6 @@ mod tests {
             oauth_state: "test-state-123".to_string(),
             issuer: "https://pds.example.com".to_string(),
             authorization_server: "https://pds.example.com".to_string(),
-            did: String::new(),
             nonce: "test-nonce".to_string(),
             pkce_verifier: "test-verifier".to_string(),
             signing_public_key: "test-public-key".to_string(),
