@@ -25,6 +25,7 @@ impl SqliteOAuthClientStore {
             GrantType::AuthorizationCode => "authorization_code",
             GrantType::ClientCredentials => "client_credentials",
             GrantType::RefreshToken => "refresh_token",
+            GrantType::DeviceCode => "urn:ietf:params:oauth:grant-type:device_code",
         }
     }
 
@@ -34,6 +35,7 @@ impl SqliteOAuthClientStore {
             "authorization_code" => Ok(GrantType::AuthorizationCode),
             "client_credentials" => Ok(GrantType::ClientCredentials),
             "refresh_token" => Ok(GrantType::RefreshToken),
+            "urn:ietf:params:oauth:grant-type:device_code" => Ok(GrantType::DeviceCode),
             _ => Err(StorageError::InvalidData(format!(
                 "Unknown grant type: {}",
                 s
@@ -46,6 +48,7 @@ impl SqliteOAuthClientStore {
         match response_type {
             ResponseType::Code => "code",
             ResponseType::IdToken => "id_token",
+            ResponseType::DeviceCode => "device_code",
         }
     }
 
@@ -54,6 +57,7 @@ impl SqliteOAuthClientStore {
         match s {
             "code" => Ok(ResponseType::Code),
             "id_token" => Ok(ResponseType::IdToken),
+            "device_code" => Ok(ResponseType::DeviceCode),
             _ => Err(StorageError::InvalidData(format!(
                 "Unknown response type: {}",
                 s
@@ -100,6 +104,26 @@ impl SqliteOAuthClientStore {
             "confidential" => Ok(ClientType::Confidential),
             _ => Err(StorageError::InvalidData(format!(
                 "Unknown client type: {}",
+                s
+            ))),
+        }
+    }
+
+    /// Convert ApplicationType enum to string representation
+    fn application_type_to_string(app_type: &ApplicationType) -> &'static str {
+        match app_type {
+            ApplicationType::Web => "web",
+            ApplicationType::Native => "native",
+        }
+    }
+
+    /// Convert string to ApplicationType enum
+    fn string_to_application_type(s: &str) -> Result<ApplicationType> {
+        match s {
+            "web" => Ok(ApplicationType::Web),
+            "native" => Ok(ApplicationType::Native),
+            _ => Err(StorageError::InvalidData(format!(
+                "Unknown application type: {}",
                 s
             ))),
         }
@@ -239,6 +263,22 @@ impl SqliteOAuthClientStore {
                 ))
             })?;
 
+        let application_type_str: Option<String> = row.try_get("application_type").map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get application_type: {}", e))
+        })?;
+        let application_type = match application_type_str {
+            Some(s) => Some(Self::string_to_application_type(&s)?),
+            None => None,
+        };
+
+        let software_id: Option<String> = row.try_get("software_id").map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get software_id: {}", e))
+        })?;
+
+        let software_version: Option<String> = row.try_get("software_version").map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get software_version: {}", e))
+        })?;
+
         Ok(OAuthClient {
             client_id,
             client_secret,
@@ -249,6 +289,9 @@ impl SqliteOAuthClientStore {
             scope,
             token_endpoint_auth_method,
             client_type,
+            application_type,
+            software_id,
+            software_version,
             created_at,
             updated_at,
             metadata,
@@ -270,6 +313,7 @@ impl OAuthClientStore for SqliteOAuthClientStore {
         let response_types_json = Self::serialize_response_types(&client.response_types)?;
         let auth_method_str = Self::auth_method_to_string(&client.token_endpoint_auth_method);
         let client_type_str = Self::client_type_to_string(&client.client_type);
+        let application_type_str = client.application_type.as_ref().map(Self::application_type_to_string);
         let created_at_str = client.created_at.to_rfc3339();
         let updated_at_str = client.updated_at.to_rfc3339();
         let metadata_json = serde_json::to_string(&client.metadata)
@@ -285,8 +329,8 @@ impl OAuthClientStore for SqliteOAuthClientStore {
                 client_id, client_secret, client_name, redirect_uris, grant_types, 
                 response_types, scope, token_endpoint_auth_method, client_type,
                 created_at, updated_at, metadata, access_token_expiration, refresh_token_expiration,
-                require_redirect_exact, registration_access_token
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                require_redirect_exact, registration_access_token, application_type, software_id, software_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&client.client_id)
@@ -309,6 +353,9 @@ impl OAuthClientStore for SqliteOAuthClientStore {
             0i64
         })
         .bind(&client.registration_access_token)
+        .bind(application_type_str)
+        .bind(&client.software_id)
+        .bind(&client.software_version)
         .execute(&self.pool)
         .await
         .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
@@ -340,6 +387,7 @@ impl OAuthClientStore for SqliteOAuthClientStore {
         let response_types_json = Self::serialize_response_types(&client.response_types)?;
         let auth_method_str = Self::auth_method_to_string(&client.token_endpoint_auth_method);
         let client_type_str = Self::client_type_to_string(&client.client_type);
+        let application_type_str = client.application_type.as_ref().map(Self::application_type_to_string);
         let updated_at_str = client.updated_at.to_rfc3339();
         let metadata_json = serde_json::to_string(&client.metadata)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
@@ -354,7 +402,8 @@ impl OAuthClientStore for SqliteOAuthClientStore {
                 client_secret = ?, client_name = ?, redirect_uris = ?, grant_types = ?,
                 response_types = ?, scope = ?, token_endpoint_auth_method = ?, 
                 client_type = ?, updated_at = ?, metadata = ?, access_token_expiration = ?, 
-                refresh_token_expiration = ?, require_redirect_exact = ?, registration_access_token = ?
+                refresh_token_expiration = ?, require_redirect_exact = ?, registration_access_token = ?,
+                application_type = ?, software_id = ?, software_version = ?
             WHERE client_id = ?
             "#,
         )
@@ -372,6 +421,9 @@ impl OAuthClientStore for SqliteOAuthClientStore {
         .bind(refresh_token_expiration_seconds)
         .bind(if client.require_redirect_exact { 1i64 } else { 0i64 })
         .bind(&client.registration_access_token)
+        .bind(application_type_str)
+        .bind(&client.software_id)
+        .bind(&client.software_version)
         .bind(&client.client_id)
         .execute(&self.pool)
         .await

@@ -62,6 +62,10 @@ pub struct AtprotoClientTos(Option<String>);
 #[derive(Clone)]
 pub struct AtprotoClientPolicy(Option<String>);
 
+/// Internal device authorization client configuration
+#[derive(Clone)]
+pub struct InternalDeviceAuthClientId(String);
+
 /// Main application configuration
 #[derive(Clone)]
 pub struct Config {
@@ -91,6 +95,7 @@ pub struct Config {
     pub atproto_client_logo: AtprotoClientLogo,
     pub atproto_client_tos: AtprotoClientTos,
     pub atproto_client_policy: AtprotoClientPolicy,
+    pub internal_device_auth_client_id: InternalDeviceAuthClientId,
 }
 
 impl Config {
@@ -140,6 +145,8 @@ impl Config {
         let atproto_client_tos: AtprotoClientTos = optional_env("ATPROTO_CLIENT_TOS").try_into()?;
         let atproto_client_policy: AtprotoClientPolicy =
             optional_env("ATPROTO_CLIENT_POLICY").try_into()?;
+        let internal_device_auth_client_id: InternalDeviceAuthClientId =
+            default_env("INTERNAL_DEVICE_AUTH_CLIENT_ID", "aip-internal-device-auth").try_into()?;
 
         Ok(Self {
             version: version()?,
@@ -168,6 +175,7 @@ impl Config {
             atproto_client_logo,
             atproto_client_tos,
             atproto_client_policy,
+            internal_device_auth_client_id,
         })
     }
 }
@@ -534,6 +542,20 @@ impl TryFrom<Option<String>> for AtprotoClientPolicy {
 
 impl AsRef<Option<String>> for AtprotoClientPolicy {
     fn as_ref(&self) -> &Option<String> {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for InternalDeviceAuthClientId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Ok(Self(value))
+    }
+}
+
+impl AsRef<String> for InternalDeviceAuthClientId {
+    fn as_ref(&self) -> &String {
         &self.0
     }
 }

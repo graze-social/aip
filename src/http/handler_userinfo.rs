@@ -56,60 +56,84 @@ pub async fn get_userinfo_handler(
     // Create initial UserInfo claims
     let initial_claims = OpenIDClaims::new_userinfo(user_id.clone());
 
-    let session_id = match access_token.session_id {
-        Some(value) => value,
-        _ => {
-            tracing::warn!("no session_id associated with access token");
-            let error_response = json!({
-                "error": "internal_error",
-                "error_description": "Internal error generating response"
-            });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
-        }
-    };
+    // Handle both interactive OAuth flow (with session) and device code flow (without session)
+    let claims = match access_token.session_id {
+        Some(session_id) => {
+            // Interactive OAuth flow - get ATProtocol session and build full claims
+            let session = match get_atprotocol_session_with_refresh(&state, &document, &session_id).await {
+                Ok(value) => value,
+                Err(_) => {
+                    let error_response = json!({
+                        "error": "internal_error",
+                        "error_description": "Internal error generating response"
+                    });
+                    return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
+                }
+            };
 
-    let session = match get_atprotocol_session_with_refresh(&state, &document, &session_id).await {
-        Ok(value) => value,
-        Err(_) => {
-            let error_response = json!({
-                "error": "internal_error",
-                "error_description": "Internal error generating response"
-            });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
-        }
-    };
-
-    // Use the helper function to build claims with document information
-    let mut claims = build_openid_claims_with_document_info(
-        &state.http_client,
-        initial_claims,
-        &document,
-        &scopes,
-        Some(&session),
-    )
-    .await
-    .map_err(|e| {
-        let error_msg = e.to_string();
-        let (status, error_type, error_desc) = if error_msg.contains("DID document not found") {
-            (StatusCode::NOT_FOUND, "not_found", "DID document not found")
-        } else {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "server_error",
-                error_msg.as_str(),
+            // Use the helper function to build claims with document information
+            build_openid_claims_with_document_info(
+                &state.http_client,
+                initial_claims,
+                &document,
+                &scopes,
+                Some(&session),
             )
-        };
+            .await
+            .map_err(|e| {
+                let error_msg = e.to_string();
+                let (status, error_type, error_desc) = if error_msg.contains("DID document not found") {
+                    (StatusCode::NOT_FOUND, "not_found", "DID document not found")
+                } else {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "server_error",
+                        error_msg.as_str(),
+                    )
+                };
 
-        let error_response = json!({
-            "error": error_type,
-            "error_description": error_desc
-        });
-        (status, Json(error_response))
-    })?;
+                let error_response = json!({
+                    "error": error_type,
+                    "error_description": error_desc
+                });
+                (status, Json(error_response))
+            })?
+        }
+        None => {
+            // Device code flow - build basic claims without session
+            tracing::debug!("building userinfo claims for device code flow (no session)");
+            build_openid_claims_with_document_info(
+                &state.http_client,
+                initial_claims,
+                &document,
+                &scopes,
+                None, // No session for device code flow
+            )
+            .await
+            .map_err(|e| {
+                let error_msg = e.to_string();
+                let (status, error_type, error_desc) = if error_msg.contains("DID document not found") {
+                    (StatusCode::NOT_FOUND, "not_found", "DID document not found")
+                } else {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "server_error",
+                        error_msg.as_str(),
+                    )
+                };
 
-    claims = claims.with_nonce(access_token.nonce);
+                let error_response = json!({
+                    "error": error_type,
+                    "error_description": error_desc
+                });
+                (status, Json(error_response))
+            })?
+        }
+    };
 
-    Ok(Json(claims))
+    let final_claims = claims.with_nonce(access_token.nonce);
+
+    Ok(Json(final_claims))
 }
 
 #[cfg(test)]

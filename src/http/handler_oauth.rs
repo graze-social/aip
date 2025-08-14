@@ -56,6 +56,54 @@ pub async fn handle_oauth_token(
         .await
     {
         Ok(mut value) => {
+            // For device code grants, link the access token to an existing ATProtocol session
+            if matches!(request.grant_type, crate::oauth::types::GrantType::DeviceCode) {
+                match state.oauth_storage.get_token(&value.access_token).await {
+                    Ok(Some(mut access_token)) => {
+                        if let Some(ref user_did) = access_token.user_id {
+                            match state.atp_session_storage.get_sessions_by_did(user_did).await {
+                                Ok(sessions) => {
+                                    if let Some(latest_session) = sessions.into_iter()
+                                        .max_by_key(|s| s.session_created_at) {
+                                        // Update the access token with the session_id
+                                        access_token.session_id = Some(latest_session.session_id.clone());
+                                        access_token.session_iteration = Some(latest_session.iteration);
+
+                                        // Store the updated access token
+                                        if let Err(e) = state.oauth_storage.store_token(&access_token).await {
+                                            tracing::error!(
+                                                error = %e,
+                                                "Failed to store updated access token"
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        error = %e,
+                                        user_did = %user_did,
+                                        "Failed to get sessions for user"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::error!(
+                            access_token = %value.access_token,
+                            "Access token not found in storage"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            access_token = %value.access_token,
+                            "Failed to retrieve access token"
+                        );
+                    }
+                }
+            }
+
             if value.scope.clone().is_some_and(|v| v.contains("openid")) {
                 let access_token = state
                     .oauth_storage
