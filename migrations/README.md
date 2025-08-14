@@ -24,6 +24,10 @@ Example:
 
 ### SQLite
 ```bash
+# Create the database if it doesn't exist
+sqlx database create --database-url sqlite://path/to/database.db
+
+# Run migrations
 sqlx migrate run --database-url sqlite://path/to/database.db --source migrations/sqlite
 ```
 
