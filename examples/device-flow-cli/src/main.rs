@@ -83,7 +83,10 @@ async fn main() -> Result<()> {
 
     let aip_base_url = matches.get_one::<String>("aip-url").unwrap();
     let client_id = matches.get_one::<String>("client-id").unwrap();
-    let scope = matches.get_one::<String>("scope").map(|s| s.to_string()).or_else(|| Some("atproto:atproto".to_string()));
+    let scope = matches
+        .get_one::<String>("scope")
+        .map(|s| s.to_string())
+        .or_else(|| Some("atproto:atproto".to_string()));
 
     info!("🚀 Starting OAuth 2.0 Device Authorization Grant flow");
     info!("📡 AIP Server: {}", aip_base_url);
@@ -95,9 +98,10 @@ async fn main() -> Result<()> {
     let client = Client::new();
 
     // Step 1: Request device authorization
-    let auth_response = request_device_authorization(&client, aip_base_url, client_id, scope.as_deref())
-        .await
-        .context("Failed to request device authorization")?;
+    let auth_response =
+        request_device_authorization(&client, aip_base_url, client_id, scope.as_deref())
+            .await
+            .context("Failed to request device authorization")?;
 
     println!("\n📱 Device Authorization Required");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -111,7 +115,10 @@ async fn main() -> Result<()> {
 
     println!("⏰ Code expires in {} seconds", auth_response.expires_in);
     println!("\n🎯 Next Steps:");
-    println!("   1. Open {} in your browser", auth_response.verification_uri);
+    println!(
+        "   1. Open {} in your browser",
+        auth_response.verification_uri
+    );
     println!("   2. Enter the user code: {}", auth_response.user_code);
     println!("   3. Complete the authentication process");
     println!("   4. Return here - the CLI will automatically detect completion\n");
@@ -130,9 +137,11 @@ async fn main() -> Result<()> {
 
     println!("\n✅ Authentication Successful!");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("🎫 Access Token: {}...{}",
+    println!(
+        "🎫 Access Token: {}...{}",
         &token_response.access_token[..8],
-        &token_response.access_token[token_response.access_token.len()-8..]);
+        &token_response.access_token[token_response.access_token.len() - 8..]
+    );
 
     if let Some(expires_in) = token_response.expires_in {
         println!("⏰ Expires in: {} seconds", expires_in);
@@ -151,14 +160,22 @@ async fn main() -> Result<()> {
     match test_access_token(&client, aip_base_url, &token_response.access_token).await {
         Ok(session_info) => {
             println!("✅ Token is valid!");
-            println!("👤 User: {}", session_info.get("did").and_then(|v| v.as_str()).unwrap_or("Unknown"));
+            println!(
+                "👤 User: {}",
+                session_info
+                    .get("did")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown")
+            );
         }
         Err(e) => {
             error!("❌ Token test failed: {}", e);
         }
     }
 
-    println!("\n🎉 Device flow complete! You can now use the access token to make authenticated API calls.");
+    println!(
+        "\n🎉 Device flow complete! You can now use the access token to make authenticated API calls."
+    );
 
     Ok(())
 }
@@ -196,7 +213,10 @@ async fn request_device_authorization(
         .await
         .context("Failed to parse device authorization response")?;
 
-    info!("✅ Device authorization received: user_code={}", auth_response.user_code);
+    info!(
+        "✅ Device authorization received: user_code={}",
+        auth_response.user_code
+    );
 
     Ok(auth_response)
 }
@@ -220,7 +240,10 @@ async fn poll_for_token(
         client_id: client_id.to_string(),
     };
 
-    info!("🔄 Starting token polling (interval: {}s, timeout: {}s)", interval, expires_in);
+    info!(
+        "🔄 Starting token polling (interval: {}s, timeout: {}s)",
+        interval, expires_in
+    );
 
     let mut poll_count = 0;
     loop {
@@ -256,7 +279,10 @@ async fn poll_for_token(
 
         match error_response.error.as_str() {
             "authorization_pending" => {
-                info!("⏳ Authorization still pending, waiting {} seconds...", interval);
+                info!(
+                    "⏳ Authorization still pending, waiting {} seconds...",
+                    interval
+                );
             }
             "slow_down" => {
                 info!("🐌 Slow down requested, increasing poll interval");
@@ -272,16 +298,23 @@ async fn poll_for_token(
             "server_error" => {
                 // Check if it's actually an authorization pending error from AIP
                 let description = error_response.error_description.as_deref().unwrap_or("");
-                if description.contains("Authorization pending") || description.contains("Device code not yet authorized") {
-                    info!("⏳ Authorization still pending, waiting {} seconds...", interval);
+                if description.contains("Authorization pending")
+                    || description.contains("Device code not yet authorized")
+                {
+                    info!(
+                        "⏳ Authorization still pending, waiting {} seconds...",
+                        interval
+                    );
                 } else {
                     anyhow::bail!("Server error: {}", description);
                 }
             }
             _ => {
-                anyhow::bail!("Token request failed: {} - {}",
+                anyhow::bail!(
+                    "Token request failed: {} - {}",
                     error_response.error,
-                    error_response.error_description.unwrap_or_default());
+                    error_response.error_description.unwrap_or_default()
+                );
             }
         }
 
