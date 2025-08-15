@@ -1,5 +1,7 @@
 target/
+.env*
 .env.test
 .env.dev
 .vscode
 sites/
+*.db*

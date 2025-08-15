@@ -105,7 +105,7 @@ impl AccessTokenStore for SqliteAccessTokenStore {
 
         sqlx::query(
             r#"
-            INSERT INTO access_tokens (
+            INSERT OR REPLACE INTO access_tokens (
                 token, token_type, client_id, user_id, session_id, session_iteration,
                 scope, nonce, created_at, expires_at, dpop_jkt
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

@@ -251,6 +251,9 @@ async fn main() -> Result<()> {
         *config.client_default_redirect_exact.as_ref(),
     ));
 
+    // Ensure internal device authorization client exists
+    ensure_internal_device_auth_client(&oauth_storage, &config).await?;
+
     // Create application context
     let app_context = AppState {
         http_client: http_client.clone(),
@@ -337,5 +340,61 @@ async fn main() -> Result<()> {
 
     tracker.wait().await;
 
+    Ok(())
+}
+
+/// Ensure the internal device authorization client exists
+async fn ensure_internal_device_auth_client(
+    oauth_storage: &Arc<dyn aip::storage::traits::OAuthStorage>,
+    config: &Config,
+) -> Result<()> {
+    use aip::oauth::types::{OAuthClient, ApplicationType, GrantType, ResponseType, ClientAuthMethod, ClientType};
+    
+    let client_id = config.internal_device_auth_client_id.as_ref();
+    
+    // Check if client already exists
+    match oauth_storage.get_client(client_id).await {
+        Ok(Some(_)) => {
+            tracing::debug!("Internal device auth client already exists: {}", client_id);
+            return Ok(());
+        }
+        Ok(None) => {
+            tracing::info!("Creating internal device auth client: {}", client_id);
+        }
+        Err(e) => {
+            tracing::warn!("Error checking for internal device auth client: {}", e);
+            // Continue to try creating the client
+        }
+    }
+    
+    // Create the internal client
+    let redirect_uri = format!("{}/device/callback", config.external_base);
+    let now = chrono::Utc::now();
+    let client = OAuthClient {
+        client_id: client_id.clone(),
+        client_secret: None, // Public client
+        client_name: Some("AIP Internal Device Authorization Client".to_string()),
+        redirect_uris: vec![redirect_uri],
+        grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
+        response_types: vec![ResponseType::Code],
+        scope: None,
+        token_endpoint_auth_method: ClientAuthMethod::None,
+        client_type: ClientType::Public,
+        application_type: Some(ApplicationType::Web),
+        software_id: Some("aip-internal-device-auth".to_string()),
+        software_version: Some(config.version.clone()),
+        created_at: now,
+        updated_at: now,
+        metadata: serde_json::json!({}),
+        access_token_expiration: *config.client_default_access_token_expiration.as_ref(),
+        refresh_token_expiration: *config.client_default_refresh_token_expiration.as_ref(),
+        require_redirect_exact: *config.client_default_redirect_exact.as_ref(),
+        registration_access_token: None,
+    };
+    
+    oauth_storage.store_client(&client).await
+        .map_err(|e| anyhow::anyhow!("Failed to create internal device auth client: {}", e))?;
+    
+    tracing::info!("Internal device auth client created successfully: {}", client_id);
     Ok(())
 }
