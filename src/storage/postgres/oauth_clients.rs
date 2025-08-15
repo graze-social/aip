@@ -299,6 +299,7 @@ impl PostgresOAuthClientStore {
             refresh_token_expiration,
             require_redirect_exact,
             registration_access_token,
+            jwks: row.try_get("jwks").ok(),
         })
     }
 }
@@ -329,8 +330,8 @@ impl OAuthClientStore for PostgresOAuthClientStore {
                 client_id, client_secret, client_name, redirect_uris, grant_types, 
                 response_types, scope, token_endpoint_auth_method, client_type,
                 created_at, updated_at, metadata, access_token_expiration, refresh_token_expiration,
-                require_redirect_exact, registration_access_token
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                require_redirect_exact, registration_access_token, jwks
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             "#,
         )
         .bind(&client.client_id)
@@ -349,6 +350,7 @@ impl OAuthClientStore for PostgresOAuthClientStore {
         .bind(refresh_token_expiration_seconds)
         .bind(client.require_redirect_exact)
         .bind(&client.registration_access_token)
+        .bind(&client.jwks)
         .execute(&self.pool)
         .await
         .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
@@ -396,7 +398,7 @@ impl OAuthClientStore for PostgresOAuthClientStore {
                 client_secret = $2, client_name = $3, redirect_uris = $4, grant_types = $5,
                 response_types = $6, scope = $7, token_endpoint_auth_method = $8, 
                 client_type = $9, updated_at = $10, metadata = $11, access_token_expiration = $12, 
-                refresh_token_expiration = $13, require_redirect_exact = $14, registration_access_token = $15
+                refresh_token_expiration = $13, require_redirect_exact = $14, registration_access_token = $15, jwks = $16
             WHERE client_id = $1
             "#,
         )
@@ -415,6 +417,7 @@ impl OAuthClientStore for PostgresOAuthClientStore {
         .bind(refresh_token_expiration_seconds)
         .bind(client.require_redirect_exact)
         .bind(&client.registration_access_token)
+        .bind(&client.jwks)
         .execute(&self.pool)
         .await
         .map_err(|e| StorageError::DatabaseError(e.to_string()))?;

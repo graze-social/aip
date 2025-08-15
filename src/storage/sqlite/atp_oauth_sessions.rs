@@ -156,7 +156,7 @@ impl AtpOAuthSessionStorage for SqliteAtpOAuthSessionStorage {
 
         sqlx::query(
             r#"
-            INSERT INTO atp_oauth_sessions (
+            INSERT OR REPLACE INTO atp_oauth_sessions (
                 session_id, did, iteration, session_created_at, atp_oauth_state,
                 signing_key_jkt, dpop_key, access_token, refresh_token,
                 access_token_created_at, access_token_expires_at, access_token_scopes,
