@@ -80,6 +80,8 @@ pub struct OAuthClient {
     pub require_redirect_exact: bool,
     /// Registration access token for client management operations
     pub registration_access_token: Option<String>,
+    /// Public keys for private_key_jwt authentication (JWK Set)
+    pub jwks: Option<serde_json::Value>,
 }
 
 /// Client Type
@@ -215,10 +217,14 @@ pub struct TokenRequest {
     pub client_secret: Option<String>,
     /// Requested scope
     pub scope: Option<String>,
+    /// JWT client assertion for private_key_jwt authentication (RFC 7523)
+    pub client_assertion: Option<String>,
+    /// Client assertion type for private_key_jwt authentication
+    pub client_assertion_type: Option<String>,
 }
 
 /// Token Response
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct TokenResponse {
     /// Access token
     pub access_token: String,
@@ -289,6 +295,10 @@ pub struct ClientRegistrationRequest {
     pub scope: Option<String>,
     /// Token endpoint authentication method
     pub token_endpoint_auth_method: Option<ClientAuthMethod>,
+    /// Public keys for private_key_jwt authentication (JWK Set)
+    pub jwks: Option<serde_json::Value>,
+    /// URL pointing to client's JWK Set
+    pub jwks_uri: Option<String>,
     /// Additional metadata
     #[serde(flatten)]
     pub metadata: serde_json::Value,

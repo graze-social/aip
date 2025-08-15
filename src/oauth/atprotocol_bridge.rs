@@ -1104,6 +1104,7 @@ mod tests {
             refresh_token_expiration: chrono::Duration::days(14),
             require_redirect_exact: true,
             registration_access_token: Some("test-registration-token".to_string()),
+            jwks: None,
         };
 
         server
@@ -1543,6 +1544,7 @@ mod tests {
                 refresh_token_expiration: chrono::Duration::days(14),
                 require_redirect_exact: true,
                 registration_access_token: Some("test-registration-token".to_string()),
+                jwks: None,
             };
 
             server
