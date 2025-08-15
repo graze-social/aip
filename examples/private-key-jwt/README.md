@@ -1,10 +1,14 @@
 # Private Key JWT OAuth Client Example
 
-This example demonstrates how to use private_key_jwt client authentication with the AIP OAuth server, as defined in [RFC 7523](https://tools.ietf.org/html/rfc7523).
+This example demonstrates how to use private_key_jwt client authentication with
+the AIP OAuth server, as defined in
+[RFC 7523](https://tools.ietf.org/html/rfc7523).
 
 ## Overview
 
-Private Key JWT authentication allows OAuth clients to authenticate using a cryptographically signed JWT instead of a client secret. This provides enhanced security and is particularly useful for:
+Private Key JWT authentication allows OAuth clients to authenticate using a
+cryptographically signed JWT instead of a client secret. This provides enhanced
+security and is particularly useful for:
 
 - Public clients that cannot securely store secrets
 - Server-to-server applications requiring strong authentication
@@ -14,7 +18,7 @@ Private Key JWT authentication allows OAuth clients to authenticate using a cryp
 
 - OpenSSL (for key generation and JWT signing)
 - jq (for JSON processing)
-- AIP server running on `http://localhost:8081` (or set `AIP_BASE_URL`)
+- AIP server running on `http://localhost:8080` (or set `AIP_BASE_URL`)
 
 ### Install Dependencies
 
@@ -53,6 +57,7 @@ cd examples/private-key-jwt
 ```
 
 This script will:
+
 - Generate an ES256 key pair (P-256 curve)
 - Create a JWK Set with the public key
 - Register the client with the AIP server
@@ -65,6 +70,7 @@ This script will:
 ```
 
 This script demonstrates:
+
 - JWT client assertion creation and signing
 - Pushed Authorization Request (PAR) with private_key_jwt auth
 - Authorization URL generation
@@ -87,7 +93,8 @@ private_key_jwt_client/
 
 ### 1. Client Registration
 
-The client registers with `token_endpoint_auth_method: "private_key_jwt"` and provides a JWK Set containing its public key:
+The client registers with `token_endpoint_auth_method: "private_key_jwt"` and
+provides a JWK Set containing its public key:
 
 ```json
 {
@@ -115,9 +122,11 @@ The client registers with `token_endpoint_auth_method: "private_key_jwt"` and pr
 
 ### 2. JWT Client Assertion
 
-For each OAuth request (PAR, token exchange), the client creates a signed JWT with:
+For each OAuth request (PAR, token exchange), the client creates a signed JWT
+with:
 
 **Header:**
+
 ```json
 {
   "typ": "JWT",
@@ -127,14 +136,15 @@ For each OAuth request (PAR, token exchange), the client creates a signed JWT wi
 ```
 
 **Claims:**
+
 ```json
 {
-  "iss": "client_id",           // Client ID as issuer
-  "sub": "client_id",           // Client ID as subject  
+  "iss": "client_id", // Client ID as issuer
+  "sub": "client_id", // Client ID as subject
   "aud": "https://server/oauth/token", // Token endpoint as audience
-  "iat": 1234567890,            // Issued at time
-  "exp": 1234568190,            // Expiration (max 5 minutes)
-  "jti": "unique-jwt-id"        // Unique JWT ID (prevents replay)
+  "iat": 1234567890, // Issued at time
+  "exp": 1234568190, // Expiration (max 5 minutes)
+  "jti": "unique-jwt-id" // Unique JWT ID (prevents replay)
 }
 ```
 
@@ -152,7 +162,7 @@ client_assertion=eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtleS0xIn0...
 ### PAR Request with Private Key JWT
 
 ```bash
-curl -X POST "http://localhost:8081/oauth/par" \
+curl -X POST "http://localhost:8080/oauth/par" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "response_type=code" \
   -d "client_id=your_client_id" \
@@ -166,7 +176,7 @@ curl -X POST "http://localhost:8081/oauth/par" \
 ### Token Exchange with Private Key JWT
 
 ```bash
-curl -X POST "http://localhost:8081/oauth/token" \
+curl -X POST "http://localhost:8080/oauth/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code" \
   -d "code=authorization_code_here" \
@@ -180,7 +190,8 @@ curl -X POST "http://localhost:8081/oauth/token" \
 
 1. **Private Key Security**: Keep `private_key.pem` secure and never expose it
 2. **JWT Expiration**: JWTs should have short expiration times (≤ 5 minutes)
-3. **JTI Uniqueness**: Each JWT should have a unique `jti` to prevent replay attacks
+3. **JTI Uniqueness**: Each JWT should have a unique `jti` to prevent replay
+   attacks
 4. **Key Rotation**: Regularly rotate your key pairs and update the JWK Set
 5. **Audience Validation**: Always include the correct audience in your JWTs
 
@@ -189,7 +200,8 @@ curl -X POST "http://localhost:8081/oauth/token" \
 ### Common Issues
 
 1. **Invalid JWT Format**: Ensure proper base64url encoding without padding
-2. **Signature Verification Failed**: Check that your JWK Set matches your private key
+2. **Signature Verification Failed**: Check that your JWK Set matches your
+   private key
 3. **Expired JWT**: JWTs are only valid for a short time (5 minutes max)
 4. **Wrong Audience**: JWT audience must match the token endpoint URL
 
@@ -214,10 +226,13 @@ This example works with the other OAuth examples:
 
 This implementation follows:
 
-- [RFC 7523](https://tools.ietf.org/html/rfc7523): JSON Web Token (JWT) Profile for OAuth 2.0 Client Authentication and Authorization Grants
+- [RFC 7523](https://tools.ietf.org/html/rfc7523): JSON Web Token (JWT) Profile
+  for OAuth 2.0 Client Authentication and Authorization Grants
 - [RFC 7517](https://tools.ietf.html/rfc7517): JSON Web Key (JWK)
-- [RFC 9126](https://tools.ietf.org/html/rfc9126): OAuth 2.0 Pushed Authorization Requests (PAR)
-- [RFC 6749](https://tools.ietf.org/html/rfc6749): The OAuth 2.0 Authorization Framework
+- [RFC 9126](https://tools.ietf.org/html/rfc9126): OAuth 2.0 Pushed
+  Authorization Requests (PAR)
+- [RFC 6749](https://tools.ietf.org/html/rfc6749): The OAuth 2.0 Authorization
+  Framework
 
 ## Next Steps
 
