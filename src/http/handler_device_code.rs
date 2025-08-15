@@ -127,15 +127,11 @@ fn generate_user_code() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     
-    // Generate 8-character alphanumeric code in format XXXX-XXXX
+    // Generate 8-character alphanumeric code
     let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Excluding confusing chars
     let code: String = (0..8)
-        .map(|i| {
-            if i == 4 {
-                '-'
-            } else {
-                chars.chars().nth(rng.gen_range(0..chars.len())).unwrap()
-            }
+        .map(|_| {
+            chars.chars().nth(rng.gen_range(0..chars.len())).unwrap()
         })
         .collect();
     
@@ -149,11 +145,10 @@ mod tests {
     #[test]
     fn test_generate_user_code() {
         let code = generate_user_code();
-        assert_eq!(code.len(), 9); // XXXX-XXXX
-        assert_eq!(code.chars().nth(4).unwrap(), '-');
+        assert_eq!(code.len(), 8);
         
         // Should only contain valid characters
-        let valid_chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789-";
+        let valid_chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         for c in code.chars() {
             assert!(valid_chars.contains(c));
         }

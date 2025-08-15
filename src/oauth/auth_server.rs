@@ -883,7 +883,7 @@ pub fn extract_client_auth(headers: &HeaderMap, form: &TokenForm) -> Option<Clie
 mod tests {
     use super::*;
     use crate::storage::inmemory::MemoryOAuthStorage;
-    use crate::storage::traits::{OAuthClientStore, AccessTokenStore, DeviceCodeStore, AtpOAuthSessionStorage};
+    use crate::storage::traits::{OAuthClientStore, AccessTokenStore, DeviceCodeStore};
 
     #[tokio::test]
     async fn test_authorization_code_flow() {
