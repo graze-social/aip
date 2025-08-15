@@ -58,17 +58,11 @@ cargo build
 # Build the project in release mode
 cargo build --release
 
-# Run the project (default: PostgreSQL + Redis)
+# Run the project
 cargo run
 
 # Run in release mode
 cargo run --release
-
-# Run with development features (SQLite + Redis, no PostgreSQL)
-cargo run --bin aip --no-default-features --features dev
-
-# Run with SQLite only (useful when DATABASE_URL points to SQLite)
-cargo run --bin aip --no-default-features --features sqlite,reload
 ```
 
 ### Testing and Quality Assurance
@@ -180,55 +174,15 @@ AIP provides three storage backend implementations:
 ### Building with Storage Features
 
 ```bash
-# Build with development features (SQLite + Redis, recommended for local development)
-cargo build --no-default-features --features dev
+# Build with SQLite support
+cargo build --features sqlite
 
-# Build with SQLite support only
-cargo build --no-default-features --features sqlite
-
-# Build with PostgreSQL support (default)
-cargo build
+# Build with PostgreSQL support
+cargo build --features postgres
 
 # Build with both SQLite and PostgreSQL support
 cargo build --features sqlite,postgres
 ```
-
-### Development Workflow
-
-When developing locally with SQLite:
-
-1. **Set up your `.env` file** with SQLite configuration:
-   ```bash
-   STORAGE_BACKEND=sqlite
-   DATABASE_URL=sqlite://aip.db
-   ```
-
-2. **Run migrations** for SQLite:
-   ```bash
-   sqlx migrate run --source migrations/sqlite
-   ```
-
-3. **Use the dev features** to avoid PostgreSQL compilation issues:
-   ```bash
-   # Recommended for SQLite development
-   cargo run --bin aip --no-default-features --features dev
-   
-   # Alternative for SQLite-only development
-   cargo run --bin aip --no-default-features --features sqlite,reload
-   ```
-
-4. **For production builds** use the default features (PostgreSQL):
-   ```bash
-   cargo build --release
-   ```
-
-### SQLx Query Validation
-
-If you encounter SQLx compilation errors when using `--features sqlite` with default features:
-
-- This happens because PostgreSQL modules are compiled but SQLx validates against the SQLite database in `DATABASE_URL`
-- Solution: Use `--no-default-features --features dev` for SQLite development
-- Alternative: Use `SQLX_OFFLINE=true` with prepared query cache
 
 ### Running Migrations
 

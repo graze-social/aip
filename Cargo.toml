@@ -71,7 +71,6 @@ minijinja-embed = {version = "2.7", optional = true}
 
 [features]
 default = ["reload", "redis", "postgres"]
-dev = ["reload", "redis", "sqlite"]
 embed = ["dep:minijinja-embed", "dep:rust-embed"]
 reload = ["dep:minijinja-autoreload", "minijinja/loader", "axum-template/minijinja-autoreload"]
 sqlite = ["dep:sqlx", "sqlx/sqlite"]
