@@ -6,7 +6,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use atproto_oauth::{storage::OAuthRequestStorage, workflow::OAuthRequest};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use sqlx::Row;
 use sqlx::sqlite::{SqlitePool, SqliteRow};
 

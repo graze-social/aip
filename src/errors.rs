@@ -108,6 +108,10 @@ pub enum OAuthError {
     /// Temporarily unavailable
     #[error("error-aip-oauth-13 Temporarily unavailable: {0}")]
     TemporarilyUnavailable(String),
+
+    /// Authorization pending (RFC 8628 device flow)
+    #[error("error-aip-oauth-14 Authorization pending: {0}")]
+    AuthorizationPending(String),
 }
 
 /// Identity resolution errors

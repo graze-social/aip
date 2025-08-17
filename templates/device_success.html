@@ -1,0 +1,35 @@
+{% extends "base.html" %} {% block title %}Device Authorized{% endblock %} {%
+block content %}
+<header>
+  <h1>✅ Device Authorized Successfully</h1>
+  <p>Your device has been authorized and can now access your account</p>
+</header>
+<main>
+  <section>
+    <article>
+      <h3>Authorization Complete</h3>
+      <p>Code: <code>{{ user_code }}</code></p>
+
+      <p>
+        <strong>Success!</strong> You can now return to your device and
+        continue.
+      </p>
+
+      <hr>
+
+      <details>
+        <summary>What happens next?</summary>
+        <p>
+          Your device should automatically detect the authorization and
+          continue. If it doesn't, please check your device.
+        </p>
+        <p>You can safely close this page.</p>
+      </details>
+
+      <p>
+        <a href="/" role="button">Return to Home</a>
+      </p>
+    </article>
+  </section>
+</main>
+{% endblock %}
