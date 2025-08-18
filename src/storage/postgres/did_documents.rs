@@ -91,6 +91,7 @@ mod tests {
         let storage = PostgresDidDocumentStorage::new(pool);
 
         let document = Document {
+            context: vec![],
             id: "did:plc:test123".to_string(),
             also_known_as: vec!["at://test.bsky.social".to_string()],
             service: vec![Service {
@@ -138,6 +139,7 @@ mod tests {
         let storage = PostgresDidDocumentStorage::new(pool);
 
         let mut document = Document {
+            context: vec![],
             id: "did:plc:test456".to_string(),
             also_known_as: vec!["at://original.bsky.social".to_string()],
             service: vec![],

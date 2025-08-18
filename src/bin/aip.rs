@@ -20,7 +20,7 @@ use aip::{
 };
 use anyhow::Result;
 use atproto_identity::{
-    resolve::{IdentityResolver, InnerIdentityResolver, create_resolver},
+    resolve::{HickoryDnsResolver, InnerIdentityResolver, SharedIdentityResolver},
     storage::DidDocumentStorage,
     storage_lru::LruDidDocumentStorage,
 };
@@ -122,10 +122,12 @@ async fn main() -> Result<()> {
     };
 
     // Initialize the DNS resolver
-    let dns_resolver = create_resolver(config.dns_nameservers.as_ref());
+    let dns_resolver = Arc::new(HickoryDnsResolver::create_resolver(
+        config.dns_nameservers.as_ref(),
+    ));
 
     // Initialize the identity resolver
-    let identity_resolver = IdentityResolver(Arc::new(InnerIdentityResolver {
+    let identity_resolver = SharedIdentityResolver(Arc::new(InnerIdentityResolver {
         dns_resolver,
         http_client: http_client.clone(),
         plc_hostname: config.plc_hostname.clone(),

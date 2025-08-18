@@ -343,7 +343,7 @@ mod tests {
     use crate::storage::SimpleKeyProvider;
     use crate::storage::inmemory::MemoryOAuthStorage;
     use crate::storage::traits::AppPassword;
-    use atproto_identity::{resolve::create_resolver, storage_lru::LruDidDocumentStorage};
+    use atproto_identity::{resolve::HickoryDnsResolver, storage_lru::LruDidDocumentStorage};
     use atproto_oauth::storage_lru::LruOAuthRequestStorage;
     use std::{num::NonZeroUsize, sync::Arc};
 
@@ -352,8 +352,8 @@ mod tests {
 
         let http_client = reqwest::Client::new();
         let dns_nameservers = vec![];
-        let dns_resolver = create_resolver(&dns_nameservers);
-        let identity_resolver = atproto_identity::resolve::IdentityResolver(Arc::new(
+        let dns_resolver = Arc::new(HickoryDnsResolver::create_resolver(&dns_nameservers));
+        let identity_resolver = atproto_identity::resolve::SharedIdentityResolver(Arc::new(
             atproto_identity::resolve::InnerIdentityResolver {
                 http_client: http_client.clone(),
                 dns_resolver,

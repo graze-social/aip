@@ -89,7 +89,7 @@ pub struct AtpBackedAuthorizationServer {
     /// Base OAuth authorization server
     base_auth_server: Arc<AuthorizationServer>,
     /// ATProtocol identity resolver
-    identity_resolver: atproto_identity::resolve::IdentityResolver,
+    identity_resolver: atproto_identity::resolve::SharedIdentityResolver,
     /// HTTP client for making requests
     http_client: reqwest::Client,
     /// OAuth request storage for ATProtocol flows
@@ -110,7 +110,7 @@ impl AtpBackedAuthorizationServer {
     /// Create a new ATProtocol-backed authorization server
     pub fn new(
         base_auth_server: Arc<AuthorizationServer>,
-        identity_resolver: atproto_identity::resolve::IdentityResolver,
+        identity_resolver: atproto_identity::resolve::SharedIdentityResolver,
         http_client: reqwest::Client,
         oauth_request_storage: Arc<dyn atproto_oauth::storage::OAuthRequestStorage>,
         client_config: atproto_oauth_axum::state::OAuthClientConfig,
@@ -868,7 +868,9 @@ mod tests {
         UnifiedAtpOAuthSessionStorageAdapter, UnifiedAuthorizationRequestStorageAdapter,
     };
     use crate::storage::inmemory::MemoryOAuthStorage;
-    use atproto_identity::resolve::{IdentityResolver, InnerIdentityResolver, create_resolver};
+    use atproto_identity::resolve::{
+        HickoryDnsResolver, InnerIdentityResolver, SharedIdentityResolver,
+    };
     use atproto_identity::storage_lru::LruDidDocumentStorage;
     use atproto_oauth::storage_lru::LruOAuthRequestStorage;
     use std::num::NonZeroUsize;
@@ -887,8 +889,8 @@ mod tests {
         // Create identity resolver
         let http_client = reqwest::Client::new();
         let dns_nameservers = vec![];
-        let dns_resolver = create_resolver(&dns_nameservers);
-        let identity_resolver = IdentityResolver(Arc::new(InnerIdentityResolver {
+        let dns_resolver = Arc::new(HickoryDnsResolver::create_resolver(&dns_nameservers));
+        let identity_resolver = SharedIdentityResolver(Arc::new(InnerIdentityResolver {
             http_client: http_client.clone(),
             dns_resolver,
             plc_hostname: "plc.directory".to_string(),

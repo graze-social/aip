@@ -38,7 +38,7 @@ pub(super) struct PushedAuthorizationRequest {
 
     // ATProtocol-specific parameter (legacy, prefer login_hint)
     pub subject: Option<String>,
-    
+
     /// JWT client assertion for private_key_jwt authentication (RFC 7523)
     pub client_assertion: Option<String>,
     /// Client assertion type for private_key_jwt authentication
@@ -284,11 +284,13 @@ fn extract_client_auth_from_headers(headers: &HeaderMap) -> Option<ClientAuthent
 }
 
 /// Extract client authentication from PAR request form data
-fn extract_client_auth_from_request(request: &PushedAuthorizationRequest) -> Option<ClientAuthentication> {
+fn extract_client_auth_from_request(
+    request: &PushedAuthorizationRequest,
+) -> Option<ClientAuthentication> {
     // Check for JWT client assertion first (private_key_jwt)
-    if let (Some(client_assertion), Some(client_assertion_type)) = 
-        (&request.client_assertion, &request.client_assertion_type) {
-        
+    if let (Some(client_assertion), Some(client_assertion_type)) =
+        (&request.client_assertion, &request.client_assertion_type)
+    {
         // Validate the assertion type
         if client_assertion_type == "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
             return Some(ClientAuthentication {
@@ -299,7 +301,7 @@ fn extract_client_auth_from_request(request: &PushedAuthorizationRequest) -> Opt
             });
         }
     }
-    
+
     // PAR typically uses client credentials from headers, not form data
     // But we'll support client_id from the form
     Some(ClientAuthentication {
@@ -339,20 +341,25 @@ fn authenticate_client(
         ClientAuthMethod::PrivateKeyJwt => {
             // Require JWT client assertion
             if let Some(client_assertion) = client_auth.client_assertion.as_ref() {
-                // Construct token endpoint URL for audience validation  
+                // Construct token endpoint URL for audience validation
                 // Note: PAR uses token endpoint as audience per RFC 9126
                 let token_endpoint = format!("{}/oauth/token", issuer);
-                
+
                 // Validate the JWT client assertion
                 let par_endpoint = format!("{}/oauth/par", issuer);
-                match validate_client_assertion(client_assertion, client, &token_endpoint, Some(&par_endpoint)) {
+                match validate_client_assertion(
+                    client_assertion,
+                    client,
+                    &token_endpoint,
+                    Some(&par_endpoint),
+                ) {
                     Ok(validated_client_id) => {
                         // Ensure the validated client_id matches the expected client
                         if validated_client_id == client.client_id {
                             Ok(())
                         } else {
                             Err(OAuthError::InvalidClient(
-                                "JWT client_id does not match expected client".to_string()
+                                "JWT client_id does not match expected client".to_string(),
                             ))
                         }
                     }
@@ -360,7 +367,7 @@ fn authenticate_client(
                 }
             } else {
                 Err(OAuthError::InvalidClient(
-                    "Missing client_assertion for private_key_jwt authentication".to_string()
+                    "Missing client_assertion for private_key_jwt authentication".to_string(),
                 ))
             }
         }

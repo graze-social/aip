@@ -89,8 +89,9 @@ impl ClientRegistrationService {
 
         // Determine client type
         // Confidential clients are those with client secrets OR using private_key_jwt auth
-        let client_type = if client_secret.is_some() || 
-            request.token_endpoint_auth_method.as_ref() == Some(&ClientAuthMethod::PrivateKeyJwt) {
+        let client_type = if client_secret.is_some()
+            || request.token_endpoint_auth_method.as_ref() == Some(&ClientAuthMethod::PrivateKeyJwt)
+        {
             ClientType::Confidential
         } else {
             ClientType::Public
@@ -632,34 +633,30 @@ fn extract_client_jwks(
             // TODO: Implement JWK Set fetching from URI
             // For now, require inline JWKs
             Err(ClientRegistrationError::InvalidClientMetadata(
-                "jwks_uri not yet supported, please provide jwks inline".to_string()
+                "jwks_uri not yet supported, please provide jwks inline".to_string(),
             ))
         }
-        (Some(_), Some(_)) => {
-            Err(ClientRegistrationError::InvalidClientMetadata(
-                "Cannot specify both jwks and jwks_uri".to_string()
-            ))
-        }
-        (None, None) => {
-            Err(ClientRegistrationError::InvalidClientMetadata(
-                "private_key_jwt requires jwks or jwks_uri".to_string()
-            ))
-        }
+        (Some(_), Some(_)) => Err(ClientRegistrationError::InvalidClientMetadata(
+            "Cannot specify both jwks and jwks_uri".to_string(),
+        )),
+        (None, None) => Err(ClientRegistrationError::InvalidClientMetadata(
+            "private_key_jwt requires jwks or jwks_uri".to_string(),
+        )),
     }
 }
 
 /// Validate JWK Set format and keys
 fn validate_jwk_set(jwks: &serde_json::Value) -> Result<(), ClientRegistrationError> {
     // Check basic JWK Set structure
-    let keys = jwks.get("keys")
-        .and_then(|k| k.as_array())
-        .ok_or_else(|| ClientRegistrationError::InvalidClientMetadata(
-            "Invalid JWK Set: missing 'keys' array".to_string()
-        ))?;
+    let keys = jwks.get("keys").and_then(|k| k.as_array()).ok_or_else(|| {
+        ClientRegistrationError::InvalidClientMetadata(
+            "Invalid JWK Set: missing 'keys' array".to_string(),
+        )
+    })?;
 
     if keys.is_empty() {
         return Err(ClientRegistrationError::InvalidClientMetadata(
-            "JWK Set cannot be empty".to_string()
+            "JWK Set cannot be empty".to_string(),
         ));
     }
 
@@ -676,58 +673,66 @@ fn validate_jwk(jwk: &serde_json::Value, index: usize) -> Result<(), ClientRegis
     let error_prefix = format!("Invalid JWK at index {}", index);
 
     // Check required fields
-    let kty = jwk.get("kty")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| ClientRegistrationError::InvalidClientMetadata(
-            format!("{}: missing 'kty' field", error_prefix)
-        ))?;
+    let kty = jwk.get("kty").and_then(|v| v.as_str()).ok_or_else(|| {
+        ClientRegistrationError::InvalidClientMetadata(format!(
+            "{}: missing 'kty' field",
+            error_prefix
+        ))
+    })?;
 
-    let alg = jwk.get("alg")
-        .and_then(|v| v.as_str());
+    let alg = jwk.get("alg").and_then(|v| v.as_str());
 
     // Validate key type and algorithm
     match kty {
         "EC" => {
-            let crv = jwk.get("crv")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| ClientRegistrationError::InvalidClientMetadata(
-                    format!("{}: EC key missing 'crv' field", error_prefix)
-                ))?;
+            let crv = jwk.get("crv").and_then(|v| v.as_str()).ok_or_else(|| {
+                ClientRegistrationError::InvalidClientMetadata(format!(
+                    "{}: EC key missing 'crv' field",
+                    error_prefix
+                ))
+            })?;
 
             // Validate curve and algorithm compatibility
             match (crv, alg) {
                 ("P-256", Some("ES256")) | ("P-256", None) => {}
                 ("secp256k1", Some("ES256K")) | ("secp256k1", None) => {}
-                _ => return Err(ClientRegistrationError::InvalidClientMetadata(
-                    format!("{}: unsupported curve/algorithm combination", error_prefix)
-                ))
+                _ => {
+                    return Err(ClientRegistrationError::InvalidClientMetadata(format!(
+                        "{}: unsupported curve/algorithm combination",
+                        error_prefix
+                    )));
+                }
             }
 
             // Check required EC key components
             if jwk.get("x").is_none() || jwk.get("y").is_none() {
-                return Err(ClientRegistrationError::InvalidClientMetadata(
-                    format!("{}: EC key missing x/y coordinates", error_prefix)
-                ));
+                return Err(ClientRegistrationError::InvalidClientMetadata(format!(
+                    "{}: EC key missing x/y coordinates",
+                    error_prefix
+                )));
             }
         }
         "RSA" => {
-            return Err(ClientRegistrationError::InvalidClientMetadata(
-                format!("{}: RSA keys not supported for private_key_jwt", error_prefix)
-            ));
+            return Err(ClientRegistrationError::InvalidClientMetadata(format!(
+                "{}: RSA keys not supported for private_key_jwt",
+                error_prefix
+            )));
         }
         _ => {
-            return Err(ClientRegistrationError::InvalidClientMetadata(
-                format!("{}: unsupported key type '{}'", error_prefix, kty)
-            ));
+            return Err(ClientRegistrationError::InvalidClientMetadata(format!(
+                "{}: unsupported key type '{}'",
+                error_prefix, kty
+            )));
         }
     }
 
     // Key usage should be 'sig' for signing
     if let Some(use_val) = jwk.get("use").and_then(|v| v.as_str()) {
         if use_val != "sig" {
-            return Err(ClientRegistrationError::InvalidClientMetadata(
-                format!("{}: key use must be 'sig' for JWT signing", error_prefix)
-            ));
+            return Err(ClientRegistrationError::InvalidClientMetadata(format!(
+                "{}: key use must be 'sig' for JWT signing",
+                error_prefix
+            )));
         }
     }
 

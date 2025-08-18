@@ -4,7 +4,11 @@ use axum::{
     Router, middleware,
     routing::{get, post},
 };
+use std::time::Duration;
+use tower_http::classify::ServerErrorsFailureClass;
+use tower_http::trace::DefaultMakeSpan;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
+use tracing::Span;
 
 use super::{
     context::AppState,
@@ -120,6 +124,19 @@ pub fn build_router(ctx: AppState) -> Router {
             post(xrpc_clients_update_handler),
         )
         .nest_service("/static", ServeDir::new(&ctx.config.http_static_path))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(
+                    DefaultMakeSpan::new()
+                        .level(tracing::Level::INFO)
+                        .include_headers(true),
+                )
+                .on_failure(
+                    |err: ServerErrorsFailureClass, _latency: Duration, _span: &Span| {
+                        tracing::error!(error = ?err, "Unhandled error: {err}");
+                    },
+                ),
+        )
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(ctx)
@@ -131,7 +148,7 @@ mod tests {
     use crate::oauth::DPoPNonceGenerator;
     use crate::storage::SimpleKeyProvider;
     use crate::storage::inmemory::MemoryOAuthStorage;
-    use atproto_identity::{resolve::create_resolver, storage_lru::LruDidDocumentStorage};
+    use atproto_identity::{resolve::HickoryDnsResolver, storage_lru::LruDidDocumentStorage};
     use atproto_oauth::storage_lru::LruOAuthRequestStorage;
     use std::{num::NonZeroUsize, sync::Arc};
 
@@ -146,8 +163,8 @@ mod tests {
 
         let http_client = reqwest::Client::new();
         let dns_nameservers = vec![];
-        let dns_resolver = create_resolver(&dns_nameservers);
-        let identity_resolver = atproto_identity::resolve::IdentityResolver(Arc::new(
+        let dns_resolver = Arc::new(HickoryDnsResolver::create_resolver(&dns_nameservers));
+        let identity_resolver = atproto_identity::resolve::SharedIdentityResolver(Arc::new(
             atproto_identity::resolve::InnerIdentityResolver {
                 http_client: http_client.clone(),
                 dns_resolver,

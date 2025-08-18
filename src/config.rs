@@ -1,7 +1,7 @@
 //! Environment-based configuration types for AIP server runtime settings.
 
 use anyhow::Result;
-use atproto_identity::key::{KeyData, KeyType, generate_key, identify_key};
+use atproto_identity::key::{KeyData, identify_key};
 use std::time::Duration;
 
 use crate::errors::ConfigError;
@@ -329,13 +329,15 @@ impl TryFrom<Option<String>> for PrivateKeys {
         match value {
             None => {
                 // Generate a new P-256 private key if no keys are provided
-                let key = generate_key(KeyType::P256Private)?;
-                Ok(Self(vec![key]))
+                // let key = generate_key(KeyType::P256Private)?;
+                // Ok(Self(vec![key]))
+                unreachable!()
             }
             Some(value) if value.is_empty() => {
                 // Generate a new P-256 private key if no keys are provided
-                let key = generate_key(KeyType::P256Private)?;
-                Ok(Self(vec![key]))
+                // let key = generate_key(KeyType::P256Private)?;
+                // Ok(Self(vec![key]))
+                unreachable!()
             }
             Some(value) => {
                 // Parse semicolon-separated list of KeyData DID strings
@@ -347,8 +349,9 @@ impl TryFrom<Option<String>> for PrivateKeys {
 
                 if keys.is_empty() {
                     // Generate a new P-256 private key if parsing resulted in empty list
-                    let key = generate_key(KeyType::P256Private)?;
-                    Ok(Self(vec![key]))
+                    // let key = generate_key(KeyType::P256Private)?;
+                    // Ok(Self(vec![key]))
+                    unreachable!()
                 } else {
                     Ok(Self(keys))
                 }

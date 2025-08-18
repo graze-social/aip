@@ -1,9 +1,8 @@
 //! Application state and request context management.
 
 use atproto_identity::{
-    axum::state::DidDocumentStorageExtractor,
     key::{KeyData, KeyProvider},
-    resolve::IdentityResolver,
+    resolve::SharedIdentityResolver,
     storage::DidDocumentStorage,
 };
 use atproto_oauth::storage::OAuthRequestStorage;
@@ -41,7 +40,7 @@ pub struct AppState {
     /// Template engine for rendering HTML responses.
     pub template_env: AppEngine,
     /// Identity resolver for ATProtocol DIDs
-    pub identity_resolver: IdentityResolver,
+    pub identity_resolver: SharedIdentityResolver,
     /// Key provider for OAuth signing keys
     pub key_provider: Arc<dyn KeyProvider + Send + Sync>,
     /// OAuth request storage for ATProtocol flows
@@ -69,10 +68,8 @@ impl FromRef<AppState> for Arc<dyn DPoPNonceProvider> {
     }
 }
 
-impl FromRef<AppState> for DidDocumentStorageExtractor {
+impl FromRef<AppState> for Arc<dyn DidDocumentStorage> {
     fn from_ref(app_state: &AppState) -> Self {
-        atproto_identity::axum::state::DidDocumentStorageExtractor(
-            app_state.document_storage.clone(),
-        )
+        app_state.document_storage.clone()
     }
 }

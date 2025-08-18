@@ -256,7 +256,8 @@ impl SqliteOAuthClientStore {
             refresh_token_expiration,
             require_redirect_exact,
             registration_access_token,
-            jwks: row.try_get::<Option<String>, _>("jwks")
+            jwks: row
+                .try_get::<Option<String>, _>("jwks")
                 .ok()
                 .flatten()
                 .and_then(|s| serde_json::from_str(&s).ok()),
@@ -313,7 +314,12 @@ impl OAuthClientStore for SqliteOAuthClientStore {
             0i64
         })
         .bind(&client.registration_access_token)
-        .bind(&client.jwks.as_ref().map(|j| serde_json::to_string(j).unwrap_or_default()))
+        .bind(
+            &client
+                .jwks
+                .as_ref()
+                .map(|j| serde_json::to_string(j).unwrap_or_default()),
+        )
         .execute(&self.pool)
         .await
         .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
