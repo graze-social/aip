@@ -6,7 +6,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use atproto_oauth::{storage::OAuthRequestStorage, workflow::OAuthRequest};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use sqlx::Row;
 use sqlx::sqlite::{SqlitePool, SqliteRow};
 
@@ -159,7 +159,6 @@ impl OAuthRequestRow {
             oauth_state: self.oauth_state,
             issuer: self.issuer,
             authorization_server: self.authorization_server,
-            did: String::new(), // Empty string - field will be ignored
             nonce: self.nonce,
             pkce_verifier: self.pkce_verifier,
             signing_public_key: self.signing_public_key,
@@ -193,7 +192,6 @@ mod tests {
             oauth_state: "test-state-123".to_string(),
             issuer: "https://pds.example.com".to_string(),
             authorization_server: "https://pds.example.com".to_string(),
-            did: String::new(),
             nonce: "test-nonce".to_string(),
             pkce_verifier: "test-verifier".to_string(),
             signing_public_key: "test-public-key".to_string(),

@@ -17,7 +17,7 @@ use super::context::AppState;
 use super::utils_oauth::normalize_login_hint;
 use crate::errors::OAuthError;
 use crate::oauth::{
-    auth_server::{AuthorizationServer, ClientAuthentication},
+    auth_server::{AuthorizationServer, ClientAuthentication, validate_client_assertion},
     types::*,
 };
 
@@ -38,6 +38,11 @@ pub(super) struct PushedAuthorizationRequest {
 
     // ATProtocol-specific parameter (legacy, prefer login_hint)
     pub subject: Option<String>,
+
+    /// JWT client assertion for private_key_jwt authentication (RFC 7523)
+    pub client_assertion: Option<String>,
+    /// Client assertion type for private_key_jwt authentication
+    pub client_assertion_type: Option<String>,
 }
 
 /// PAR response
@@ -61,8 +66,9 @@ pub async fn pushed_authorization_request_handler(
         state.oauth_storage.clone(),
         state.config.external_base.clone(),
     ));
-    // Validate client authentication
-    let client_auth = extract_client_auth_from_headers(&headers);
+    // Validate client authentication (check both headers and request body)
+    let client_auth = extract_client_auth_from_headers(&headers)
+        .or_else(|| extract_client_auth_from_request(&request));
     let client_id = client_auth
         .as_ref()
         .map(|auth| auth.client_id.as_str())
@@ -89,7 +95,7 @@ pub async fn pushed_authorization_request_handler(
 
     // Authenticate client if credentials provided
     if let Some(auth) = client_auth {
-        if let Err(e) = authenticate_client(&client, &auth) {
+        if let Err(e) = authenticate_client(&client, &auth, &state.config.external_base) {
             let error_response = json!({
                 "error": "invalid_client",
                 "error_description": e.to_string()
@@ -265,6 +271,8 @@ fn extract_client_auth_from_headers(headers: &HeaderMap) -> Option<ClientAuthent
                             return Some(ClientAuthentication {
                                 client_id: parts[0].to_string(),
                                 client_secret: Some(parts[1].to_string()),
+                                client_assertion: None,
+                                client_assertion_type: None,
                             });
                         }
                     }
@@ -275,10 +283,40 @@ fn extract_client_auth_from_headers(headers: &HeaderMap) -> Option<ClientAuthent
     None
 }
 
+/// Extract client authentication from PAR request form data
+fn extract_client_auth_from_request(
+    request: &PushedAuthorizationRequest,
+) -> Option<ClientAuthentication> {
+    // Check for JWT client assertion first (private_key_jwt)
+    if let (Some(client_assertion), Some(client_assertion_type)) =
+        (&request.client_assertion, &request.client_assertion_type)
+    {
+        // Validate the assertion type
+        if client_assertion_type == "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
+            return Some(ClientAuthentication {
+                client_id: request.client_id.clone(),
+                client_secret: None,
+                client_assertion: Some(client_assertion.clone()),
+                client_assertion_type: Some(client_assertion_type.clone()),
+            });
+        }
+    }
+
+    // PAR typically uses client credentials from headers, not form data
+    // But we'll support client_id from the form
+    Some(ClientAuthentication {
+        client_id: request.client_id.clone(),
+        client_secret: None,
+        client_assertion: None,
+        client_assertion_type: None,
+    })
+}
+
 /// Authenticate client using provided authentication
 fn authenticate_client(
     client: &OAuthClient,
     client_auth: &ClientAuthentication,
+    issuer: &str,
 ) -> Result<(), OAuthError> {
     match &client.token_endpoint_auth_method {
         ClientAuthMethod::None => Ok(()),
@@ -300,9 +338,39 @@ fn authenticate_client(
 
             Ok(())
         }
-        ClientAuthMethod::PrivateKeyJwt => Err(OAuthError::UnsupportedGrantType(
-            "private_key_jwt not implemented for PAR".to_string(),
-        )),
+        ClientAuthMethod::PrivateKeyJwt => {
+            // Require JWT client assertion
+            if let Some(client_assertion) = client_auth.client_assertion.as_ref() {
+                // Construct token endpoint URL for audience validation
+                // Note: PAR uses token endpoint as audience per RFC 9126
+                let token_endpoint = format!("{}/oauth/token", issuer);
+
+                // Validate the JWT client assertion
+                let par_endpoint = format!("{}/oauth/par", issuer);
+                match validate_client_assertion(
+                    client_assertion,
+                    client,
+                    &token_endpoint,
+                    Some(&par_endpoint),
+                ) {
+                    Ok(validated_client_id) => {
+                        // Ensure the validated client_id matches the expected client
+                        if validated_client_id == client.client_id {
+                            Ok(())
+                        } else {
+                            Err(OAuthError::InvalidClient(
+                                "JWT client_id does not match expected client".to_string(),
+                            ))
+                        }
+                    }
+                    Err(e) => Err(e),
+                }
+            } else {
+                Err(OAuthError::InvalidClient(
+                    "Missing client_assertion for private_key_jwt authentication".to_string(),
+                ))
+            }
+        }
     }
 }
 
@@ -338,6 +406,7 @@ mod tests {
             refresh_token_expiration: chrono::Duration::days(14),
             require_redirect_exact: true,
             registration_access_token: Some("test-registration-token".to_string()),
+            jwks: None,
         };
 
         auth_server.storage.store_client(&client).await.unwrap();
@@ -362,6 +431,8 @@ mod tests {
             login_hint: None,
             nonce: None,
             subject: Some("alice.bsky.social".to_string()),
+            client_assertion: None,
+            client_assertion_type: None,
         };
 
         let test_config = crate::config::Config {
@@ -424,6 +495,7 @@ mod tests {
             refresh_token_expiration: chrono::Duration::days(14),
             require_redirect_exact: true,
             registration_access_token: Some("test-registration-token".to_string()),
+            jwks: None,
         };
 
         let par_request = PushedAuthorizationRequest {
@@ -439,6 +511,8 @@ mod tests {
             login_hint: None,
             nonce: None,
             subject: None,
+            client_assertion: None,
+            client_assertion_type: None,
         };
 
         let test_config = crate::config::Config {
@@ -499,6 +573,7 @@ mod tests {
             refresh_token_expiration: chrono::Duration::days(14),
             require_redirect_exact: true,
             registration_access_token: Some("test-registration-token".to_string()),
+            jwks: None,
         };
 
         let par_request = PushedAuthorizationRequest {
@@ -514,6 +589,8 @@ mod tests {
             login_hint: None,
             nonce: None,
             subject: None,
+            client_assertion: None,
+            client_assertion_type: None,
         };
 
         let test_config = crate::config::Config {

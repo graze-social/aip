@@ -1,6 +1,8 @@
 # AIP Configuration Guide
 
-This document provides comprehensive guidance for configuring the ATProtocol Identity Provider (AIP). All configuration is managed through environment variables, making it suitable for containerized deployments.
+This document provides comprehensive guidance for configuring the ATProtocol
+Identity Provider (AIP). All configuration is managed through environment
+variables, making it suitable for containerized deployments.
 
 ## Table of Contents
 
@@ -137,7 +139,7 @@ ATPROTO_OAUTH_SIGNING_KEYS=did:key:z42tqXsadF3WKAPX1QRWtztWFyybuNLJ6g7Pzqsszsxac
 # OAuth supported scopes (space-separated)
 # Default scopes provide ATProtocol access with transition support
 # Default: "atproto:atproto atproto:transition:generic atproto:transition:email"
-OAUTH_SUPPORTED_SCOPES=atproto:atproto atproto:transition:generic atproto:transition:email
+OAUTH_SUPPORTED_SCOPES="atproto:atproto atproto:transition:generic atproto:transition:email"
 
 # Enable client management API endpoints
 # Set to "true" to enable dynamic client registration and management endpoints
@@ -216,51 +218,52 @@ RUST_LOG=aip=info,warn
 
 ### Required Variables
 
-| Variable | Description | Example | Notes |
-|----------|-------------|---------|-------|
-| `EXTERNAL_BASE` | Public base URL of your AIP server | `https://auth.example.com` | Must be accessible to OAuth clients |
-| `DPOP_NONCE_SEED` | 64-character hex string for DPoP nonces | `924f8a4c...569181e` | Generate with `openssl rand -hex 32` |
+| Variable          | Description                             | Example                    | Notes                                |
+| ----------------- | --------------------------------------- | -------------------------- | ------------------------------------ |
+| `EXTERNAL_BASE`   | Public base URL of your AIP server      | `https://auth.example.com` | Must be accessible to OAuth clients  |
+| `DPOP_NONCE_SEED` | 64-character hex string for DPoP nonces | `924f8a4c...569181e`       | Generate with `openssl rand -hex 32` |
 
 ### HTTP Server Configuration
 
-| Variable | Default | Description | Examples |
-|----------|---------|-------------|----------|
-| `HTTP_PORT` | `8080` | HTTP server port | `8080`, `3000` |
-| `HTTP_STATIC_PATH` | `{project}/static` | Static files directory | `/app/static` |
-| `HTTP_TEMPLATES_PATH` | `{project}/templates` | Templates directory | `/app/templates` |
-| `HTTP_CLIENT_TIMEOUT` | `10s` | Timeout for external HTTP requests | `30s`, `5m`, `120` |
-| `USER_AGENT` | `aip/{version} (+...)` | User agent for outbound requests | `MyAIP/1.0` |
+| Variable              | Default                | Description                        | Examples           |
+| --------------------- | ---------------------- | ---------------------------------- | ------------------ |
+| `HTTP_PORT`           | `8080`                 | HTTP server port                   | `8080`, `3000`     |
+| `HTTP_STATIC_PATH`    | `{project}/static`     | Static files directory             | `/app/static`      |
+| `HTTP_TEMPLATES_PATH` | `{project}/templates`  | Templates directory                | `/app/templates`   |
+| `HTTP_CLIENT_TIMEOUT` | `10s`                  | Timeout for external HTTP requests | `30s`, `5m`, `120` |
+| `USER_AGENT`          | `aip/{version} (+...)` | User agent for outbound requests   | `MyAIP/1.0`        |
 
 ### Storage Configuration
 
-| Variable | Default | Description | Examples |
-|----------|---------|-------------|----------|
-| `STORAGE_BACKEND` | `memory` | Storage backend type | `memory`, `sqlite`, `postgres` |
-| `DATABASE_URL` | - | Database connection string | See [Storage Backends](#storage-backends) |
-| `REDIS_URL` | - | Redis connection string | `redis://localhost:6379/0` |
+| Variable          | Default  | Description                | Examples                                  |
+| ----------------- | -------- | -------------------------- | ----------------------------------------- |
+| `STORAGE_BACKEND` | `memory` | Storage backend type       | `memory`, `sqlite`, `postgres`            |
+| `DATABASE_URL`    | -        | Database connection string | See [Storage Backends](#storage-backends) |
+| `REDIS_URL`       | -        | Redis connection string    | `redis://localhost:6379/0`                |
 
 ### ATProtocol Configuration
 
-| Variable | Default | Description | Examples |
-|----------|---------|-------------|----------|
-| `PLC_HOSTNAME` | `plc.directory` | PLC server for DID resolution | `plc.directory` |
-| `DNS_NAMESERVERS` | system default | Custom DNS servers (comma-separated) | `8.8.8.8,1.1.1.1` |
-| `ATPROTO_OAUTH_SIGNING_KEYS` | auto-generated | ATProtocol signing keys | See [Key Generation](#key-generation) |
+| Variable                     | Default         | Description                          | Examples                              |
+| ---------------------------- | --------------- | ------------------------------------ | ------------------------------------- |
+| `PLC_HOSTNAME`               | `plc.directory` | PLC server for DID resolution        | `plc.directory`                       |
+| `DNS_NAMESERVERS`            | system default  | Custom DNS servers (comma-separated) | `8.8.8.8,1.1.1.1`                     |
+| `ATPROTO_OAUTH_SIGNING_KEYS` | auto-generated  | ATProtocol signing keys              | See [Key Generation](#key-generation) |
 
 ### OAuth Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OAUTH_SIGNING_KEYS` | auto-generated | OAuth JWT signing keys |
-| `OAUTH_SUPPORTED_SCOPES` | `atproto:atproto atproto:transition:generic atproto:transition:email` | Supported OAuth scopes (space-separated) |
-| `ENABLE_CLIENT_API` | `false` | Enable client management API endpoints (`true`/`false`) |
+| Variable                 | Default                                                               | Description                                             |
+| ------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------- |
+| `OAUTH_SIGNING_KEYS`     | auto-generated                                                        | OAuth JWT signing keys                                  |
+| `OAUTH_SUPPORTED_SCOPES` | `atproto:atproto atproto:transition:generic atproto:transition:email` | Supported OAuth scopes (space-separated)                |
+| `ENABLE_CLIENT_API`      | `false`                                                               | Enable client management API endpoints (`true`/`false`) |
 
 ### Client Management API Configuration
 
-The client management API provides endpoints for dynamic client registration and management. These endpoints are disabled by default for security reasons.
+The client management API provides endpoints for dynamic client registration and
+management. These endpoints are disabled by default for security reasons.
 
-| Variable | Default | Description | Security Notes |
-|----------|---------|-------------|----------------|
+| Variable            | Default | Description                        | Security Notes                                 |
+| ------------------- | ------- | ---------------------------------- | ---------------------------------------------- |
 | `ENABLE_CLIENT_API` | `false` | Enable client management endpoints | Only enable when client management is required |
 
 #### Client Management Endpoints
@@ -268,16 +271,18 @@ The client management API provides endpoints for dynamic client registration and
 When `ENABLE_CLIENT_API=true`, the following endpoints become available:
 
 - `POST /oauth/clients/register` - Dynamic Client Registration (RFC 7591)
-- `GET /oauth/clients/{client_id}` - Retrieve client information  
+- `GET /oauth/clients/{client_id}` - Retrieve client information
 - `PUT /oauth/clients/{client_id}` - Update client configuration
 - `DELETE /oauth/clients/{client_id}` - Delete client registration
 
 #### Security Considerations
 
-- **Disable by default**: Only enable when dynamic client registration is required
+- **Disable by default**: Only enable when dynamic client registration is
+  required
 - **Access control**: Implement appropriate access controls and authentication
 - **Monitoring**: Monitor client registration activities for suspicious behavior
-- **Rate limiting**: Consider implementing rate limiting on registration endpoints
+- **Rate limiting**: Consider implementing rate limiting on registration
+  endpoints
 
 ```bash
 # Enable client management API (use with caution)
@@ -289,9 +294,9 @@ ENABLE_CLIENT_API=false
 
 ### TLS Configuration
 
-| Variable | Default | Description | Examples |
-|----------|---------|-------------|----------|
-| `CERTIFICATE_BUNDLES` | - | Custom CA certificates (semicolon-separated) | `/etc/ssl/ca.pem;/etc/ssl/custom.pem` |
+| Variable              | Default | Description                                  | Examples                              |
+| --------------------- | ------- | -------------------------------------------- | ------------------------------------- |
+| `CERTIFICATE_BUNDLES` | -       | Custom CA certificates (semicolon-separated) | `/etc/ssl/ca.pem;/etc/ssl/custom.pem` |
 
 ## Security Configuration
 
@@ -305,6 +310,7 @@ DPOP_NONCE_SEED=$(openssl rand -hex 32)
 ```
 
 **Security Requirements:**
+
 - Must be exactly 64 hexadecimal characters
 - Should be unique per deployment
 - Must be kept secret and secure
@@ -315,6 +321,7 @@ DPOP_NONCE_SEED=$(openssl rand -hex 32)
 AIP uses cryptographic keys for signing JWTs and ATProtocol tokens:
 
 #### Automatic Key Generation
+
 If not specified, AIP will automatically generate P-256 ECDSA keys on startup:
 
 ```bash
@@ -344,6 +351,7 @@ If not specified, AIP will automatically generate P-256 ECDSA keys on startup:
 #### Key Rotation
 
 For production deployments:
+
 1. Generate new keys before rotating
 2. Update environment variables
 3. Restart the service
@@ -361,6 +369,7 @@ STORAGE_BACKEND=memory
 ```
 
 **Characteristics:**
+
 - Fast performance
 - Data lost on restart
 - Not suitable for production
@@ -376,6 +385,7 @@ DATABASE_URL=sqlite:///var/lib/aip/aip.db
 ```
 
 **Setup:**
+
 1. Create database directory:
    ```bash
    mkdir -p /var/lib/aip
@@ -387,6 +397,7 @@ DATABASE_URL=sqlite:///var/lib/aip/aip.db
    ```
 
 **Characteristics:**
+
 - File-based persistence
 - No separate database server required
 - Limited concurrent access
@@ -402,6 +413,7 @@ DATABASE_URL=postgresql://aip_user:secure_password@postgres:5432/aip_production
 ```
 
 **Setup:**
+
 1. Create database and user:
    ```sql
    CREATE DATABASE aip_production;
@@ -415,6 +427,7 @@ DATABASE_URL=postgresql://aip_user:secure_password@postgres:5432/aip_production
    ```
 
 **Characteristics:**
+
 - High performance and scalability
 - Full ACID compliance
 - Supports high availability
@@ -429,6 +442,7 @@ REDIS_URL=redis://username:password@redis:6379/0
 ```
 
 **Connection String Format:**
+
 - Basic: `redis://host:port/database`
 - With auth: `redis://username:password@host:port/database`
 - With TLS: `rediss://host:port/database`
@@ -438,6 +452,7 @@ REDIS_URL=redis://username:password@redis:6379/0
 ### Cryptographic Requirements
 
 AIP requires ECDSA P-256 keys for:
+
 - OAuth JWT token signing
 - ATProtocol OAuth integration
 - DPoP proof validation
@@ -445,13 +460,14 @@ AIP requires ECDSA P-256 keys for:
 ### Key Generation Methods
 
 #### Method 1: Goat
+
 ```bash
 # Generate P-256 private key
 goat key generate -t p256
-
 ```
 
 #### Method 2: Automatic Generation
+
 Let AIP generate keys automatically on first startup:
 
 ```bash
@@ -548,7 +564,7 @@ HTTP_STATIC_PATH=/path/to/static
 ### Docker Compose Example
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   aip:
@@ -597,31 +613,31 @@ spec:
         app: aip
     spec:
       containers:
-      - name: aip
-        image: aip:latest
-        ports:
-        - containerPort: 8080
-        env:
-        - name: EXTERNAL_BASE
-          value: "https://auth.example.com"
-        - name: DPOP_NONCE_SEED
-          valueFrom:
-            secretKeyRef:
-              name: aip-secrets
-              key: dpop-nonce-seed
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: aip-secrets
-              key: database-url
-        - name: STORAGE_BACKEND
-          value: "postgres"
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
+        - name: aip
+          image: aip:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: EXTERNAL_BASE
+              value: "https://auth.example.com"
+            - name: DPOP_NONCE_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: aip-secrets
+                  key: dpop-nonce-seed
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: aip-secrets
+                  key: database-url
+            - name: STORAGE_BACKEND
+              value: "postgres"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
 ```
 
 ## Production Configuration
@@ -630,7 +646,7 @@ spec:
 
 - [ ] `EXTERNAL_BASE` uses HTTPS
 - [ ] `DPOP_NONCE_SEED` is unique and secure
-- [ ] Database credentials are rotated regularly  
+- [ ] Database credentials are rotated regularly
 - [ ] OAuth signing keys are backed up
 - [ ] TLS certificates are valid and monitored
 - [ ] Environment variables are not logged
@@ -690,18 +706,21 @@ For HA deployments:
 ### Common Configuration Issues
 
 #### Invalid EXTERNAL_BASE
+
 ```
 Error: OAuth callback mismatch
 Solution: Ensure EXTERNAL_BASE matches the URL clients can reach
 ```
 
 #### Missing DPOP_NONCE_SEED
+
 ```
 Error: error-aip-config-1 DPOP_NONCE_SEED must be set
 Solution: Generate with: openssl rand -hex 32
 ```
 
 #### Database Connection Failed
+
 ```
 Error: error-aip-storage-1 Database connection failed
 Solutions:
@@ -712,6 +731,7 @@ Solutions:
 ```
 
 #### Key Generation Issues
+
 ```
 Error: Failed to generate OAuth signing key
 Solutions:
@@ -723,11 +743,13 @@ Solutions:
 ### Debugging Configuration
 
 #### Enable Debug Logging
+
 ```bash
 RUST_LOG=aip=debug,config=debug
 ```
 
 #### Validate Configuration
+
 ```bash
 # Test configuration without starting server
 cargo run --bin aip --help
@@ -737,6 +759,7 @@ env | grep -E "(EXTERNAL_BASE|DPOP_NONCE_SEED|DATABASE_URL)"
 ```
 
 #### Test Database Connection
+
 ```bash
 # PostgreSQL
 psql $DATABASE_URL -c "SELECT version();"
@@ -748,6 +771,7 @@ sqlite3 /path/to/database.db ".schema"
 ### Performance Issues
 
 #### Slow External Requests
+
 ```bash
 # Increase timeout
 HTTP_CLIENT_TIMEOUT=60s
@@ -757,6 +781,7 @@ DNS_NAMESERVERS=8.8.8.8,1.1.1.1
 ```
 
 #### Database Performance
+
 ```bash
 # Connection pooling
 DATABASE_URL=postgresql://user:pass@host/db?max_connections=20&pool_timeout=30

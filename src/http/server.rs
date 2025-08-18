@@ -6,8 +6,8 @@ use axum::{
 };
 use std::time::Duration;
 use tower_http::classify::ServerErrorsFailureClass;
-use tower_http::trace::{self, TraceLayer};
-use tower_http::{cors::CorsLayer, services::ServeDir};
+use tower_http::trace::DefaultMakeSpan;
+use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 use tracing::Span;
 
 use super::{
@@ -127,7 +127,7 @@ pub fn build_router(ctx: AppState) -> Router {
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(
-                    trace::DefaultMakeSpan::new()
+                    DefaultMakeSpan::new()
                         .level(tracing::Level::INFO)
                         .include_headers(true),
                 )
@@ -138,6 +138,7 @@ pub fn build_router(ctx: AppState) -> Router {
                 ),
         )
         .layer(cors)
+        .layer(TraceLayer::new_for_http())
         .with_state(ctx)
 }
 

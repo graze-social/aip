@@ -39,7 +39,7 @@ pub async fn oauth_authorization_server_handler(State(state): State<AppState>) -
         "response_types_supported": ["code"],
         "response_modes_supported": ["query"],
         "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token"],
-        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none", "private_key_jwt"],
         "token_endpoint_auth_signing_alg_values_supported": ["ES256"],
         "service_documentation": format!("{}/docs", state.config.external_base),
         "ui_locales_supported": ["en"],
@@ -81,7 +81,9 @@ pub async fn openid_configuration_handler(State(state): State<AppState>) -> Json
         "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
         "claims_supported": ["iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "at_hash", "c_hash", "email", "did", "name", "profile", "pds_endpoint"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
-        "response_modes_supported": ["query", "fragment"]
+        "response_modes_supported": ["query", "fragment"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none", "private_key_jwt"],
+        "token_endpoint_auth_signing_alg_values_supported": ["ES256"]
     });
 
     Json(metadata)
