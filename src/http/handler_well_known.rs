@@ -128,8 +128,10 @@ mod tests {
 
         let http_client = reqwest::Client::new();
         let dns_nameservers = vec![];
-        let dns_resolver = atproto_identity::resolve::create_resolver(&dns_nameservers);
-        let identity_resolver = atproto_identity::resolve::IdentityResolver(Arc::new(
+        let dns_resolver = Arc::new(
+            atproto_identity::resolve::HickoryDnsResolver::create_resolver(&dns_nameservers),
+        );
+        let identity_resolver = atproto_identity::resolve::SharedIdentityResolver(Arc::new(
             atproto_identity::resolve::InnerIdentityResolver {
                 http_client: http_client.clone(),
                 dns_resolver,
