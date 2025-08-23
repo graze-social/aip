@@ -93,13 +93,20 @@ pub fn normalize_login_hint(login_hint: &str) -> Result<String, OAuthError> {
     }
     // Otherwise, treat it as a handle
     else {
-        if !(is_valid_hostname(trimmed) && trimmed.contains('.')) {
+        // If it doesn't contain a dot, append .bsky.social
+        let handle = if !trimmed.contains('.') {
+            format!("{}.bsky.social", trimmed)
+        } else {
+            trimmed.to_string()
+        };
+
+        if !(is_valid_hostname(&handle) && handle.contains('.')) {
             return Err(OAuthError::InvalidRequest(
                 "Invalid handle format".to_string(),
             ));
         }
 
-        Ok(trimmed.to_string())
+        Ok(handle)
     }
 }
 
@@ -306,6 +313,15 @@ mod tests {
             normalize_login_hint("  @example.com  ").unwrap(),
             "example.com"
         );
+
+        // Handle without dot gets .bsky.social appended
+        assert_eq!(normalize_login_hint("nick").unwrap(), "nick.bsky.social");
+
+        // Handle with @ prefix and no dot gets .bsky.social appended
+        assert_eq!(normalize_login_hint("@alice").unwrap(), "alice.bsky.social");
+
+        // Handle with at:// prefix and no dot gets .bsky.social appended
+        assert_eq!(normalize_login_hint("at://bob").unwrap(), "bob.bsky.social");
     }
 
     #[test]
@@ -381,11 +397,6 @@ mod tests {
 
         // Only whitespace
         assert!(normalize_login_hint("   ").is_err());
-
-        // Invalid handle (no dot) - ATProtocol validation will catch these
-        assert!(normalize_login_hint("invalid").is_err());
-        assert!(normalize_login_hint("@invalid").is_err());
-        assert!(normalize_login_hint("at://invalid").is_err());
 
         // Invalid DID PLC (wrong format)
         assert!(normalize_login_hint("did:plc:invalid").is_err());
