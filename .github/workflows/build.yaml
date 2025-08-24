@@ -1,0 +1,202 @@
+name: Build and Publish AIP
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  build-sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+        with:
+          logger: pretty
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Check flake
+        run: nix flake check --refresh
+
+      - name: Build Rust binary
+        run: nix build .#aip-sqlite
+
+      - name: Build Docker image
+        run: nix build .#aipImg-sqlite
+
+      - name: Load Docker image
+        run: docker load < result
+
+      - name: Test Docker image
+        run: |
+          # Start the container in the background with temp volume
+          docker run -d --name aip-test -p 8080:8080 \
+            -e EXTERNAL_BASE=http://localhost:8080 \
+            -e DPOP_NONCE_SEED=test-seed-for-ci \
+            -e DATABASE_URL=sqlite:///data/aip.db \
+            -v /tmp/aip-test:/data \
+            aip:sqlite
+
+          # Wait for the service to start and check container status
+          sleep 5
+          docker ps -a
+          
+          # Check if container is running
+          if ! docker ps | grep -q aip-test; then
+            echo "Container exited, checking logs:"
+            docker logs aip-test
+            exit 1
+          fi
+
+          # Wait a bit more for the service to fully start
+          sleep 10
+
+          # Test the root endpoint
+          curl -f http://localhost:8080 || {
+            echo "Curl failed, checking container logs:"
+            docker logs aip-test
+            exit 1
+          }
+
+          # Stop the test container
+          docker stop aip-test
+          docker rm aip-test
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta-sqlite
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/aip-sqlite
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Tag and push SQLite image
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ steps.meta-sqlite.outputs.tags }}" | while read -r tag; do
+            docker tag aip:sqlite "$tag"
+            docker push "$tag"
+          done
+
+  build-postgres:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+        with:
+          logger: pretty
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Check flake
+        run: nix flake check --refresh
+
+      - name: Build PostgreSQL Rust binary
+        run: nix build .#aip-postgres
+
+      - name: Build PostgreSQL Docker image
+        run: nix build .#aipImg-postgres
+
+      - name: Load PostgreSQL Docker image
+        run: docker load < result
+
+      - name: Start PostgreSQL for testing
+        run: |
+          docker run -d --name postgres-test \
+            -e POSTGRES_DB=aip_test \
+            -e POSTGRES_USER=aip \
+            -e POSTGRES_PASSWORD=aip_test_password \
+            -p 5432:5432 \
+            postgres:15
+
+          # Wait for PostgreSQL to start
+          sleep 10
+
+      - name: Test PostgreSQL Docker image
+        run: |
+          # Start the AIP container with PostgreSQL backend
+          docker run -d --name aip-postgres-test -p 8080:8080 \
+            -e EXTERNAL_BASE=http://localhost:8080 \
+            -e DPOP_NONCE_SEED=test-seed-for-ci \
+            -e DATABASE_URL=postgresql://aip:aip_test_password@host.docker.internal:5432/aip_test \
+            --add-host host.docker.internal:host-gateway \
+            aip:postgres
+
+          # Wait for the service to start and check container status
+          sleep 10
+          docker ps -a
+          
+          # Check if container is running
+          if ! docker ps | grep -q aip-postgres-test; then
+            echo "AIP container exited, checking logs:"
+            docker logs aip-postgres-test
+            echo "PostgreSQL logs:"
+            docker logs postgres-test
+            exit 1
+          fi
+
+          # Wait a bit more for the service to fully start
+          sleep 10
+
+          # Test the root endpoint
+          curl -f http://localhost:8080 || {
+            echo "Curl failed, checking container logs:"
+            docker logs aip-postgres-test
+            echo "PostgreSQL logs:"
+            docker logs postgres-test
+            exit 1
+          }
+
+          # Stop test containers
+          docker stop aip-postgres-test postgres-test
+          docker rm aip-postgres-test postgres-test
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for PostgreSQL Docker
+        id: meta-postgres
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/aip-postgres
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Tag and push PostgreSQL image
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ steps.meta-postgres.outputs.tags }}" | while read -r tag; do
+            docker tag aip:postgres "$tag"
+            docker push "$tag"
+          done
+
