@@ -1,9 +1,10 @@
-//! Handles GET /oauth/atp/client-metadata - Provides ATProtocol OAuth client metadata per RFC 7591
+//! Handles GET /oauth-client-metadata.json - Provides ATProtocol OAuth client metadata per RFC 7591
 
 use atproto_oauth_axum::{handler_metadata::handle_oauth_metadata, state::OAuthClientConfig};
 use axum::{extract::State, response::IntoResponse};
 
 use super::context::AppState;
+use crate::config::ATPROTO_CLIENT_METADATA_PATH;
 
 /// Handles requests for ATProtocol OAuth client metadata.
 ///
@@ -13,10 +14,17 @@ pub async fn handle_atpoauth_client_metadata(
     State(app_state): State<AppState>,
 ) -> impl IntoResponse {
     // Convert AppState configuration to OAuthClientConfig
+    // Use configured server scopes
+    let scopes = app_state
+        .config
+        .oauth_supported_scopes
+        .as_strings()
+        .join(" ");
+
     let oauth_client_config = OAuthClientConfig {
         client_id: format!(
-            "{}/oauth/atp/client-metadata",
-            app_state.config.external_base
+            "{}{}",
+            app_state.config.external_base, ATPROTO_CLIENT_METADATA_PATH
         ),
         redirect_uris: format!("{}/oauth/atp/callback", app_state.config.external_base),
         jwks_uri: None, // Use inline JWKS instead of external URI
@@ -26,7 +34,7 @@ pub async fn handle_atpoauth_client_metadata(
         logo_uri: app_state.config.atproto_client_logo.as_ref().clone(),
         tos_uri: app_state.config.atproto_client_tos.as_ref().clone(),
         policy_uri: app_state.config.atproto_client_policy.as_ref().clone(),
-        scope: Some("atproto transition:generic transition:email".to_string()),
+        scope: Some(scopes),
     };
 
     // Use the atproto-oauth-axum handler

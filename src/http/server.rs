@@ -55,7 +55,10 @@ pub fn build_router(ctx: AppState) -> Router {
         .route("/userinfo", post(get_userinfo_handler))
         .route("/par", post(pushed_authorization_request_handler))
         .route("/atp/callback", get(handle_atpoauth_callback))
-        .route("/atp/client-metadata", get(handle_atpoauth_client_metadata));
+        .route(
+            crate::config::ATPROTO_CLIENT_METADATA_PATH,
+            get(handle_atpoauth_client_metadata),
+        );
 
     // Conditionally add client API endpoints
     if ctx.config.enable_client_api {
@@ -203,7 +206,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),

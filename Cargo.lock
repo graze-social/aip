@@ -191,9 +191,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "atproto-client"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8b3d9628afd1e4a79e9701089aced14c2519c12f4f8b27f4a6e72bb3eb29e66"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "atproto-identity",
@@ -213,9 +211,7 @@ dependencies = [
 
 [[package]]
 name = "atproto-identity"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0091aac30b30c70507c865d3b09053178a746f474742eba7f25377086d13bcba"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -240,9 +236,7 @@ dependencies = [
 
 [[package]]
 name = "atproto-oauth"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58743096f464928c76b5e8ed73b4218345c66723629dc623cb93662cc8ecd4e6"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -273,9 +267,7 @@ dependencies = [
 
 [[package]]
 name = "atproto-oauth-axum"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea053c73ad9c19ea63a355193833728a61156744d129e72a62d4ffe361133bb1"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -301,9 +293,7 @@ dependencies = [
 
 [[package]]
 name = "atproto-record"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66191a5512ebfa103e72ddbc3b96d4d5afd58e22dbcadf4cc7d5ea431c1cb31e"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "atproto-identity",
@@ -317,9 +307,7 @@ dependencies = [
 
 [[package]]
 name = "atproto-xrpcs"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12c18b713888b1af7027770db1815d7508ed4bd666a4bf5e96515915d8ea3654"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "async-trait",

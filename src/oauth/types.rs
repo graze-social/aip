@@ -431,8 +431,16 @@ pub(crate) fn generate_client_id() -> String {
 pub(crate) fn validate_scope(scope: &str) -> bool {
     // Basic scope validation - contains only valid characters
     scope.split_whitespace().all(|s| {
-        s.chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == ':')
+        s.chars().all(|c| {
+            c.is_alphanumeric()
+                || c == '_'
+                || c == '-'
+                || c == ':'
+                || c == '?'
+                || c == '='
+                || c == '#'
+                || c == '.'
+        })
     })
 }
 

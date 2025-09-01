@@ -207,7 +207,7 @@ fn validate_and_convert_par_request(
     if let Some(ref requested_scope) = request.scope {
         let requested_scopes = crate::oauth::types::parse_scope(requested_scope);
         let supported_scopes =
-            crate::oauth::types::parse_scope(&config.oauth_supported_scopes.as_ref().join(" "));
+            crate::oauth::types::parse_scope(&config.oauth_supported_scopes.as_strings().join(" "));
 
         // First, validate against server's supported scopes
         if !requested_scopes.is_subset(&supported_scopes) {
@@ -396,7 +396,7 @@ mod tests {
             redirect_uris: vec!["https://example.com/callback".to_string()],
             grant_types: vec![GrantType::AuthorizationCode],
             response_types: vec![ResponseType::Code],
-            scope: Some("read write atproto".to_string()),
+            scope: Some("atproto transition:generic transition:email".to_string()),
             token_endpoint_auth_method: ClientAuthMethod::ClientSecretBasic,
             client_type: ClientType::Confidential,
             created_at: Utc::now(),
@@ -422,7 +422,7 @@ mod tests {
             response_type: "code".to_string(),
             client_id: client.client_id.clone(),
             redirect_uri: "https://example.com/callback".to_string(),
-            scope: Some("read".to_string()),
+            scope: Some("atproto".to_string()),
             state: Some("test-state".to_string()),
             code_challenge: Some("test-challenge".to_string()),
             code_challenge_method: Some("S256".to_string()),
@@ -449,7 +449,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
@@ -472,7 +472,7 @@ mod tests {
 
         assert_eq!(auth_request.response_type, vec![ResponseType::Code]);
         assert_eq!(auth_request.client_id, client.client_id);
-        assert_eq!(auth_request.scope, Some("read".to_string()));
+        assert_eq!(auth_request.scope, Some("atproto".to_string()));
         assert_eq!(auth_request.state, Some("test-state".to_string()));
     }
 
@@ -485,7 +485,7 @@ mod tests {
             redirect_uris: vec!["https://example.com/callback".to_string()],
             grant_types: vec![GrantType::AuthorizationCode],
             response_types: vec![ResponseType::Code],
-            scope: Some("read write".to_string()),
+            scope: Some("atproto transition:generic".to_string()),
             token_endpoint_auth_method: ClientAuthMethod::ClientSecretBasic,
             client_type: ClientType::Confidential,
             created_at: Utc::now(),
@@ -502,7 +502,7 @@ mod tests {
             response_type: "code".to_string(),
             client_id: client.client_id.clone(),
             redirect_uri: "https://evil.com/callback".to_string(), // Invalid redirect URI
-            scope: Some("read".to_string()),
+            scope: Some("atproto".to_string()),
             state: Some("test-state".to_string()),
             code_challenge: None,
             code_challenge_method: None,
@@ -529,7 +529,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
@@ -563,7 +563,7 @@ mod tests {
             redirect_uris: vec!["https://example.com/callback".to_string()],
             grant_types: vec![GrantType::AuthorizationCode],
             response_types: vec![ResponseType::Code],
-            scope: Some("read".to_string()), // Only 'read' allowed
+            scope: Some("atproto".to_string()), // Only 'read' allowed
             token_endpoint_auth_method: ClientAuthMethod::ClientSecretBasic,
             client_type: ClientType::Confidential,
             created_at: Utc::now(),
@@ -580,7 +580,7 @@ mod tests {
             response_type: "code".to_string(),
             client_id: client.client_id.clone(),
             redirect_uri: "https://example.com/callback".to_string(),
-            scope: Some("read write admin".to_string()), // Requesting more than allowed
+            scope: Some("atproto transition:email".to_string()), // Requesting more than allowed
             state: Some("test-state".to_string()),
             code_challenge: None,
             code_challenge_method: None,
@@ -607,7 +607,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write admin".to_string(),
+                "atproto transition:generic".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),

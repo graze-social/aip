@@ -16,7 +16,7 @@ pub async fn oauth_protected_resource_handler(State(state): State<AppState>) -> 
         "resource": state.config.external_base,
         "authorization_servers": [state.config.external_base],
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
-        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
+        "scopes_supported": state.config.oauth_supported_scopes.as_strings(),
         "bearer_methods_supported": ["header", "body"],
         "dpop_signing_alg_values_supported": ["ES256"]
     });
@@ -35,7 +35,7 @@ pub async fn oauth_authorization_server_handler(State(state): State<AppState>) -
         "token_endpoint": format!("{}/oauth/token", state.config.external_base),
         "registration_endpoint": format!("{}/oauth/clients/register", state.config.external_base),
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
-        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
+        "scopes_supported": state.config.oauth_supported_scopes.as_strings(),
         "response_types_supported": ["code"],
         "response_modes_supported": ["query"],
         "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token"],
@@ -78,7 +78,7 @@ pub async fn openid_configuration_handler(State(state): State<AppState>) -> Json
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["ES256"],
         "userinfo_signed_response_alg": ["ES256"],
-        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
+        "scopes_supported": state.config.oauth_supported_scopes.as_strings(),
         "claims_supported": ["iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "at_hash", "c_hash", "email", "did", "name", "profile", "pds_endpoint"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "response_modes_supported": ["query", "fragment"],
@@ -175,7 +175,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "openid atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
