@@ -61,7 +61,7 @@ impl OAuthClientStore for MemoryOAuthStorage {
         let mut clients = self
             .clients
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         clients.insert(client.client_id.clone(), client.clone());
         Ok(())
     }
@@ -70,7 +70,7 @@ impl OAuthClientStore for MemoryOAuthStorage {
         let clients = self
             .clients
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         Ok(clients.get(client_id).cloned())
     }
 
@@ -78,12 +78,12 @@ impl OAuthClientStore for MemoryOAuthStorage {
         let mut clients = self
             .clients
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         if clients.contains_key(&client.client_id) {
             clients.insert(client.client_id.clone(), client.clone());
             Ok(())
         } else {
-            Err(StorageError::QueryFailed("Client not found".to_string()))
+            Err(StorageError::NotFound("OAuth client not found".to_string()))
         }
     }
 
@@ -91,7 +91,7 @@ impl OAuthClientStore for MemoryOAuthStorage {
         let mut clients = self
             .clients
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         clients.remove(client_id);
         Ok(())
     }
@@ -100,7 +100,7 @@ impl OAuthClientStore for MemoryOAuthStorage {
         let clients = self
             .clients
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         let mut result: Vec<_> = clients.values().cloned().collect();
         if let Some(limit) = limit {
             result.truncate(limit);
@@ -115,7 +115,7 @@ impl AuthorizationCodeStore for MemoryOAuthStorage {
         let mut codes = self
             .auth_codes
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         codes.insert(code.code.clone(), code.clone());
         Ok(())
     }
@@ -124,7 +124,7 @@ impl AuthorizationCodeStore for MemoryOAuthStorage {
         let mut codes = self
             .auth_codes
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
 
         if let Some(mut auth_code) = codes.get(code).cloned() {
             // Check if code is expired
@@ -153,7 +153,7 @@ impl AuthorizationCodeStore for MemoryOAuthStorage {
         let mut codes = self
             .auth_codes
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
 
         let now = Utc::now();
         let initial_count = codes.len();
@@ -169,7 +169,7 @@ impl AccessTokenStore for MemoryOAuthStorage {
         let mut tokens = self
             .access_tokens
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         tokens.insert(token.token.clone(), token.clone());
         Ok(())
     }
@@ -178,7 +178,7 @@ impl AccessTokenStore for MemoryOAuthStorage {
         let tokens = self
             .access_tokens
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
 
         if let Some(access_token) = tokens.get(token) {
             // Check if token is expired
@@ -195,7 +195,7 @@ impl AccessTokenStore for MemoryOAuthStorage {
         let mut tokens = self
             .access_tokens
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         tokens.remove(token);
         Ok(())
     }
@@ -204,7 +204,7 @@ impl AccessTokenStore for MemoryOAuthStorage {
         let mut tokens = self
             .access_tokens
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
 
         let now = Utc::now();
         let initial_count = tokens.len();
@@ -217,7 +217,7 @@ impl AccessTokenStore for MemoryOAuthStorage {
         let tokens = self
             .access_tokens
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
 
         let now = Utc::now();
         let result: Vec<_> = tokens
@@ -235,7 +235,7 @@ impl AccessTokenStore for MemoryOAuthStorage {
         let tokens = self
             .access_tokens
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
 
         let now = Utc::now();
         let result: Vec<_> = tokens
@@ -254,7 +254,7 @@ impl RefreshTokenStore for MemoryOAuthStorage {
         let mut tokens = self
             .refresh_tokens
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         tokens.insert(token.token.clone(), token.clone());
         Ok(())
     }
@@ -263,7 +263,7 @@ impl RefreshTokenStore for MemoryOAuthStorage {
         let mut tokens = self
             .refresh_tokens
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
 
         if let Some(refresh_token) = tokens.remove(token) {
             // Check if token is expired (if it has an expiry)
@@ -282,7 +282,7 @@ impl RefreshTokenStore for MemoryOAuthStorage {
         let mut tokens = self
             .refresh_tokens
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
 
         let now = Utc::now();
         let initial_count = tokens.len();
@@ -342,7 +342,7 @@ impl PARStorage for MemoryOAuthStorage {
         let mut par_requests = self
             .par_requests
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         par_requests.insert(request.request_uri.clone(), request.clone());
         Ok(())
     }
@@ -351,7 +351,7 @@ impl PARStorage for MemoryOAuthStorage {
         let par_requests = self
             .par_requests
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         Ok(par_requests.get(request_uri).cloned())
     }
 
@@ -359,7 +359,7 @@ impl PARStorage for MemoryOAuthStorage {
         let mut par_requests = self
             .par_requests
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
         Ok(par_requests.remove(request_uri))
     }
 
@@ -367,7 +367,7 @@ impl PARStorage for MemoryOAuthStorage {
         let mut par_requests = self
             .par_requests
             .lock()
-            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+            .map_err(|e| StorageError::SerializationFailed(e.to_string()))?;
 
         let now = Utc::now();
         let initial_count = par_requests.len();
@@ -457,7 +457,7 @@ impl AtpOAuthSessionStorage for MemoryOAuthStorage {
             e.insert(session.clone());
             Ok(())
         } else {
-            Err(StorageError::QueryFailed("Session not found".to_string()))
+            Err(StorageError::NotFound("ATProtocol OAuth session not found".to_string()))
         }
     }
 
@@ -492,7 +492,7 @@ impl AtpOAuthSessionStorage for MemoryOAuthStorage {
             session.access_token_scopes = access_token_scopes;
             Ok(())
         } else {
-            Err(StorageError::QueryFailed("Session not found".to_string()))
+            Err(StorageError::NotFound("ATProtocol OAuth session not found".to_string()))
         }
     }
 

@@ -179,7 +179,7 @@ impl ClientRegistrationService {
             .get_client(client_id)
             .await
             .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(format!("Storage error: {:?}", e))
+                ClientRegistrationError::InvalidClientMetadata(e.to_string())
             })?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
@@ -235,7 +235,7 @@ impl ClientRegistrationService {
             .get_client(client_id)
             .await
             .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(format!("Storage error: {:?}", e))
+                ClientRegistrationError::InvalidClientMetadata(e.to_string())
             })?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
@@ -307,7 +307,7 @@ impl ClientRegistrationService {
             .get_client(client_id)
             .await
             .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(format!("Storage error: {:?}", e))
+                ClientRegistrationError::InvalidClientMetadata(e.to_string())
             })?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 

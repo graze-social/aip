@@ -440,7 +440,7 @@ impl AtpBackedAuthorizationServer {
             .session_storage
             .get_session_by_atp_state(&state)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Session storage error: {}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidState("Session not found".to_string()))?;
 
         // Verify this is the first iteration as expected during callback
@@ -465,7 +465,7 @@ impl AtpBackedAuthorizationServer {
             .oauth_request_storage
             .get_oauth_request_by_state(&state)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("OAuth request storage error: {}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidState("OAuth request not found".to_string()))?;
 
         // Parse the DPoP private key from storage
@@ -572,7 +572,7 @@ impl AtpBackedAuthorizationServer {
             .get_authorization_request(&session.session_id)
             .await
             .map_err(|e| {
-                OAuthError::ServerError(format!("Authorization request storage error: {}", e))
+                OAuthError::ServerError(e.to_string())
             })?
             .ok_or_else(|| {
                 OAuthError::InvalidState("Authorization request not found".to_string())
@@ -595,21 +595,21 @@ impl AtpBackedAuthorizationServer {
         self.oauth_request_storage
             .delete_oauth_request_by_state(&state)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("OAuth request cleanup error: {}", e)))?;
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?;
 
         // Clean up authorization request storage
         self.authorization_request_storage
             .remove_authorization_request(&session_id)
             .await
             .map_err(|e| {
-                OAuthError::ServerError(format!("Authorization request cleanup error: {}", e))
+                OAuthError::ServerError(e.to_string())
             })?;
 
         match auth_response {
             AuthorizeResponse::Redirect(url) => Ok(url),
-            AuthorizeResponse::Error { error, description } => Err(OAuthError::ServerError(
-                format!("Authorization failed: {} - {}", error, description),
-            )),
+            AuthorizeResponse::Error { error, description } => {
+                Err(OAuthError::AuthorizationFailed(format!("{} - {}", error, description)))
+            }
         }
     }
 
@@ -625,7 +625,7 @@ impl AtpBackedAuthorizationServer {
         let client = storage
             .get_client(&request.client_id)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidClient("Client not found".to_string()))?;
 
         // Validate redirect URI

@@ -157,7 +157,7 @@ where
                 create_oauth_error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "server_error",
-                    &format!("Storage error: {}", e),
+                    &e.to_string(),
                 )
             })?
             .ok_or_else(|| {

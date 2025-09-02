@@ -96,7 +96,7 @@ pub async fn get_atprotocol_session_with_refresh(
         .await?;
 
     if sessions.is_empty() {
-        return Err("No sessions found for the given DID and session_id".into());
+        return Err("ATProtocol OAuth session not found for DID and session_id".into());
     }
 
     // Use the most recent session (highest iteration)
@@ -104,7 +104,7 @@ pub async fn get_atprotocol_session_with_refresh(
 
     // Check if session has an exchange error
     if let Some(ref exchange_error) = session.exchange_error {
-        return Err(format!("Session has exchange error: {}", exchange_error).into());
+        return Err(format!("ATProtocol OAuth session exchange error: {}", exchange_error).into());
     }
 
     // Check if token needs refreshing
@@ -178,8 +178,8 @@ pub async fn refresh_session(
                 .session_storage()
                 .store_session(&new_session)
                 .await
-                .map_err(|e| format!("Failed to store session with error: {}", e))?;
-            return Err("DID document not found".into());
+                .map_err(|e| format!("ATProtocol OAuth session storage failed: {}", e))?;
+            return Err("ATProtocol DID document not found".into());
         }
         Err(e) => {
             new_session.exchange_error = Some(format!("Failed to get DID document: {}", e));
@@ -187,8 +187,8 @@ pub async fn refresh_session(
                 .session_storage()
                 .store_session(&new_session)
                 .await
-                .map_err(|e| format!("Failed to store session with error: {}", e))?;
-            return Err(format!("Failed to get DID document: {}", e).into());
+                .map_err(|e| format!("ATProtocol OAuth session storage failed: {}", e))?;
+            return Err(format!("ATProtocol DID document retrieval failed: {}", e).into());
         }
     };
 

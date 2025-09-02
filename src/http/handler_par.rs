@@ -87,7 +87,7 @@ pub async fn pushed_authorization_request_handler(
         Err(e) => {
             let error_response = json!({
                 "error": "server_error",
-                "error_description": format!("Storage error: {:?}", e)
+                "error_description": e.to_string()
             });
             return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
         }
