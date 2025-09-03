@@ -386,8 +386,11 @@ impl TryFrom<Option<String>> for OAuthSupportedScopes {
             return Ok(Self(scopes));
         }
 
+        // Apply compat_scopes to normalize scope format before parsing
+        let normalized_value = crate::oauth::scope_validation::compat_scopes(&value);
+        
         // Parse the provided scopes
-        let scopes = Scope::parse_multiple_reduced(&value)
+        let scopes = Scope::parse_multiple(&normalized_value)
             .map_err(|e| ConfigError::InvalidScope(format!("Failed to parse scopes: {}", e)))?;
 
         // Validate scope requirements

@@ -50,12 +50,15 @@ pub async fn get_userinfo_handler(
     // Parse the access token scopes into Scope objects
     let scopes = match access_token.scope {
         Some(ref scope_str) => {
+            // Apply compat_scopes to normalize scope format before parsing
+            let normalized_scope = crate::oauth::scope_validation::compat_scopes(scope_str);
+            
             // Parse all scopes at once using Scope::parse_multiple
-            match Scope::parse_multiple(scope_str) {
+            match Scope::parse_multiple(&normalized_scope) {
                 Ok(parsed_scopes) => parsed_scopes.into_iter().collect(),
                 Err(e) => {
                     // If parsing fails, log and use empty set
-                    tracing::debug!("Failed to parse scopes '{}': {}", scope_str, e);
+                    tracing::debug!("Failed to parse scopes '{}': {}", normalized_scope, e);
                     std::collections::HashSet::new()
                 }
             }

@@ -298,11 +298,6 @@ pub async fn build_openid_claims_with_document_info(
     // Check for required ATProtocol base scope
     let has_atproto = scopes.iter().any(|s| matches!(s, Scope::Atproto));
 
-    // Check for ATProtocol scopes that grant specific capabilities
-    let has_transition_generic = scopes
-        .iter()
-        .any(|s| matches!(s, Scope::Transition(TransitionScope::Generic)));
-
     // Check for transition:email (deprecated but still supported)
     let has_transition_email = scopes
         .iter()
@@ -324,8 +319,7 @@ pub async fn build_openid_claims_with_document_info(
     // Profile can be read if:
     // - The 'profile' scope is requested AND
     // - The 'atproto' scope is present (required) AND
-    // - The 'transition:generic' scope grants profile read capability
-    let can_provide_profile = has_profile_scope && has_atproto && has_transition_generic;
+    let can_provide_profile = has_profile_scope && has_atproto;
 
     // Email can be read if:
     // - The 'email' scope is requested AND

@@ -1,5 +1,6 @@
 //! Handles GET /oauth-client-metadata.json - Provides ATProtocol OAuth client metadata per RFC 7591
 
+use atproto_oauth::scopes::Scope;
 use atproto_oauth_axum::{handler_metadata::handle_oauth_metadata, state::OAuthClientConfig};
 use axum::{extract::State, response::IntoResponse};
 
@@ -14,12 +15,26 @@ pub async fn handle_atpoauth_client_metadata(
     State(app_state): State<AppState>,
 ) -> impl IntoResponse {
     // Convert AppState configuration to OAuthClientConfig
-    // Use configured server scopes
-    let scopes = app_state
+    // Filter scopes to only include ATProtocol-compatible scopes for client metadata
+    // Parse the configured scopes
+    let all_scopes = app_state
         .config
         .oauth_supported_scopes
-        .as_strings()
-        .join(" ");
+        .as_ref()
+        .clone();
+    
+    // Filter the scopes using the same function as in atprotocol_bridge
+    // This removes non-ATProtocol scopes and validates requirements
+    let filtered_scopes = match crate::oauth::scope_validation::filter_atprotocol_scopes(&all_scopes) {
+        Ok(scopes) => scopes,
+        Err(_) => {
+            // If filtering fails (e.g., missing required scopes), default to just atproto
+            vec![Scope::Atproto]
+        }
+    };
+    
+    // Serialize the filtered scopes
+    let scopes = Scope::serialize_multiple(&filtered_scopes);
 
     let oauth_client_config = OAuthClientConfig {
         client_id: format!(

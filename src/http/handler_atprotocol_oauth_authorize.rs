@@ -174,11 +174,14 @@ async fn process_authorization_query(
         None
     };
 
+    // Apply compat_scopes to normalize scope format if present
+    let normalized_scope = query.scope.as_ref().map(|s| crate::oauth::scope_validation::compat_scopes(s));
+    
     let request = AuthorizationRequest {
         response_type: vec![crate::oauth::types::ResponseType::Code],
         client_id: query.client_id.clone(),
         redirect_uri,
-        scope: query.scope.clone(),
+        scope: normalized_scope,
         state: query.state.clone(),
         code_challenge: query.code_challenge.clone(),
         code_challenge_method: query.code_challenge_method.clone(),

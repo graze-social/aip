@@ -440,6 +440,9 @@ pub(crate) fn validate_scope(scope: &str) -> bool {
                 || c == '='
                 || c == '#'
                 || c == '.'
+                || c == '?'
+                || c == '*'
+                || c == '/'
         })
     })
 }

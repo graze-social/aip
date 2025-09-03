@@ -3,6 +3,11 @@
 use atproto_oauth::scopes::{AccountScope, Scope, TransitionScope};
 use crate::errors::OAuthError;
 
+
+pub fn compat_scopes(scopes: &str) -> String {
+    scopes.replace("atproto:", "")
+}
+
 /// Validate that scopes contain required AT Protocol scopes for OAuth operations.
 /// 
 /// This function ensures:

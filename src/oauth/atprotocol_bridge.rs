@@ -322,8 +322,11 @@ impl AtpBackedAuthorizationServer {
         // Create OAuth request state for ATProtocol workflow
         // Parse, validate, and filter scopes for AT Protocol OAuth
         let filtered_scope = if let Some(ref original_scope) = request.scope {
+            // Apply compat_scopes to normalize scope format before parsing
+            let normalized_scope = crate::oauth::scope_validation::compat_scopes(original_scope);
+            
             // Parse the scopes using Scope::parse_multiple
-            let scopes = Scope::parse_multiple(original_scope)
+            let scopes = Scope::parse_multiple(&normalized_scope)
                 .map_err(|e| OAuthError::InvalidScope(format!("Failed to parse scopes: {}", e)))?;
 
             // Validate and filter the scopes for AT Protocol OAuth
