@@ -1,7 +1,7 @@
 //! Environment-based configuration types for AIP server runtime settings.
 
 use anyhow::Result;
-use atproto_identity::key::{KeyData, identify_key};
+use atproto_identity::key::{KeyData, identify_key, generate_key, KeyType};
 use std::time::Duration;
 
 use crate::errors::ConfigError;
@@ -326,18 +326,17 @@ impl TryFrom<Option<String>> for PrivateKeys {
     type Error = anyhow::Error;
 
     fn try_from(value: Option<String>) -> Result<Self, Self::Error> {
+        eprintln!("PrivateKeys::try_from called with value: {:?}", value);
         match value {
             None => {
                 // Generate a new P-256 private key if no keys are provided
-                // let key = generate_key(KeyType::P256Private)?;
-                // Ok(Self(vec![key]))
-                unreachable!()
+                let key = generate_key(KeyType::P256Private)?;
+                Ok(Self(vec![key]))
             }
             Some(value) if value.is_empty() => {
                 // Generate a new P-256 private key if no keys are provided
-                // let key = generate_key(KeyType::P256Private)?;
-                // Ok(Self(vec![key]))
-                unreachable!()
+                let key = generate_key(KeyType::P256Private)?;
+                Ok(Self(vec![key]))
             }
             Some(value) => {
                 // Parse semicolon-separated list of KeyData DID strings
@@ -349,9 +348,8 @@ impl TryFrom<Option<String>> for PrivateKeys {
 
                 if keys.is_empty() {
                     // Generate a new P-256 private key if parsing resulted in empty list
-                    // let key = generate_key(KeyType::P256Private)?;
-                    // Ok(Self(vec![key]))
-                    unreachable!()
+                    let key = generate_key(KeyType::P256Private)?;
+                    Ok(Self(vec![key]))
                 } else {
                     Ok(Self(keys))
                 }
