@@ -36,6 +36,48 @@ pub struct AppPasswordResponse {
     pub timestamp: String,
 }
 
+/// Check if app password exists
+/// GET /api/atprotocol/app-password
+///
+/// Returns 204 No Content if an app password exists for the authenticated user
+/// and the OAuth client, or 404 Not Found if it doesn't exist.
+pub async fn get_app_password_handler(
+    State(state): State<AppState>,
+    ExtractedAuth(access_token): ExtractedAuth,
+) -> Result<StatusCode, (StatusCode, Json<Value>)> {
+    // Extract DID from the access token
+    let did = access_token.user_id.as_ref().ok_or_else(|| {
+        let error_response = json!({
+            "error": "invalid_token",
+            "error_description": "Token missing user_id (DID)"
+        });
+        (StatusCode::UNAUTHORIZED, Json(error_response))
+    })?;
+
+    // Check if app password exists
+    let existing = state
+        .oauth_storage
+        .get_app_password(&access_token.client_id, did)
+        .await
+        .map_err(|e| {
+            let error_response = json!({
+                "error": "server_error",
+                "error_description": format!("Failed to check app password: {}", e)
+            });
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+        })?;
+
+    if existing.is_some() {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        let error_response = json!({
+            "error": "not_found",
+            "error_description": "No app password found for this client and user"
+        });
+        Err((StatusCode::NOT_FOUND, Json(error_response)))
+    }
+}
+
 /// Create or update app password
 /// POST /api/atprotocol/app-password
 ///
