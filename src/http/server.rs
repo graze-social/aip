@@ -54,8 +54,7 @@ pub fn build_router(ctx: AppState) -> Router {
         .route("/userinfo", get(get_userinfo_handler))
         .route("/userinfo", post(get_userinfo_handler))
         .route("/par", post(pushed_authorization_request_handler))
-        .route("/atp/callback", get(handle_atpoauth_callback))
-        .route("/atp/client-metadata", get(handle_atpoauth_client_metadata));
+        .route("/atp/callback", get(handle_atpoauth_callback));
 
     // Conditionally add client API endpoints
     if ctx.config.enable_client_api {
@@ -119,6 +118,10 @@ pub fn build_router(ctx: AppState) -> Router {
         .nest("/api", protected_api_routes)
         .nest("/oauth", oauth_routes)
         .nest("/.well-known", well_known_routes)
+        .route(
+            crate::config::ATPROTO_CLIENT_METADATA_PATH,
+            get(handle_atpoauth_client_metadata),
+        )
         .route(
             "/xrpc/tools.graze.aip.clients.Update",
             post(xrpc_clients_update_handler),
@@ -203,7 +206,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),

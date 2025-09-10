@@ -174,11 +174,14 @@ async fn process_authorization_query(
         None
     };
 
+    // Apply compat_scopes to normalize scope format if present
+    let normalized_scope = query.scope.as_ref().map(|s| crate::oauth::scope_validation::compat_scopes(s));
+    
     let request = AuthorizationRequest {
         response_type: vec![crate::oauth::types::ResponseType::Code],
         client_id: query.client_id.clone(),
         redirect_uri,
-        scope: query.scope.clone(),
+        scope: normalized_scope,
         state: query.state.clone(),
         code_challenge: query.code_challenge.clone(),
         code_challenge_method: query.code_challenge_method.clone(),
@@ -190,7 +193,7 @@ async fn process_authorization_query(
     if let Some(ref requested_scope) = request.scope {
         let requested_scopes = crate::oauth::types::parse_scope(requested_scope);
         let supported_scopes =
-            crate::oauth::types::parse_scope(&config.oauth_supported_scopes.as_ref().join(" "));
+            crate::oauth::types::parse_scope(&config.oauth_supported_scopes.as_strings().join(" "));
 
         if !requested_scopes.is_subset(&supported_scopes) {
             return Err(serde_json::json!({
@@ -284,7 +287,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
@@ -312,7 +315,7 @@ mod tests {
             client_id: "test-client".to_string(),
             redirect_uri: Some("https://example.com/callback".to_string()),
             response_type: Some("code".to_string()),
-            scope: Some("read write".to_string()),
+            scope: Some("atproto transition:generic".to_string()),
             state: Some("test-state".to_string()),
             code_challenge: None,
             code_challenge_method: None,
@@ -346,7 +349,7 @@ mod tests {
             client_id: "test-client".to_string(),
             redirect_uri: Some("https://example.com/callback".to_string()),
             response_type: Some("code".to_string()),
-            scope: Some("read".to_string()),
+            scope: Some("atproto".to_string()),
             state: Some("test-state".to_string()),
             code_challenge: Some("test-challenge".to_string()),
             code_challenge_method: Some("S256".to_string()),

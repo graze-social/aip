@@ -58,7 +58,7 @@ impl AuthorizationServer {
             .storage
             .get_client(&request.client_id)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidClient("Client not found".to_string()))?;
 
         // Validate redirect URI
@@ -198,7 +198,7 @@ impl AuthorizationServer {
             .storage
             .consume_code(code)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidGrant("Invalid authorization code".to_string()))?;
 
         // Verify redirect URI matches
@@ -213,7 +213,7 @@ impl AuthorizationServer {
             .storage
             .get_client(&auth_code.client_id)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidClient("Client not found".to_string()))?;
 
         // Authenticate client
@@ -334,7 +334,7 @@ impl AuthorizationServer {
             .storage
             .get_client(client_id)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidClient("Client not found".to_string()))?;
 
         // Authenticate client
@@ -420,7 +420,7 @@ impl AuthorizationServer {
             .storage
             .consume_refresh_token(refresh_token)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidGrant("Invalid refresh token".to_string()))?;
 
         // Get client
@@ -428,7 +428,7 @@ impl AuthorizationServer {
             .storage
             .get_client(&refresh_token_record.client_id)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidClient("Client not found".to_string()))?;
 
         // Authenticate client
@@ -438,7 +438,7 @@ impl AuthorizationServer {
             .storage
             .get_token(&refresh_token_record.access_token)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidGrant("Invalid refresh token".to_string()))?;
 
         let session_iteration = old_access_token
