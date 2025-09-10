@@ -431,8 +431,19 @@ pub(crate) fn generate_client_id() -> String {
 pub(crate) fn validate_scope(scope: &str) -> bool {
     // Basic scope validation - contains only valid characters
     scope.split_whitespace().all(|s| {
-        s.chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == ':')
+        s.chars().all(|c| {
+            c.is_alphanumeric()
+                || c == '_'
+                || c == '-'
+                || c == ':'
+                || c == '?'
+                || c == '='
+                || c == '#'
+                || c == '.'
+                || c == '?'
+                || c == '*'
+                || c == '/'
+        })
     })
 }
 
@@ -449,12 +460,12 @@ pub(crate) fn parse_response_type(response_type_str: &str) -> Result<Vec<Respons
         match part {
             "code" => response_types.push(ResponseType::Code),
             "id_token" => response_types.push(ResponseType::IdToken),
-            _ => return Err(format!("Invalid response type: {}", part)),
+            _ => return Err(format!("OAuth response type '{}' not supported", part)),
         }
     }
 
     if response_types.is_empty() {
-        return Err("Empty response type".to_string());
+        return Err("OAuth response type cannot be empty".to_string());
     }
 
     Ok(response_types)

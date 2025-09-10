@@ -6,10 +6,10 @@ use serde_json::{Value, json};
 use super::context::AppState;
 use crate::http::middleware_auth::ExtractedAuth;
 use crate::oauth::openid::OpenIDClaims;
-use crate::oauth::types::parse_scope;
 use crate::oauth::utils_atprotocol_oauth::{
     build_openid_claims_with_document_info, get_atprotocol_session_with_refresh,
 };
+use atproto_oauth::scopes::Scope;
 
 /// Get OpenID Connect UserInfo
 /// GET /oauth/userinfo
@@ -47,9 +47,22 @@ pub async fn get_userinfo_handler(
         }
     };
 
-    // Parse the access token scopes
+    // Parse the access token scopes into Scope objects
     let scopes = match access_token.scope {
-        Some(ref scope_str) => parse_scope(scope_str),
+        Some(ref scope_str) => {
+            // Apply compat_scopes to normalize scope format before parsing
+            let normalized_scope = crate::oauth::scope_validation::compat_scopes(scope_str);
+            
+            // Parse all scopes at once using Scope::parse_multiple
+            match Scope::parse_multiple(&normalized_scope) {
+                Ok(parsed_scopes) => parsed_scopes.into_iter().collect(),
+                Err(e) => {
+                    // If parsing fails, log and use empty set
+                    tracing::debug!("Failed to parse scopes '{}': {}", normalized_scope, e);
+                    std::collections::HashSet::new()
+                }
+            }
+        }
         None => std::collections::HashSet::new(),
     };
 
@@ -167,7 +180,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "openid read write atproto:atproto".to_string(),
+                "openid atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
@@ -281,7 +294,7 @@ mod tests {
             refresh_token: Some("test-atp-refresh-token".to_string()),
             access_token_created_at: Some(Utc::now()),
             access_token_expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
-            access_token_scopes: Some(vec!["atproto:atproto".to_string()]),
+            access_token_scopes: Some(vec!["atproto".to_string()]),
             session_exchanged_at: Some(Utc::now()),
             exchange_error: None,
             iteration: 1,
@@ -397,7 +410,7 @@ mod tests {
             refresh_token: Some("test-atp-refresh-token".to_string()),
             access_token_created_at: Some(Utc::now()),
             access_token_expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
-            access_token_scopes: Some(vec!["atproto:atproto".to_string()]),
+            access_token_scopes: Some(vec!["atproto".to_string()]),
             session_exchanged_at: Some(Utc::now()),
             exchange_error: None,
             iteration: 1,

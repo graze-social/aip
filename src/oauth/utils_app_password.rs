@@ -75,18 +75,18 @@ pub async fn create_app_password_session(
         .json(&request_body)
         .send()
         .await
-        .map_err(|e| format!("Failed to send createSession request: {}", e))?;
+        .map_err(|e| format!("ATProtocol createSession request failed: {}", e))?;
 
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("createSession failed with status {}: {}", status, body).into());
+        return Err(format!("ATProtocol createSession failed with status {}: {}", status, body).into());
     }
 
     let session_response: CreateSessionResponse = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse createSession response: {}", e))?;
+        .map_err(|e| format!("ATProtocol createSession response parse error: {}", e))?;
 
     let now = Utc::now();
 
@@ -159,8 +159,8 @@ pub async fn refresh_app_password_session(
                 .oauth_storage
                 .store_app_password_session(&new_session)
                 .await
-                .map_err(|e| format!("Failed to store session with error: {}", e))?;
-            return Err("No refresh token available".into());
+                .map_err(|e| format!("App-password session storage failed: {}", e))?;
+            return Err("App-password session missing refresh token".into());
         }
     };
 
@@ -191,19 +191,19 @@ pub async fn refresh_app_password_session(
                     }
                     Err(e) => {
                         new_session.exchange_error =
-                            Some(format!("Failed to parse refresh response: {}", e));
+                            Some(format!("ATProtocol refreshSession response parse error: {}", e));
                     }
                 }
             } else {
                 let status = response.status();
                 let body = response.text().await.unwrap_or_default();
                 new_session.exchange_error =
-                    Some(format!("Refresh failed with status {}: {}", status, body));
+                    Some(format!("ATProtocol refreshSession failed with status {}: {}", status, body));
             }
         }
         Err(e) => {
             // Store the refresh error in the new session
-            new_session.exchange_error = Some(format!("Refresh request failed: {}", e));
+            new_session.exchange_error = Some(format!("ATProtocol refreshSession network error: {}", e));
         }
     }
 
@@ -250,7 +250,7 @@ pub async fn get_app_password_session_with_refresh(
 
     // Check if session has an exchange error
     if let Some(ref exchange_error) = session.exchange_error {
-        return Err(format!("Session has exchange error: {}", exchange_error).into());
+        return Err(format!("App-password session exchange error: {}", exchange_error).into());
     }
 
     // Check if token needs refreshing
@@ -392,7 +392,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),

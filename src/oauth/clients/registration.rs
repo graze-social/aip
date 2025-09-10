@@ -179,7 +179,7 @@ impl ClientRegistrationService {
             .get_client(client_id)
             .await
             .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(format!("Storage error: {:?}", e))
+                ClientRegistrationError::InvalidClientMetadata(e.to_string())
             })?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
@@ -235,7 +235,7 @@ impl ClientRegistrationService {
             .get_client(client_id)
             .await
             .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(format!("Storage error: {:?}", e))
+                ClientRegistrationError::InvalidClientMetadata(e.to_string())
             })?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
@@ -307,7 +307,7 @@ impl ClientRegistrationService {
             .get_client(client_id)
             .await
             .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(format!("Storage error: {:?}", e))
+                ClientRegistrationError::InvalidClientMetadata(e.to_string())
             })?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
@@ -383,16 +383,31 @@ impl ClientRegistrationService {
                 )));
             }
 
+            let requested_scopes = parse_scope(scope);
+
+            // Parse the scope string into Scope instances for validation
+            let parsed_scopes = atproto_oauth::scopes::Scope::parse_multiple_reduced(scope)
+                .map_err(|e| {
+                    ClientRegistrationError::InvalidClientMetadata(format!(
+                        "Invalid scope format: {}",
+                        e
+                    ))
+                })?;
+
+            // Validate scope requirements (openid and email scopes must have required AT Protocol scopes)
+            crate::config::OAuthSupportedScopes::validate_scope_requirements(&parsed_scopes)
+                .map_err(|e| ClientRegistrationError::InvalidClientMetadata(e.to_string()))?;
+
             // Validate against server's supported scopes if provided
             if let Some(supported_scopes) = supported_scopes {
-                let requested_scopes = parse_scope(scope);
-                let server_supported_scopes = parse_scope(&supported_scopes.as_ref().join(" "));
+                let supported_scope_strings = supported_scopes.as_strings();
+                let server_supported_scopes = parse_scope(&supported_scope_strings.join(" "));
 
                 if !requested_scopes.is_subset(&server_supported_scopes) {
                     return Err(ClientRegistrationError::InvalidClientMetadata(format!(
                         "Requested scope '{}' contains unsupported scopes. Supported scopes: {}",
                         scope,
-                        supported_scopes.as_ref().join(" ")
+                        supported_scope_strings.join(" ")
                     )));
                 }
             }
@@ -473,7 +488,7 @@ mod tests {
             redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
             grant_types: Some(vec![GrantType::AuthorizationCode]),
             response_types: Some(vec![ResponseType::Code]),
-            scope: Some("read write".to_string()),
+            scope: Some("atproto transition:generic transition:email".to_string()),
             token_endpoint_auth_method: Some(ClientAuthMethod::ClientSecretBasic),
             jwks: None,
             jwks_uri: None,
@@ -564,9 +579,10 @@ mod tests {
         );
 
         // Test with supported scopes
-        let supported_scopes =
-            crate::config::OAuthSupportedScopes::try_from("read write atproto:atproto".to_string())
-                .unwrap();
+        let supported_scopes = crate::config::OAuthSupportedScopes::try_from(
+            "atproto transition:generic transition:email".to_string(),
+        )
+        .unwrap();
 
         // Test valid scope within supported scopes
         let valid_request = ClientRegistrationRequest {
@@ -574,7 +590,7 @@ mod tests {
             redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
             grant_types: None,
             response_types: None,
-            scope: Some("read write".to_string()),
+            scope: Some("atproto transition:generic".to_string()),
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
@@ -592,7 +608,7 @@ mod tests {
             redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
             grant_types: None,
             response_types: None,
-            scope: Some("read write admin".to_string()), // 'admin' not in supported scopes
+            scope: Some("atproto transition:generic admin".to_string()), // 'admin' not in supported scopes
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
@@ -608,6 +624,279 @@ mod tests {
                 error,
                 ClientRegistrationError::InvalidClientMetadata(_)
             ));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openid_scope_validation() {
+        let storage = Arc::new(MemoryOAuthStorage::new());
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+            true,
+        );
+
+        // Test with supported scopes including required AT Protocol scopes
+        let supported_scopes = crate::config::OAuthSupportedScopes::try_from(
+            "openid email atproto transition:generic transition:email".to_string(),
+        )
+        .unwrap();
+
+        // Test 1: openid scope with transition:generic should succeed
+        let valid_request1 = ClientRegistrationRequest {
+            client_name: Some("Test Client".to_string()),
+            redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
+            grant_types: None,
+            response_types: None,
+            scope: Some("openid atproto transition:generic".to_string()),
+            token_endpoint_auth_method: None,
+            jwks: None,
+            jwks_uri: None,
+            metadata: serde_json::Value::Null,
+        };
+
+        let result = service
+            .register_client_with_supported_scopes(valid_request1, Some(&supported_scopes))
+            .await;
+        assert!(
+            result.is_ok(),
+            "openid with atproto transition:generic should succeed"
+        );
+
+        // Test 2: openid scope with atproto but no transition:generic should fail
+        let invalid_request2 = ClientRegistrationRequest {
+            client_name: Some("Test Client".to_string()),
+            redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
+            grant_types: None,
+            response_types: None,
+            scope: Some("openid atproto".to_string()),
+            token_endpoint_auth_method: None,
+            jwks: None,
+            jwks_uri: None,
+            metadata: serde_json::Value::Null,
+        };
+
+        let result = service
+            .register_client_with_supported_scopes(invalid_request2, Some(&supported_scopes))
+            .await;
+        assert!(
+            result.is_ok(),
+            "openid with only atproto should succeed (no transition:generic required)"
+        );
+
+        // Test 3: openid scope without required AT Protocol scopes should fail
+        let invalid_request = ClientRegistrationRequest {
+            client_name: Some("Test Client".to_string()),
+            redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
+            grant_types: None,
+            response_types: None,
+            scope: Some("openid".to_string()),
+            token_endpoint_auth_method: None,
+            jwks: None,
+            jwks_uri: None,
+            metadata: serde_json::Value::Null,
+        };
+
+        let result = service
+            .register_client_with_supported_scopes(invalid_request, Some(&supported_scopes))
+            .await;
+        assert!(
+            result.is_err(),
+            "openid without required AT Protocol scopes should fail"
+        );
+        if let Err(error) = result {
+            let error_msg = error.to_string();
+            assert!(
+                error_msg.contains("atproto") && error_msg.contains("required"),
+                "Error should mention atproto scope requirement. Got: {}",
+                error_msg
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_email_scope_validation() {
+        let storage = Arc::new(MemoryOAuthStorage::new());
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+            true,
+        );
+
+        // Test with supported scopes including required AT Protocol scopes
+        let supported_scopes = crate::config::OAuthSupportedScopes::try_from(
+            "openid email atproto transition:generic transition:email account:email?action=read".to_string(),
+        )
+        .unwrap();
+
+        // Test 1: email scope with openid and transition:email should succeed
+        let valid_request1 = ClientRegistrationRequest {
+            client_name: Some("Test Client".to_string()),
+            redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
+            grant_types: None,
+            response_types: None,
+            scope: Some("openid email atproto transition:email".to_string()),
+            token_endpoint_auth_method: None,
+            jwks: None,
+            jwks_uri: None,
+            metadata: serde_json::Value::Null,
+        };
+
+        let result = service
+            .register_client_with_supported_scopes(valid_request1, Some(&supported_scopes))
+            .await;
+        assert!(
+            result.is_ok(),
+            "email with openid and transition:email should succeed"
+        );
+
+        // Test 2: email scope with account:email (parsed from account:email?action=read) should succeed
+        let valid_request2 = ClientRegistrationRequest {
+            client_name: Some("Test Client".to_string()),
+            redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
+            grant_types: None,
+            response_types: None,
+            scope: Some("openid email atproto account:email".to_string()),
+            token_endpoint_auth_method: None,
+            jwks: None,
+            jwks_uri: None,
+            metadata: serde_json::Value::Null,
+        };
+
+        let result = service
+            .register_client_with_supported_scopes(valid_request2, Some(&supported_scopes))
+            .await;
+        assert!(
+            result.is_ok(),
+            "email with openid and account:email should succeed. Got error: {:?}",
+            result.as_ref().err()
+        );
+
+        // Test 3: email scope without required AT Protocol scopes should fail
+        let invalid_request = ClientRegistrationRequest {
+            client_name: Some("Test Client".to_string()),
+            redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
+            grant_types: None,
+            response_types: None,
+            scope: Some("email".to_string()),
+            token_endpoint_auth_method: None,
+            jwks: None,
+            jwks_uri: None,
+            metadata: serde_json::Value::Null,
+        };
+
+        let result = service
+            .register_client_with_supported_scopes(invalid_request, Some(&supported_scopes))
+            .await;
+        assert!(
+            result.is_err(),
+            "email without required AT Protocol scopes should fail"
+        );
+        if let Err(error) = result {
+            let error_msg = error.to_string();
+            assert!(
+                error_msg.contains("atproto") && error_msg.contains("required"),
+                "Error should mention atproto scope requirement. Got: {}",
+                error_msg
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_combined_openid_email_scope_validation() {
+        let storage = Arc::new(MemoryOAuthStorage::new());
+        let service = ClientRegistrationService::new(
+            storage,
+            chrono::Duration::days(1),
+            chrono::Duration::days(14),
+            true,
+        );
+
+        // Test with supported scopes including required AT Protocol scopes
+        let supported_scopes = crate::config::OAuthSupportedScopes::try_from(
+            "openid email atproto transition:generic transition:email".to_string(),
+        )
+        .unwrap();
+
+        // Test: both openid and email with all required scopes should succeed
+        let valid_request = ClientRegistrationRequest {
+            client_name: Some("Test Client".to_string()),
+            redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
+            grant_types: None,
+            response_types: None,
+            scope: Some("openid email atproto transition:generic transition:email".to_string()),
+            token_endpoint_auth_method: None,
+            jwks: None,
+            jwks_uri: None,
+            metadata: serde_json::Value::Null,
+        };
+
+        let result = service
+            .register_client_with_supported_scopes(valid_request, Some(&supported_scopes))
+            .await;
+        assert!(
+            result.is_ok(),
+            "openid and email with all required scopes should succeed"
+        );
+
+        // Test: openid and email with transition:generic should fail (doesn't grant email)
+        let invalid_request2 = ClientRegistrationRequest {
+            client_name: Some("Test Client".to_string()),
+            redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
+            grant_types: None,
+            response_types: None,
+            scope: Some("openid email atproto transition:generic".to_string()),
+            token_endpoint_auth_method: None,
+            jwks: None,
+            jwks_uri: None,
+            metadata: serde_json::Value::Null,
+        };
+
+        let result = service
+            .register_client_with_supported_scopes(invalid_request2, Some(&supported_scopes))
+            .await;
+        assert!(
+            result.is_err(),
+            "openid and email with only transition:generic should fail (doesn't grant email)"
+        );
+        if let Err(error) = result {
+            let error_msg = error.to_string();
+            assert!(
+                error_msg.contains("email") && error_msg.contains("requires"),
+                "Error should mention email requirements. Got: {}",
+                error_msg
+            );
+        }
+        
+        // Test: openid and email without any transition scopes should fail
+        let invalid_request = ClientRegistrationRequest {
+            client_name: Some("Test Client".to_string()),
+            redirect_uris: Some(vec!["https://example.com/callback".to_string()]),
+            grant_types: None,
+            response_types: None,
+            scope: Some("openid email atproto".to_string()),
+            token_endpoint_auth_method: None,
+            jwks: None,
+            jwks_uri: None,
+            metadata: serde_json::Value::Null,
+        };
+
+        let result = service
+            .register_client_with_supported_scopes(invalid_request, Some(&supported_scopes))
+            .await;
+        assert!(
+            result.is_err(),
+            "openid and email without transition scopes should fail"
+        );
+        if let Err(error) = result {
+            let error_msg = error.to_string();
+            assert!(
+                error_msg.contains("email") && (error_msg.contains("read access") || error_msg.contains("transition:email")),
+                "Error should mention email requires read access capability. Got: {}",
+                error_msg
+            );
         }
     }
 }

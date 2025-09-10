@@ -9,6 +9,7 @@ use crate::oauth::{AtpBackedAuthorizationServer, auth_server::AuthorizationServe
 use atproto_client::client::{DPoPAuth, get_dpop_json_with_headers};
 use atproto_identity::key::identify_key;
 use atproto_identity::model::Document;
+use atproto_oauth::scopes::{AccountScope, Scope, TransitionScope};
 use atproto_oauth_axum::state::OAuthClientConfig;
 use chrono::{Duration, Utc};
 use reqwest::header::HeaderMap;
@@ -30,7 +31,11 @@ pub async fn create_atp_backed_server(
     let http_client = reqwest::Client::new();
 
     let client_config = OAuthClientConfig {
-        client_id: format!("{}/oauth/atp/client-metadata", state.config.external_base),
+        client_id: format!(
+            "{}{}",
+            state.config.external_base,
+            crate::config::ATPROTO_CLIENT_METADATA_PATH
+        ),
         redirect_uris: format!("{}/oauth/atp/callback", state.config.external_base),
         jwks_uri: Some(format!(
             "{}/.well-known/jwks.json",
@@ -42,7 +47,7 @@ pub async fn create_atp_backed_server(
         logo_uri: None,
         tos_uri: None,
         policy_uri: None,
-        scope: Some(state.config.oauth_supported_scopes.as_ref().join(" ")),
+        scope: Some(state.config.oauth_supported_scopes.as_strings().join(" ")),
     };
 
     Ok(AtpBackedAuthorizationServer::new(
@@ -91,7 +96,7 @@ pub async fn get_atprotocol_session_with_refresh(
         .await?;
 
     if sessions.is_empty() {
-        return Err("No sessions found for the given DID and session_id".into());
+        return Err("ATProtocol OAuth session not found for DID and session_id".into());
     }
 
     // Use the most recent session (highest iteration)
@@ -99,7 +104,7 @@ pub async fn get_atprotocol_session_with_refresh(
 
     // Check if session has an exchange error
     if let Some(ref exchange_error) = session.exchange_error {
-        return Err(format!("Session has exchange error: {}", exchange_error).into());
+        return Err(format!("ATProtocol OAuth session exchange error: {}", exchange_error).into());
     }
 
     // Check if token needs refreshing
@@ -173,8 +178,8 @@ pub async fn refresh_session(
                 .session_storage()
                 .store_session(&new_session)
                 .await
-                .map_err(|e| format!("Failed to store session with error: {}", e))?;
-            return Err("DID document not found".into());
+                .map_err(|e| format!("ATProtocol OAuth session storage failed: {}", e))?;
+            return Err("ATProtocol DID document not found".into());
         }
         Err(e) => {
             new_session.exchange_error = Some(format!("Failed to get DID document: {}", e));
@@ -182,8 +187,8 @@ pub async fn refresh_session(
                 .session_storage()
                 .store_session(&new_session)
                 .await
-                .map_err(|e| format!("Failed to store session with error: {}", e))?;
-            return Err(format!("Failed to get DID document: {}", e).into());
+                .map_err(|e| format!("ATProtocol OAuth session storage failed: {}", e))?;
+            return Err(format!("ATProtocol DID document retrieval failed: {}", e).into());
         }
     };
 
@@ -283,17 +288,44 @@ pub async fn build_openid_claims_with_document_info(
     http_client: &reqwest::Client,
     mut claims: OpenIDClaims,
     document: &Document,
-    scopes: &HashSet<String>,
+    scopes: &HashSet<Scope>,
     session: Option<&AtpOAuthSession>,
 ) -> Result<OpenIDClaims, Box<dyn std::error::Error + Send + Sync>> {
-    // Check for standard OAuth scopes
-    let has_profile_scope = scopes.contains("profile");
-    let has_email_scope = scopes.contains("email");
+    // Check what OpenID Connect scopes are requested
+    let has_profile_scope = scopes.iter().any(|s| matches!(s, Scope::Profile));
+    let has_email_scope = scopes.iter().any(|s| matches!(s, Scope::Email));
 
-    // Check for ATProtocol-specific scopes
-    let has_atproto_scopes =
-        scopes.contains("atproto:atproto") && scopes.contains("atproto:transition:generic");
-    let has_atproto_email = scopes.contains("atproto:transition:email");
+    // Check for required ATProtocol base scope
+    let has_atproto = scopes.iter().any(|s| matches!(s, Scope::Atproto));
+
+    // Check for transition:email (deprecated but still supported)
+    let has_transition_email = scopes
+        .iter()
+        .any(|s| matches!(s, Scope::Transition(TransitionScope::Email)));
+
+    // Check if any scope grants email read access using the grants() function
+    let email_read_scope = Scope::Account(AccountScope {
+        resource: atproto_oauth::scopes::AccountResource::Email,
+        action: atproto_oauth::scopes::AccountAction::Read,
+    });
+    let grants_email_read = has_transition_email || scopes.iter().any(|s| s.grants(&email_read_scope));
+    
+    // The 'atproto' scope is required for all AT Protocol operations
+    // Additional transition scopes grant specific capabilities:
+    // - 'transition:generic' grants general read access (profile but NOT email)
+    // - 'transition:email' grants email read access (deprecated)
+    // - 'account:email?action=read' grants email read access (preferred)
+
+    // Profile can be read if:
+    // - The 'profile' scope is requested AND
+    // - The 'atproto' scope is present (required) AND
+    let can_provide_profile = has_profile_scope && has_atproto;
+
+    // Email can be read if:
+    // - The 'email' scope is requested AND
+    // - The 'atproto' scope is present (required) AND
+    // - A scope grants email read capability (checked via grants() function)
+    let can_provide_email = has_email_scope && has_atproto && grants_email_read;
 
     // Always set the DID from the document
     claims = claims.with_did(document.id.clone());
@@ -303,40 +335,33 @@ pub async fn build_openid_claims_with_document_info(
         return Ok(claims);
     }
 
-    // Check if we should proceed based on ATProtocol scope requirements
-    if !has_atproto_scopes {
-        return Ok(claims);
-    }
-
-    // Add profile information if profile scope is present and requirements are met
-    let should_add_profile = has_profile_scope && has_atproto_scopes;
-
-    if should_add_profile {
+    // Add profile information if we can provide it
+    if can_provide_profile {
         let handle = document.handles().map(|h| h.to_string());
         let pds_endpoint = document.pds_endpoints().first().map(|v| v.to_string());
 
         claims = claims.with_name(handle).with_pds_endpoint(pds_endpoint);
     }
 
-    // Add email information if email scope is present and requirements are met
-    let should_add_email = has_email_scope && has_atproto_email;
-
-    if let (true, Some(session)) = (should_add_email, session) {
-        let email = if let (Some(atp_access_token), Some(pds_endpoint)) =
-            (&session.access_token, document.pds_endpoints().first())
-        {
-            fetch_email_from_pds(
-                http_client,
-                atp_access_token,
-                &session.dpop_key,
-                pds_endpoint,
-            )
-            .await?
-        } else {
-            None
-        };
-        if email.is_some() {
-            claims = claims.with_email(email);
+    // Add email information if we can provide it
+    if can_provide_email {
+        if let Some(session) = session {
+            let email = if let (Some(atp_access_token), Some(pds_endpoint)) =
+                (&session.access_token, document.pds_endpoints().first())
+            {
+                fetch_email_from_pds(
+                    http_client,
+                    atp_access_token,
+                    &session.dpop_key,
+                    pds_endpoint,
+                )
+                .await?
+            } else {
+                None
+            };
+            if email.is_some() {
+                claims = claims.with_email(email);
+            }
         }
     }
 
@@ -444,7 +469,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
@@ -526,7 +551,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
@@ -553,7 +578,11 @@ mod tests {
     #[test]
     fn test_atp_oauth_client_config_construction() {
         let external_base = "https://test.example.com";
-        let expected_client_id = format!("{}/oauth/atp/client-metadata", external_base);
+        let expected_client_id = format!(
+            "{}{}",
+            external_base,
+            crate::config::ATPROTO_CLIENT_METADATA_PATH
+        );
         let expected_redirect_uri = format!("{}/oauth/atp/callback", external_base);
         let expected_jwks_uri = format!("{}/.well-known/jwks.json", external_base);
 
@@ -567,9 +596,7 @@ mod tests {
             logo_uri: None,
             tos_uri: None,
             policy_uri: None,
-            scope: Some(
-                "atproto:atproto atproto:transition:generic atproto:transition:email".to_string(),
-            ),
+            scope: Some("atproto transition:generic transition:email".to_string()),
         };
 
         assert_eq!(client_config.client_id, expected_client_id);
