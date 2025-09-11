@@ -178,9 +178,7 @@ impl ClientRegistrationService {
             .storage
             .get_client(client_id)
             .await
-            .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(e.to_string())
-            })?
+            .map_err(|e| ClientRegistrationError::InvalidClientMetadata(e.to_string()))?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
         if let ClientServiceAuth::RegistrationToken(registration_token) = client_service_auth {
@@ -234,9 +232,7 @@ impl ClientRegistrationService {
             .storage
             .get_client(client_id)
             .await
-            .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(e.to_string())
-            })?
+            .map_err(|e| ClientRegistrationError::InvalidClientMetadata(e.to_string()))?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
         if let ClientServiceAuth::RegistrationToken(registration_token) = client_service_auth {
@@ -306,9 +302,7 @@ impl ClientRegistrationService {
             .storage
             .get_client(client_id)
             .await
-            .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(e.to_string())
-            })?
+            .map_err(|e| ClientRegistrationError::InvalidClientMetadata(e.to_string()))?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
         if let ClientServiceAuth::RegistrationToken(registration_token) = client_service_auth {
@@ -727,7 +721,8 @@ mod tests {
 
         // Test with supported scopes including required AT Protocol scopes
         let supported_scopes = crate::config::OAuthSupportedScopes::try_from(
-            "openid email atproto transition:generic transition:email account:email?action=read".to_string(),
+            "openid email atproto transition:generic transition:email account:email?action=read"
+                .to_string(),
         )
         .unwrap();
 
@@ -869,7 +864,7 @@ mod tests {
                 error_msg
             );
         }
-        
+
         // Test: openid and email without any transition scopes should fail
         let invalid_request = ClientRegistrationRequest {
             client_name: Some("Test Client".to_string()),
@@ -893,7 +888,9 @@ mod tests {
         if let Err(error) = result {
             let error_msg = error.to_string();
             assert!(
-                error_msg.contains("email") && (error_msg.contains("read access") || error_msg.contains("transition:email")),
+                error_msg.contains("email")
+                    && (error_msg.contains("read access")
+                        || error_msg.contains("transition:email")),
                 "Error should mention email requires read access capability. Got: {}",
                 error_msg
             );

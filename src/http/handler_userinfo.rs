@@ -52,7 +52,7 @@ pub async fn get_userinfo_handler(
         Some(ref scope_str) => {
             // Apply compat_scopes to normalize scope format before parsing
             let normalized_scope = crate::oauth::scope_validation::compat_scopes(scope_str);
-            
+
             // Parse all scopes at once using Scope::parse_multiple
             match Scope::parse_multiple(&normalized_scope) {
                 Ok(parsed_scopes) => parsed_scopes.into_iter().collect(),

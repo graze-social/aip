@@ -17,22 +17,19 @@ pub async fn handle_atpoauth_client_metadata(
     // Convert AppState configuration to OAuthClientConfig
     // Filter scopes to only include ATProtocol-compatible scopes for client metadata
     // Parse the configured scopes
-    let all_scopes = app_state
-        .config
-        .oauth_supported_scopes
-        .as_ref()
-        .clone();
-    
+    let all_scopes = app_state.config.oauth_supported_scopes.as_ref().clone();
+
     // Filter the scopes using the same function as in atprotocol_bridge
     // This removes non-ATProtocol scopes and validates requirements
-    let filtered_scopes = match crate::oauth::scope_validation::filter_atprotocol_scopes(&all_scopes) {
-        Ok(scopes) => scopes,
-        Err(_) => {
-            // If filtering fails (e.g., missing required scopes), default to just atproto
-            vec![Scope::Atproto]
-        }
-    };
-    
+    let filtered_scopes =
+        match crate::oauth::scope_validation::filter_atprotocol_scopes(&all_scopes) {
+            Ok(scopes) => scopes,
+            Err(_) => {
+                // If filtering fails (e.g., missing required scopes), default to just atproto
+                vec![Scope::Atproto]
+            }
+        };
+
     // Serialize the filtered scopes
     let scopes = Scope::serialize_multiple(&filtered_scopes);
 

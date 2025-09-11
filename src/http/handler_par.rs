@@ -206,8 +206,9 @@ fn validate_and_convert_par_request(
     // Validate scope
     if let Some(ref requested_scope) = request.scope {
         // Apply compat_scopes to normalize scope format before parsing
-        let normalized_requested_scope = crate::oauth::scope_validation::compat_scopes(requested_scope);
-        
+        let normalized_requested_scope =
+            crate::oauth::scope_validation::compat_scopes(requested_scope);
+
         let requested_scopes = crate::oauth::types::parse_scope(&normalized_requested_scope);
         let supported_scopes =
             crate::oauth::types::parse_scope(&config.oauth_supported_scopes.as_strings().join(" "));
@@ -222,7 +223,8 @@ fn validate_and_convert_par_request(
         // Then, validate against client's allowed scopes
         if let Some(ref client_scope) = client.scope {
             // Apply compat_scopes to client scope as well (from database)
-            let normalized_client_scope = crate::oauth::scope_validation::compat_scopes(client_scope);
+            let normalized_client_scope =
+                crate::oauth::scope_validation::compat_scopes(client_scope);
             let allowed_scopes = crate::oauth::types::parse_scope(&normalized_client_scope);
 
             if !requested_scopes.is_subset(&allowed_scopes) {
@@ -252,8 +254,11 @@ fn validate_and_convert_par_request(
     };
 
     // Apply compat_scopes to normalize the scope format before storing
-    let normalized_scope = request.scope.as_ref().map(|s| crate::oauth::scope_validation::compat_scopes(s));
-    
+    let normalized_scope = request
+        .scope
+        .as_ref()
+        .map(|s| crate::oauth::scope_validation::compat_scopes(s));
+
     Ok(AuthorizationRequest {
         response_type: response_types,
         client_id: request.client_id.clone(),

@@ -457,7 +457,9 @@ impl AtpOAuthSessionStorage for MemoryOAuthStorage {
             e.insert(session.clone());
             Ok(())
         } else {
-            Err(StorageError::NotFound("ATProtocol OAuth session not found".to_string()))
+            Err(StorageError::NotFound(
+                "ATProtocol OAuth session not found".to_string(),
+            ))
         }
     }
 
@@ -492,7 +494,9 @@ impl AtpOAuthSessionStorage for MemoryOAuthStorage {
             session.access_token_scopes = access_token_scopes;
             Ok(())
         } else {
-            Err(StorageError::NotFound("ATProtocol OAuth session not found".to_string()))
+            Err(StorageError::NotFound(
+                "ATProtocol OAuth session not found".to_string(),
+            ))
         }
     }
 

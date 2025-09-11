@@ -388,7 +388,7 @@ impl TryFrom<Option<String>> for OAuthSupportedScopes {
 
         // Apply compat_scopes to normalize scope format before parsing
         let normalized_value = crate::oauth::scope_validation::compat_scopes(&value);
-        
+
         // Parse the provided scopes
         let scopes = Scope::parse_multiple(&normalized_value)
             .map_err(|e| ConfigError::InvalidScope(format!("Failed to parse scopes: {}", e)))?;
@@ -538,15 +538,11 @@ mod tests {
         }
 
         // Test 1: Valid scopes with openid (no transition:generic required)
-        let valid_openid =
-            OAuthSupportedScopes::try_from("atproto openid".to_string());
+        let valid_openid = OAuthSupportedScopes::try_from("atproto openid".to_string());
         if let Err(ref e) = valid_openid {
             eprintln!("Test 1 failed with error: {}", e);
         }
-        assert!(
-            valid_openid.is_ok(),
-            "openid with atproto should be valid"
-        );
+        assert!(valid_openid.is_ok(), "openid with atproto should be valid");
 
         // Test 2: Valid scopes with email (requires openid and email capability)
         let valid_email =
@@ -557,12 +553,8 @@ mod tests {
         );
 
         // Test 3: Valid scopes - profile with openid
-        let valid_profile =
-            OAuthSupportedScopes::try_from("atproto openid profile".to_string());
-        assert!(
-            valid_profile.is_ok(),
-            "profile with openid should be valid"
-        );
+        let valid_profile = OAuthSupportedScopes::try_from("atproto openid profile".to_string());
+        assert!(valid_profile.is_ok(), "profile with openid should be valid");
 
         // Test 4: Invalid scopes - email and profile without openid
         let invalid_email = OAuthSupportedScopes::try_from("atproto email profile".to_string());
@@ -581,7 +573,8 @@ mod tests {
         }
 
         // Test 5: Invalid scopes - email without openid
-        let invalid_email_no_openid = OAuthSupportedScopes::try_from("atproto email transition:email".to_string());
+        let invalid_email_no_openid =
+            OAuthSupportedScopes::try_from("atproto email transition:email".to_string());
         assert!(
             invalid_email_no_openid.is_err(),
             "email without openid should be invalid"
@@ -592,8 +585,9 @@ mod tests {
         }
 
         // Test 6: Valid email with account:email?action=read
-        let valid_email_alt =
-            OAuthSupportedScopes::try_from("atproto openid email account:email?action=read".to_string());
+        let valid_email_alt = OAuthSupportedScopes::try_from(
+            "atproto openid email account:email?action=read".to_string(),
+        );
         assert!(
             valid_email_alt.is_ok(),
             "email with openid and account:email?action=read should be valid"

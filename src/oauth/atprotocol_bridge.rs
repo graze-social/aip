@@ -324,21 +324,22 @@ impl AtpBackedAuthorizationServer {
         let filtered_scope = if let Some(ref original_scope) = request.scope {
             // Apply compat_scopes to normalize scope format before parsing
             let normalized_scope = crate::oauth::scope_validation::compat_scopes(original_scope);
-            
+
             // Parse the scopes using Scope::parse_multiple
             let scopes = Scope::parse_multiple(&normalized_scope)
                 .map_err(|e| OAuthError::InvalidScope(format!("Failed to parse scopes: {}", e)))?;
 
             // Validate and filter the scopes for AT Protocol OAuth
             // This will fail if required scopes are missing
-            let filtered_scopes = crate::oauth::scope_validation::filter_atprotocol_scopes(&scopes)?;
+            let filtered_scopes =
+                crate::oauth::scope_validation::filter_atprotocol_scopes(&scopes)?;
 
             // Serialize the filtered scopes
             Scope::serialize_multiple(&filtered_scopes)
         } else {
             // If no scope provided, default to just atproto scope
             let scopes = vec![Scope::Atproto];
-            
+
             // Serialize the scopes
             Scope::serialize_multiple(&scopes)
         };
@@ -574,9 +575,7 @@ impl AtpBackedAuthorizationServer {
             .authorization_request_storage
             .get_authorization_request(&session.session_id)
             .await
-            .map_err(|e| {
-                OAuthError::ServerError(e.to_string())
-            })?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| {
                 OAuthError::InvalidState("Authorization request not found".to_string())
             })?;
@@ -604,15 +603,13 @@ impl AtpBackedAuthorizationServer {
         self.authorization_request_storage
             .remove_authorization_request(&session_id)
             .await
-            .map_err(|e| {
-                OAuthError::ServerError(e.to_string())
-            })?;
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?;
 
         match auth_response {
             AuthorizeResponse::Redirect(url) => Ok(url),
-            AuthorizeResponse::Error { error, description } => {
-                Err(OAuthError::AuthorizationFailed(format!("{} - {}", error, description)))
-            }
+            AuthorizeResponse::Error { error, description } => Err(
+                OAuthError::AuthorizationFailed(format!("{} - {}", error, description)),
+            ),
         }
     }
 
@@ -1531,7 +1528,9 @@ mod tests {
                 redirect_uris: vec!["https://example.com/callback".to_string()],
                 grant_types: vec![crate::oauth::types::GrantType::AuthorizationCode],
                 response_types: vec![crate::oauth::types::ResponseType::Code],
-                scope: Some("openid profile email atproto transition:generic transition:email".to_string()),
+                scope: Some(
+                    "openid profile email atproto transition:generic transition:email".to_string(),
+                ),
                 token_endpoint_auth_method: crate::oauth::types::ClientAuthMethod::None,
                 client_type: crate::oauth::types::ClientType::Public,
                 created_at: chrono::Utc::now(),

@@ -104,7 +104,11 @@ pub async fn get_atprotocol_session_with_refresh(
 
     // Check if session has an exchange error
     if let Some(ref exchange_error) = session.exchange_error {
-        return Err(format!("ATProtocol OAuth session exchange error: {}", exchange_error).into());
+        return Err(format!(
+            "ATProtocol OAuth session exchange error: {}",
+            exchange_error
+        )
+        .into());
     }
 
     // Check if token needs refreshing
@@ -308,8 +312,9 @@ pub async fn build_openid_claims_with_document_info(
         resource: atproto_oauth::scopes::AccountResource::Email,
         action: atproto_oauth::scopes::AccountAction::Read,
     });
-    let grants_email_read = has_transition_email || scopes.iter().any(|s| s.grants(&email_read_scope));
-    
+    let grants_email_read =
+        has_transition_email || scopes.iter().any(|s| s.grants(&email_read_scope));
+
     // The 'atproto' scope is required for all AT Protocol operations
     // Additional transition scopes grant specific capabilities:
     // - 'transition:generic' grants general read access (profile but NOT email)

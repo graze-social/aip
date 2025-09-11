@@ -127,6 +127,43 @@ pub async fn create_app_password_handler(
 
     let is_update = existing.is_some();
 
+    // If this was an update, delete all associated sessions
+    if is_update {
+        state
+            .oauth_storage
+            .delete_app_password_sessions(&access_token.client_id, did)
+            .await
+            .map_err(|e| {
+                let error_response = json!({
+                    "error": "server_error",
+                    "error_description": format!("Failed to delete existing sessions: {}", e)
+                });
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+            })?;
+    }
+
+        // Create app password entry
+        let app_password_entry = AppPassword {
+            client_id: access_token.client_id.clone(),
+            did: did.clone(),
+            app_password: app_password.clone(),
+            created_at: now,
+            updated_at: now,
+        };
+    
+        // Store the app password
+        state
+            .oauth_storage
+            .store_app_password(&app_password_entry)
+            .await
+            .map_err(|e| {
+                let error_response = json!({
+                    "error": "server_error",
+                    "error_description": format!("Failed to store app password: {}", e)
+                });
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+            })?;
+
     // Get the DID document to extract PDS endpoint for session creation
     let document = state
         .document_storage
@@ -178,43 +215,6 @@ pub async fn create_app_password_handler(
         });
         (StatusCode::UNAUTHORIZED, Json(error_response))
     })?;
-
-    // Create app password entry
-    let app_password_entry = AppPassword {
-        client_id: access_token.client_id.clone(),
-        did: did.clone(),
-        app_password,
-        created_at: existing.as_ref().map(|e| e.created_at).unwrap_or(now),
-        updated_at: now,
-    };
-
-    // Store the app password
-    state
-        .oauth_storage
-        .store_app_password(&app_password_entry)
-        .await
-        .map_err(|e| {
-            let error_response = json!({
-                "error": "server_error",
-                "error_description": format!("Failed to store app password: {}", e)
-            });
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
-        })?;
-
-    // If this was an update, delete all associated sessions
-    if is_update {
-        state
-            .oauth_storage
-            .delete_app_password_sessions(&access_token.client_id, did)
-            .await
-            .map_err(|e| {
-                let error_response = json!({
-                    "error": "server_error",
-                    "error_description": format!("Failed to delete existing sessions: {}", e)
-                });
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
-            })?;
-    }
 
     let response = AppPasswordResponse {
         client_id: access_token.client_id,

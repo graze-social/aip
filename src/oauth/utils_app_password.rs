@@ -80,7 +80,11 @@ pub async fn create_app_password_session(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("ATProtocol createSession failed with status {}: {}", status, body).into());
+        return Err(format!(
+            "ATProtocol createSession failed with status {}: {}",
+            status, body
+        )
+        .into());
     }
 
     let session_response: CreateSessionResponse = response
@@ -190,20 +194,25 @@ pub async fn refresh_app_password_session(
                         new_session.access_token_expires_at = now + Duration::hours(2);
                     }
                     Err(e) => {
-                        new_session.exchange_error =
-                            Some(format!("ATProtocol refreshSession response parse error: {}", e));
+                        new_session.exchange_error = Some(format!(
+                            "ATProtocol refreshSession response parse error: {}",
+                            e
+                        ));
                     }
                 }
             } else {
                 let status = response.status();
                 let body = response.text().await.unwrap_or_default();
-                new_session.exchange_error =
-                    Some(format!("ATProtocol refreshSession failed with status {}: {}", status, body));
+                new_session.exchange_error = Some(format!(
+                    "ATProtocol refreshSession failed with status {}: {}",
+                    status, body
+                ));
             }
         }
         Err(e) => {
             // Store the refresh error in the new session
-            new_session.exchange_error = Some(format!("ATProtocol refreshSession network error: {}", e));
+            new_session.exchange_error =
+                Some(format!("ATProtocol refreshSession network error: {}", e));
         }
     }
 
