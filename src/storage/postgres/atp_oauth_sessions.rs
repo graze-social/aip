@@ -284,6 +284,23 @@ impl AtpOAuthSessionStorage for PostgresAtpOAuthSessionStorage {
         }
     }
 
+
+    async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>> {
+        let rows = sqlx::query("SELECT * FROM atp_oauth_sessions WHERE did = $1 ORDER BY session_created_at DESC")
+            .bind(did)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+
+        let mut sessions = Vec::new();
+        for row in rows {
+            let session = Self::row_to_atp_oauth_session(&row)?;
+            sessions.push(session);
+        }
+
+        Ok(sessions)
+    }
+
     async fn update_session_tokens(
         &self,
         did: &str,
@@ -303,7 +320,7 @@ impl AtpOAuthSessionStorage for PostgresAtpOAuthSessionStorage {
 
         let result = sqlx::query(
             r#"
-            UPDATE atp_oauth_sessions SET 
+            UPDATE atp_oauth_sessions SET
                 access_token = $4, refresh_token = $5,
                 access_token_created_at = $6, access_token_expires_at = $7, access_token_scopes = $8
             WHERE did = $1 AND session_id = $2 AND iteration = $3

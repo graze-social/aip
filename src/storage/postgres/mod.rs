@@ -8,6 +8,7 @@ mod app_passwords;
 mod atp_oauth_sessions;
 mod authorization_codes;
 mod authorization_requests;
+mod device_codes;
 mod did_documents;
 mod keys;
 mod oauth_clients;
@@ -26,6 +27,7 @@ pub use app_passwords::{PostgresAppPasswordSessionStore, PostgresAppPasswordStor
 pub use atp_oauth_sessions::PostgresAtpOAuthSessionStorage;
 pub use authorization_codes::PostgresAuthorizationCodeStore;
 pub use authorization_requests::PostgresAuthorizationRequestStorage;
+pub use device_codes::PostgresDeviceCodeStore;
 pub use did_documents::PostgresDidDocumentStorage;
 pub use keys::PostgresKeyStore;
 pub use oauth_clients::PostgresOAuthClientStore;
@@ -42,6 +44,7 @@ pub struct PostgresOAuthStorage {
     authorization_code_store: Arc<PostgresAuthorizationCodeStore>,
     access_token_store: Arc<PostgresAccessTokenStore>,
     refresh_token_store: Arc<PostgresRefreshTokenStore>,
+    device_code_store: Arc<PostgresDeviceCodeStore>,
     key_store: Arc<PostgresKeyStore>,
     par_storage: Arc<PostgresPARStorage>,
     atp_oauth_session_storage: Arc<PostgresAtpOAuthSessionStorage>,
@@ -59,6 +62,7 @@ impl PostgresOAuthStorage {
         let authorization_code_store = Arc::new(PostgresAuthorizationCodeStore::new(pool.clone()));
         let access_token_store = Arc::new(PostgresAccessTokenStore::new(pool.clone()));
         let refresh_token_store = Arc::new(PostgresRefreshTokenStore::new(pool.clone()));
+        let device_code_store = Arc::new(PostgresDeviceCodeStore::new(pool.clone()));
         let key_store = Arc::new(PostgresKeyStore::new(pool.clone()));
         let par_storage = Arc::new(PostgresPARStorage::new(pool.clone()));
         let atp_oauth_session_storage = Arc::new(PostgresAtpOAuthSessionStorage::new(pool.clone()));
@@ -76,6 +80,7 @@ impl PostgresOAuthStorage {
             authorization_code_store,
             access_token_store,
             refresh_token_store,
+            device_code_store,
             key_store,
             par_storage,
             atp_oauth_session_storage,
@@ -208,6 +213,40 @@ impl RefreshTokenStore for PostgresOAuthStorage {
 }
 
 #[async_trait]
+impl DeviceCodeStore for PostgresOAuthStorage {
+    async fn store_device_code(
+        &self,
+        device_code: &str,
+        user_code: &str,
+        client_id: &str,
+        scope: Option<&str>,
+        expires_in: u64,
+    ) -> Result<()> {
+        self.device_code_store.store_device_code(device_code, user_code, client_id, scope, expires_in).await
+    }
+
+    async fn get_device_code(&self, device_code: &str) -> Result<Option<DeviceCodeEntry>> {
+        self.device_code_store.get_device_code(device_code).await
+    }
+    
+    async fn get_device_code_by_user_code(&self, user_code: &str) -> Result<Option<DeviceCodeEntry>> {
+        self.device_code_store.get_device_code_by_user_code(user_code).await
+    }
+
+    async fn authorize_device_code(&self, user_code: &str, user_id: &str) -> Result<()> {
+        self.device_code_store.authorize_device_code(user_code, user_id).await
+    }
+
+    async fn consume_device_code(&self, device_code: &str) -> Result<Option<String>> {
+        self.device_code_store.consume_device_code(device_code).await
+    }
+
+    async fn cleanup_expired_device_codes(&self) -> Result<usize> {
+        self.device_code_store.cleanup_expired_device_codes().await
+    }
+}
+
+#[async_trait]
 impl KeyStore for PostgresOAuthStorage {
     async fn store_signing_key(&self, key: &atproto_identity::key::KeyData) -> Result<()> {
         self.key_store.store_signing_key(key).await
@@ -289,6 +328,13 @@ impl AtpOAuthSessionStorage for PostgresOAuthStorage {
     async fn get_session_by_atp_state(&self, atp_state: &str) -> Result<Option<AtpOAuthSession>> {
         self.atp_oauth_session_storage
             .get_session_by_atp_state(atp_state)
+            .await
+    }
+
+
+    async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>> {
+        self.atp_oauth_session_storage
+            .get_sessions_by_did(did)
             .await
     }
 

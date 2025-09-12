@@ -20,6 +20,7 @@ pub struct MemoryOAuthStorage {
     auth_codes: Mutex<HashMap<String, AuthorizationCode>>,
     access_tokens: Mutex<HashMap<String, AccessToken>>,
     refresh_tokens: Mutex<HashMap<String, RefreshToken>>,
+    device_codes: Mutex<HashMap<String, DeviceCodeEntry>>, // device_code -> DeviceCodeEntry
     keys: Mutex<HashMap<String, String>>, // Store as KeyData string serialization
     signing_key: Mutex<Option<KeyData>>,
     par_requests: Mutex<HashMap<String, StoredPushedRequest>>,
@@ -293,6 +294,112 @@ impl RefreshTokenStore for MemoryOAuthStorage {
 }
 
 #[async_trait]
+impl DeviceCodeStore for MemoryOAuthStorage {
+    async fn store_device_code(
+        &self,
+        device_code: &str,
+        user_code: &str,
+        client_id: &str,
+        scope: Option<&str>,
+        expires_in: u64,
+    ) -> Result<()> {
+        let now = Utc::now();
+        let expires_at = now + chrono::Duration::seconds(expires_in as i64);
+
+        let entry = DeviceCodeEntry {
+            device_code: device_code.to_string(),
+            user_code: user_code.to_string(),
+            client_id: client_id.to_string(),
+            scope: scope.map(|s| s.to_string()),
+            authorized_user: None,
+            expires_at,
+            created_at: now,
+        };
+
+        let mut device_codes = self
+            .device_codes
+            .lock()
+            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+        device_codes.insert(device_code.to_string(), entry);
+        Ok(())
+    }
+
+    async fn get_device_code(&self, device_code: &str) -> Result<Option<DeviceCodeEntry>> {
+        let device_codes = self
+            .device_codes
+            .lock()
+            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+        Ok(device_codes.get(device_code).cloned())
+    }
+
+    async fn get_device_code_by_user_code(&self, user_code: &str) -> Result<Option<DeviceCodeEntry>> {
+        let device_codes = self
+            .device_codes
+            .lock()
+            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+
+        // Find the device code entry by user code
+        for entry in device_codes.values() {
+            if entry.user_code == user_code {
+                return Ok(Some(entry.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    async fn authorize_device_code(&self, user_code: &str, user_id: &str) -> Result<()> {
+        let mut device_codes = self
+            .device_codes
+            .lock()
+            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+
+        // Find the device code by user code
+        let mut found = false;
+        for entry in device_codes.values_mut() {
+            if entry.user_code == user_code && entry.expires_at > Utc::now() {
+                entry.authorized_user = Some(user_id.to_string());
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            return Err(StorageError::NotFound("Device code not found or expired".to_string()));
+        }
+
+        Ok(())
+    }
+
+    async fn consume_device_code(&self, device_code: &str) -> Result<Option<String>> {
+        let mut device_codes = self
+            .device_codes
+            .lock()
+            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+
+        if let Some(entry) = device_codes.remove(device_code) {
+            // Check if expired
+            if entry.expires_at <= Utc::now() {
+                return Ok(None);
+            }
+            Ok(entry.authorized_user)
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn cleanup_expired_device_codes(&self) -> Result<usize> {
+        let mut device_codes = self
+            .device_codes
+            .lock()
+            .map_err(|e| StorageError::SerializationFailed(format!("Lock error: {}", e)))?;
+        let now = Utc::now();
+        let initial_count = device_codes.len();
+        device_codes.retain(|_, entry| entry.expires_at > now);
+        Ok(initial_count - device_codes.len())
+    }
+}
+
+#[async_trait]
 impl KeyStore for MemoryOAuthStorage {
     async fn store_signing_key(&self, key: &KeyData) -> Result<()> {
         let mut signing_key = self.signing_key.lock().unwrap();
@@ -469,6 +576,25 @@ impl AtpOAuthSessionStorage for MemoryOAuthStorage {
         } else {
             Ok(None)
         }
+    }
+
+
+    async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>> {
+        let sessions = self.atp_sessions.read().await;
+        let mut result = Vec::new();
+
+        // Search through all sessions to find ones with matching DID
+        for session in sessions.values() {
+            if let Some(session_did) = &session.did {
+                if session_did == did {
+                    result.push(session.clone());
+                }
+            }
+        }
+
+        // Sort by creation time, newest first
+        result.sort_by(|a, b| b.session_created_at.cmp(&a.session_created_at));
+        Ok(result)
     }
 
     async fn update_session_tokens(
@@ -939,6 +1065,9 @@ mod tests {
             scope: Some("read write".to_string()),
             token_endpoint_auth_method: ClientAuthMethod::ClientSecretBasic,
             client_type: ClientType::Confidential,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,

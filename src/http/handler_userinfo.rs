@@ -69,36 +69,29 @@ pub async fn get_userinfo_handler(
     // Create initial UserInfo claims
     let initial_claims = OpenIDClaims::new_userinfo(user_id.clone());
 
-    let session_id = match access_token.session_id {
-        Some(value) => value,
-        _ => {
-            tracing::warn!("no session_id associated with access token");
-            let error_response = json!({
-                "error": "internal_error",
-                "error_description": "Internal error generating response"
-            });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
+    // Get ATProtocol session if available (interactive OAuth flow has session_id, device flow doesn't)
+    let session = if let Some(session_id) = access_token.session_id {
+        match get_atprotocol_session_with_refresh(&state, &document, &session_id).await {
+            Ok(value) => Some(value),
+            Err(_) => {
+                let error_response = json!({
+                    "error": "internal_error",
+                    "error_description": "Internal error generating response"
+                });
+                return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
+            }
         }
+    } else {
+        None
     };
 
-    let session = match get_atprotocol_session_with_refresh(&state, &document, &session_id).await {
-        Ok(value) => value,
-        Err(_) => {
-            let error_response = json!({
-                "error": "internal_error",
-                "error_description": "Internal error generating response"
-            });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
-        }
-    };
-
-    // Use the helper function to build claims with document information
-    let mut claims = build_openid_claims_with_document_info(
+    // Build claims with document information (session may be None for device code flow)
+    let claims = build_openid_claims_with_document_info(
         &state.http_client,
         initial_claims,
         &document,
         &scopes,
-        Some(&session),
+        session.as_ref(),
     )
     .await
     .map_err(|e| {
@@ -120,9 +113,9 @@ pub async fn get_userinfo_handler(
         (status, Json(error_response))
     })?;
 
-    claims = claims.with_nonce(access_token.nonce);
+    let final_claims = claims.with_nonce(access_token.nonce);
 
-    Ok(Json(claims))
+    Ok(Json(final_claims))
 }
 
 #[cfg(test)]
@@ -196,6 +189,7 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
         });
 
         let atp_session_storage = Arc::new(
