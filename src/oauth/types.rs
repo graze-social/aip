@@ -15,6 +15,8 @@ pub enum GrantType {
     AuthorizationCode,
     ClientCredentials,
     RefreshToken,
+    #[serde(rename = "urn:ietf:params:oauth:grant-type:device_code")]
+    DeviceCode,
 }
 
 /// OAuth 2.1 Response Types
@@ -24,6 +26,8 @@ pub enum ResponseType {
     Code,
     #[serde(rename = "id_token")]
     IdToken,
+    #[serde(rename = "device_code")]
+    DeviceCode,
 }
 
 /// OAuth 2.1 Token Types
@@ -66,6 +70,12 @@ pub struct OAuthClient {
     pub token_endpoint_auth_method: ClientAuthMethod,
     /// Client type (public or confidential)
     pub client_type: ClientType,
+    /// Application type (web or native)
+    pub application_type: Option<ApplicationType>,
+    /// Software identifier
+    pub software_id: Option<String>,
+    /// Software version
+    pub software_version: Option<String>,
     /// Registration timestamp
     pub created_at: DateTime<Utc>,
     /// Last updated timestamp
@@ -90,6 +100,14 @@ pub struct OAuthClient {
 pub enum ClientType {
     Public,
     Confidential,
+}
+
+/// Application Type (RFC 7591)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApplicationType {
+    Web,
+    Native,
 }
 
 /// OAuth Authorization Request
@@ -211,6 +229,8 @@ pub struct TokenRequest {
     pub code_verifier: Option<String>,
     /// Refresh token (for refresh_token grant)
     pub refresh_token: Option<String>,
+    /// Device code (for device_code grant)
+    pub device_code: Option<String>,
     /// Client ID
     pub client_id: Option<String>,
     /// Client secret
@@ -299,6 +319,12 @@ pub struct ClientRegistrationRequest {
     pub jwks: Option<serde_json::Value>,
     /// URL pointing to client's JWK Set
     pub jwks_uri: Option<String>,
+    /// Application type (web or native)
+    pub application_type: Option<ApplicationType>,
+    /// Software identifier for device/native apps
+    pub software_id: Option<String>,
+    /// Software version for device/native apps
+    pub software_version: Option<String>,
     /// Additional metadata
     #[serde(flatten)]
     pub metadata: serde_json::Value,
@@ -323,6 +349,12 @@ pub struct ClientRegistrationResponse {
     pub scope: Option<String>,
     /// Token endpoint authentication method
     pub token_endpoint_auth_method: ClientAuthMethod,
+    /// Application type (web or native)
+    pub application_type: Option<ApplicationType>,
+    /// Software identifier for device/native apps
+    pub software_id: Option<String>,
+    /// Software version for device/native apps
+    pub software_version: Option<String>,
     /// Registration access token
     pub registration_access_token: String,
     /// Registration client URI
@@ -343,6 +375,9 @@ pub struct UpdateClientRequest {
     pub response_types: Option<Vec<ResponseType>>,
     pub scope: Option<String>,
     pub token_endpoint_auth_method: Option<ClientAuthMethod>,
+    pub application_type: Option<ApplicationType>,
+    pub software_id: Option<String>,
+    pub software_version: Option<String>,
     #[serde(flatten)]
     pub metadata: serde_json::Value,
 }
@@ -367,6 +402,12 @@ pub struct FilteredClientRegistrationResponse {
     pub scope: Option<String>,
     /// Token endpoint authentication method
     pub token_endpoint_auth_method: ClientAuthMethod,
+    /// Application type (web or native)
+    pub application_type: Option<ApplicationType>,
+    /// Software identifier for device/native apps
+    pub software_id: Option<String>,
+    /// Software version for device/native apps
+    pub software_version: Option<String>,
     /// Client ID issued at
     pub client_id_issued_at: i64,
     /// Client secret expires at (optional)
@@ -384,6 +425,9 @@ impl From<ClientRegistrationResponse> for FilteredClientRegistrationResponse {
             response_types: response.response_types,
             scope: response.scope,
             token_endpoint_auth_method: response.token_endpoint_auth_method,
+            application_type: response.application_type,
+            software_id: response.software_id,
+            software_version: response.software_version,
             client_id_issued_at: response.client_id_issued_at,
             client_secret_expires_at: response.client_secret_expires_at,
         }

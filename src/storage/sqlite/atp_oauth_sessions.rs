@@ -277,7 +277,7 @@ impl AtpOAuthSessionStorage for SqliteAtpOAuthSessionStorage {
 
         let result = sqlx::query(
             r#"
-            UPDATE atp_oauth_sessions SET 
+            UPDATE atp_oauth_sessions SET
                 session_created_at = ?, atp_oauth_state = ?, signing_key_jkt = ?,
                 dpop_key = ?, access_token = ?, refresh_token = ?,
                 access_token_created_at = ?, access_token_expires_at = ?, access_token_scopes = ?,
@@ -328,6 +328,22 @@ impl AtpOAuthSessionStorage for SqliteAtpOAuthSessionStorage {
         }
     }
 
+
+    async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>> {
+        let rows = sqlx::query("SELECT * FROM atp_oauth_sessions WHERE did = ? ORDER BY session_created_at DESC")
+            .bind(did)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+
+        let mut sessions = Vec::new();
+        for row in rows {
+            sessions.push(Self::row_to_atp_oauth_session(&row)?);
+        }
+
+        Ok(sessions)
+    }
+
     async fn update_session_tokens(
         &self,
         did: &str,
@@ -351,7 +367,7 @@ impl AtpOAuthSessionStorage for SqliteAtpOAuthSessionStorage {
 
         let result = sqlx::query(
             r#"
-            UPDATE atp_oauth_sessions SET 
+            UPDATE atp_oauth_sessions SET
                 access_token = ?, refresh_token = ?,
                 access_token_created_at = ?, access_token_expires_at = ?, access_token_scopes = ?
             WHERE did = ? AND session_id = ? AND iteration = ?

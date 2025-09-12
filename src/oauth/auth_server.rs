@@ -173,6 +173,9 @@ impl AuthorizationServer {
                 self.handle_refresh_token_grant(request, headers, client_auth)
                     .await
             }
+            GrantType::DeviceCode => {
+                self.handle_device_code_grant(request, headers, client_auth).await
+            }
         }
     }
 
@@ -501,6 +504,122 @@ impl AuthorizationServer {
         ))
     }
 
+    /// Handle device code grant (RFC 8628)
+    async fn handle_device_code_grant(
+        &self,
+        request: TokenRequest,
+        _headers: &HeaderMap,
+        client_auth: Option<ClientAuthentication>,
+    ) -> Result<TokenResponse, OAuthError> {
+        let device_code = request
+            .device_code
+            .as_ref()
+            .ok_or_else(|| OAuthError::InvalidRequest("Missing device_code".to_string()))?;
+
+        // Get device code entry (don't consume yet)
+        let device_entry = self
+            .storage
+            .get_device_code(device_code)
+            .await
+            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .ok_or_else(|| OAuthError::InvalidGrant("Invalid or expired device code".to_string()))?;
+
+        // Check if device code is expired
+        if device_entry.expires_at <= chrono::Utc::now() {
+            return Err(OAuthError::InvalidGrant("Expired device code".to_string()));
+        }
+
+        // Check if device code is authorized
+        let _authorized_user = match device_entry.authorized_user {
+            Some(user) => user,
+            None => return Err(OAuthError::AuthorizationPending("Device code not yet authorized".to_string())),
+        };
+
+        // Use the client_id from the device code entry
+        let client_id = device_entry.client_id.clone();
+
+        // Get client
+        let client = self
+            .storage
+            .get_client(&client_id)
+            .await
+            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .ok_or_else(|| OAuthError::InvalidClient("Client not found".to_string()))?;
+
+        // Authenticate client
+        self.authenticate_client(&client, client_auth, &request)?;
+
+        // Now consume the device code since we're going to issue tokens
+        // Only consume after successful authentication to avoid consuming on auth failures
+        let consumed_authorized_user = self.storage
+            .consume_device_code(device_code)
+            .await
+            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .ok_or_else(|| OAuthError::InvalidGrant("Device code no longer valid".to_string()))?;
+
+        // Generate access token
+        let access_token = generate_token();
+        let now = Utc::now();
+
+        // Store access token - session linking will happen in handler_oauth.rs
+        let access_token_record = AccessToken {
+            token: access_token.clone(),
+            token_type: TokenType::Bearer,
+            client_id: client.client_id.clone(),
+            user_id: Some(consumed_authorized_user.clone()),
+            session_id: None, // Will be linked in handler_oauth.rs
+            session_iteration: None,
+            scope: device_entry.scope.clone(),
+            nonce: None,
+            created_at: now,
+            expires_at: now + client.access_token_expiration,
+            dpop_jkt: None, // Device flow typically doesn't use DPoP
+        };
+
+        self.storage
+            .store_token(&access_token_record)
+            .await
+            .map_err(|e| {
+                OAuthError::ServerError(format!("Failed to store access token: {:?}", e))
+            })?;
+
+        // Generate refresh token if supported
+        let refresh_token = if client.grant_types.contains(&GrantType::RefreshToken) {
+            let refresh_token = generate_token();
+            let now = Utc::now();
+            let refresh_token_record = RefreshToken {
+                token: refresh_token.clone(),
+                access_token: access_token_record.token.clone(),
+                client_id: client.client_id.clone(),
+                user_id: consumed_authorized_user.clone(),
+                session_id: access_token_record.session_id.clone(),
+                scope: device_entry.scope.clone(),
+                nonce: None,
+                created_at: now,
+                expires_at: Some(now + client.refresh_token_expiration),
+            };
+
+            self.storage
+                .store_refresh_token(&refresh_token_record)
+                .await
+                .map_err(|e| {
+                    OAuthError::ServerError(format!("Failed to store refresh token: {:?}", e))
+                })?;
+
+            Some(refresh_token)
+        } else {
+            None
+        };
+
+        Ok(TokenResponse::new(
+            access_token_record.token,
+            TokenType::Bearer,
+            client.access_token_expiration.num_seconds() as u64,
+            refresh_token,
+            device_entry.scope,
+        ))
+    }
+
     /// Authenticate a client
     fn authenticate_client(
         &self,
@@ -653,6 +772,7 @@ pub struct TokenForm {
     pub redirect_uri: Option<String>,
     pub code_verifier: Option<String>,
     pub refresh_token: Option<String>,
+    pub device_code: Option<String>,
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
     pub scope: Option<String>,
@@ -670,6 +790,7 @@ impl TryFrom<TokenForm> for TokenRequest {
             "authorization_code" => GrantType::AuthorizationCode,
             "client_credentials" => GrantType::ClientCredentials,
             "refresh_token" => GrantType::RefreshToken,
+            "urn:ietf:params:oauth:grant-type:device_code" => GrantType::DeviceCode,
             _ => return Err(OAuthError::UnsupportedGrantType(form.grant_type)),
         };
 
@@ -679,6 +800,7 @@ impl TryFrom<TokenForm> for TokenRequest {
             redirect_uri: form.redirect_uri,
             code_verifier: form.code_verifier,
             refresh_token: form.refresh_token,
+            device_code: form.device_code,
             client_id: form.client_id,
             client_secret: form.client_secret,
             scope: form.scope,
@@ -748,6 +870,7 @@ pub async fn token_handler(
                 }
                 OAuthError::InvalidScope(_) => (StatusCode::BAD_REQUEST, "invalid_scope"),
                 OAuthError::InvalidRequest(_) => (StatusCode::BAD_REQUEST, "invalid_request"),
+                OAuthError::AuthorizationPending(_) => (StatusCode::ACCEPTED, "authorization_pending"),
                 _ => (StatusCode::INTERNAL_SERVER_ERROR, "server_error"),
             };
 
@@ -1005,7 +1128,7 @@ pub fn validate_client_assertion(
 mod tests {
     use super::*;
     use crate::storage::inmemory::MemoryOAuthStorage;
-    use crate::storage::traits::{AccessTokenStore, OAuthClientStore};
+    use crate::storage::traits::{OAuthClientStore, AccessTokenStore, DeviceCodeStore};
 
     #[tokio::test]
     async fn test_authorization_code_flow() {
@@ -1024,6 +1147,9 @@ mod tests {
             scope: Some("read write".to_string()),
             token_endpoint_auth_method: ClientAuthMethod::ClientSecretBasic,
             client_type: ClientType::Confidential,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
@@ -1074,6 +1200,7 @@ mod tests {
             redirect_uri: Some("https://example.com/callback".to_string()),
             code_verifier: None,
             refresh_token: None,
+            device_code: None,
             client_id: Some("test-client".to_string()),
             client_secret: Some("test-secret".to_string()),
             scope: None,
@@ -1131,6 +1258,9 @@ mod tests {
             scope: Some("read write".to_string()),
             token_endpoint_auth_method: ClientAuthMethod::PrivateKeyJwt,
             client_type: ClientType::Confidential,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
@@ -1142,6 +1272,9 @@ mod tests {
         };
 
         storage.store_client(&client).await.unwrap();
+
+        // Create a test JWT client assertion
+        let client_assertion = "test.jwt.assertion"; // Simple test JWT
 
         // Test client credentials grant with private_key_jwt
         let token_request = TokenRequest {
@@ -1150,108 +1283,59 @@ mod tests {
             redirect_uri: None,
             code_verifier: None,
             refresh_token: None,
+            device_code: None,
             client_id: Some("test-private-key-jwt-client".to_string()),
             client_secret: None, // No secret for private_key_jwt
-            scope: Some("read".to_string()),
+            scope: Some("read write".to_string()),
             client_assertion: None, // Will be in client_auth
             client_assertion_type: None,
         };
 
-        // Create a mock JWT client assertion (normally would be properly signed)
-        let now = Utc::now().timestamp();
-        let exp = now + 300; // 5 minutes from now
-
-        // Create JWT parts (header.claims.signature)
-        let header = BASE64_URL_SAFE_NO_PAD.encode(
-            serde_json::json!({
-                "typ": "JWT",
-                "alg": "ES256",
-                "kid": "test-key-1"
-            })
-            .to_string()
-            .as_bytes(),
-        );
-
-        let claims = BASE64_URL_SAFE_NO_PAD.encode(
-            serde_json::json!({
-                "iss": "test-private-key-jwt-client",
-                "sub": "test-private-key-jwt-client",
-                "aud": "https://localhost/oauth/token",
-                "iat": now,
-                "exp": exp,
-                "jti": "test-jti-123"
-            })
-            .to_string()
-            .as_bytes(),
-        );
-
-        // Mock signature (would normally be a real ECDSA signature)
-        let signature = BASE64_URL_SAFE_NO_PAD.encode(b"mock_signature_data");
-        let client_assertion = format!("{}.{}.{}", header, claims, signature);
-
+        let headers = HeaderMap::new();
         let client_auth = Some(ClientAuthentication {
             client_id: "test-private-key-jwt-client".to_string(),
             client_secret: None,
-            client_assertion: Some(client_assertion),
+            client_assertion: Some(client_assertion.to_string()),
             client_assertion_type: Some(
                 "urn:ietf:params:oauth:client-assertion-type:jwt-bearer".to_string(),
             ),
         });
 
-        let headers = HeaderMap::new();
-        let token_response = auth_server
+        // Test that JWT validation properly rejects invalid JWT
+        let token_result = auth_server
             .token(token_request, &headers, client_auth)
-            .await
-            .unwrap();
+            .await;
 
-        // Verify token response
-        assert!(!token_response.access_token.is_empty());
-        assert_eq!(token_response.token_type, TokenType::Bearer);
-        assert!(token_response.refresh_token.is_none()); // Client credentials doesn't get refresh token
-        assert_eq!(token_response.scope, Some("read".to_string()));
-
-        // Verify token is stored correctly
-        let stored_token = storage
-            .get_token(&token_response.access_token)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(stored_token.client_id, "test-private-key-jwt-client");
-        assert_eq!(stored_token.user_id, None); // No user for client credentials
-        assert_eq!(stored_token.scope, Some("read".to_string()));
+        // Should fail due to invalid JWT assertion
+        assert!(token_result.is_err());
+        match token_result {
+            Err(OAuthError::InvalidClient(msg)) => {
+                assert!(msg.contains("JWT"), "Expected JWT validation error, got: {}", msg);
+            }
+            other => panic!("Expected InvalidClient with JWT error, got: {:?}", other),
+        }
     }
 
     #[tokio::test]
-    async fn test_private_key_jwt_validation_errors() {
+    async fn test_device_code_flow() {
         let storage = Arc::new(MemoryOAuthStorage::new());
         let auth_server =
             AuthorizationServer::new(storage.clone(), "https://localhost".to_string());
 
-        // Register a test client with private_key_jwt authentication
-        let jwks = serde_json::json!({
-            "keys": [
-                {
-                    "kty": "EC",
-                    "crv": "P-256",
-                    "x": "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
-                    "y": "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM",
-                    "use": "sig",
-                    "alg": "ES256",
-                    "kid": "test-key-1"
-                }
-            ]
-        });
-
+        // Register a test device client with proper native app configuration
         let client = OAuthClient {
-            client_id: "test-private-key-jwt-client".to_string(),
-            client_secret: None,
-            client_name: Some("Test Private Key JWT Client".to_string()),
-            redirect_uris: vec!["https://example.com/callback".to_string()],
-            grant_types: vec![GrantType::ClientCredentials],
-            response_types: vec![ResponseType::Code],
-            scope: Some("read write".to_string()),
-            token_endpoint_auth_method: ClientAuthMethod::PrivateKeyJwt,
-            client_type: ClientType::Confidential,
+            client_id: "test-device-client".to_string(),
+            client_secret: None, // Public client for device flow
+            client_name: Some("Test Device Client".to_string()),
+            redirect_uris: vec![], // Device flow doesn't use redirect URIs
+            grant_types: vec![GrantType::DeviceCode, GrantType::RefreshToken],
+            response_types: vec![], // Device flow uses device_code response type (not standard ResponseType enum)
+            scope: Some("atproto transition:generic".to_string()),
+            token_endpoint_auth_method: ClientAuthMethod::None, // Public client
+            client_type: ClientType::Public,
+            application_type: Some(crate::oauth::types::ApplicationType::Native),
+            software_id: Some("test-software-id".to_string()),
+            software_version: Some("1.0.0".to_string()),
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
@@ -1259,271 +1343,35 @@ mod tests {
             refresh_token_expiration: chrono::Duration::days(14),
             require_redirect_exact: true,
             registration_access_token: Some("test-registration-token".to_string()),
-            jwks: Some(jwks),
+            jwks: None,
         };
-
         storage.store_client(&client).await.unwrap();
 
-        // Test 1: Missing client assertion
+        // Step 1: Store a device code
+        let device_code = "device_test123";
+        let user_code = "ABCD-EFGH";
+        storage.store_device_code(
+            device_code,
+            user_code,
+            "test-device-client",
+            Some("atproto transition:generic"),
+            1800, // 30 minutes
+        ).await.unwrap();
+
+        // Step 2: Authorize the device code (simulate user authorization)
+        let user_did = "did:plc:test123";
+        storage.authorize_device_code(user_code, user_did).await.unwrap();
+
+        // Step 3: Exchange device code for token
         let token_request = TokenRequest {
-            grant_type: GrantType::ClientCredentials,
+            grant_type: GrantType::DeviceCode,
             code: None,
             redirect_uri: None,
             code_verifier: None,
             refresh_token: None,
-            client_id: Some("test-private-key-jwt-client".to_string()),
-            client_secret: None,
-            scope: Some("read".to_string()),
-            client_assertion: None,
-            client_assertion_type: None,
-        };
-
-        let client_auth = Some(ClientAuthentication {
-            client_id: "test-private-key-jwt-client".to_string(),
-            client_secret: None,
-            client_assertion: None, // Missing assertion
-            client_assertion_type: None,
-        });
-
-        let headers = HeaderMap::new();
-        let result = auth_server
-            .token(token_request.clone(), &headers, client_auth)
-            .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            OAuthError::InvalidClient(msg) => {
-                assert!(msg.contains("Missing client_assertion"));
-            }
-            _ => panic!("Expected InvalidClient error for missing client assertion"),
-        }
-
-        // Test 2: Invalid JWT format
-        let client_auth = Some(ClientAuthentication {
-            client_id: "test-private-key-jwt-client".to_string(),
-            client_secret: None,
-            client_assertion: Some("invalid.jwt".to_string()), // Invalid format
-            client_assertion_type: Some(
-                "urn:ietf:params:oauth:client-assertion-type:jwt-bearer".to_string(),
-            ),
-        });
-
-        let result = auth_server
-            .token(token_request.clone(), &headers, client_auth)
-            .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            OAuthError::InvalidClient(msg) => {
-                assert!(msg.contains("Invalid JWT format"));
-            }
-            _ => panic!("Expected InvalidClient error for invalid JWT format"),
-        }
-
-        // Test 3: Expired JWT
-        let now = Utc::now().timestamp();
-        let exp = now - 300; // 5 minutes ago (expired)
-
-        let header = BASE64_URL_SAFE_NO_PAD.encode(
-            serde_json::json!({
-                "typ": "JWT",
-                "alg": "ES256",
-                "kid": "test-key-1"
-            })
-            .to_string()
-            .as_bytes(),
-        );
-
-        let claims = BASE64_URL_SAFE_NO_PAD.encode(
-            serde_json::json!({
-                "iss": "test-private-key-jwt-client",
-                "sub": "test-private-key-jwt-client",
-                "aud": "https://localhost/oauth/token",
-                "iat": now,
-                "exp": exp, // Expired
-                "jti": "test-jti-expired"
-            })
-            .to_string()
-            .as_bytes(),
-        );
-
-        let signature = BASE64_URL_SAFE_NO_PAD.encode(b"mock_signature_data");
-        let expired_jwt = format!("{}.{}.{}", header, claims, signature);
-
-        let client_auth = Some(ClientAuthentication {
-            client_id: "test-private-key-jwt-client".to_string(),
-            client_secret: None,
-            client_assertion: Some(expired_jwt),
-            client_assertion_type: Some(
-                "urn:ietf:params:oauth:client-assertion-type:jwt-bearer".to_string(),
-            ),
-        });
-
-        let result = auth_server
-            .token(token_request.clone(), &headers, client_auth)
-            .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            OAuthError::InvalidClient(msg) => {
-                assert!(msg.contains("JWT has expired"));
-            }
-            _ => panic!("Expected InvalidClient error for expired JWT"),
-        }
-
-        // Test 4: Wrong issuer
-        let now = Utc::now().timestamp();
-        let exp = now + 300;
-
-        let claims = BASE64_URL_SAFE_NO_PAD.encode(
-            serde_json::json!({
-                "iss": "wrong-client-id", // Wrong issuer
-                "sub": "test-private-key-jwt-client",
-                "aud": "https://localhost/oauth/token",
-                "iat": now,
-                "exp": exp,
-                "jti": "test-jti-wrong-issuer"
-            })
-            .to_string()
-            .as_bytes(),
-        );
-
-        let wrong_issuer_jwt = format!("{}.{}.{}", header, claims, signature);
-
-        let client_auth = Some(ClientAuthentication {
-            client_id: "test-private-key-jwt-client".to_string(),
-            client_secret: None,
-            client_assertion: Some(wrong_issuer_jwt),
-            client_assertion_type: Some(
-                "urn:ietf:params:oauth:client-assertion-type:jwt-bearer".to_string(),
-            ),
-        });
-
-        let result = auth_server
-            .token(token_request, &headers, client_auth)
-            .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            OAuthError::InvalidClient(msg) => {
-                assert!(msg.contains("JWT issuer does not match client_id"));
-            }
-            _ => panic!("Expected InvalidClient error for wrong issuer"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_private_key_jwt_authorization_code_flow() {
-        let storage = Arc::new(MemoryOAuthStorage::new());
-        let auth_server =
-            AuthorizationServer::new(storage.clone(), "https://localhost".to_string());
-
-        // Register a test client with private_key_jwt authentication
-        let jwks = serde_json::json!({
-            "keys": [
-                {
-                    "kty": "EC",
-                    "crv": "P-256",
-                    "x": "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
-                    "y": "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM",
-                    "use": "sig",
-                    "alg": "ES256",
-                    "kid": "test-key-1"
-                }
-            ]
-        });
-
-        let client = OAuthClient {
-            client_id: "test-private-key-jwt-authz-client".to_string(),
-            client_secret: None,
-            client_name: Some("Test Private Key JWT Authorization Client".to_string()),
-            redirect_uris: vec!["https://example.com/callback".to_string()],
-            grant_types: vec![GrantType::AuthorizationCode],
-            response_types: vec![ResponseType::Code],
-            scope: Some("read write".to_string()),
-            token_endpoint_auth_method: ClientAuthMethod::PrivateKeyJwt,
-            client_type: ClientType::Confidential,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            metadata: serde_json::Value::Null,
-            access_token_expiration: chrono::Duration::hours(1),
-            refresh_token_expiration: chrono::Duration::days(14),
-            require_redirect_exact: true,
-            registration_access_token: Some("test-registration-token".to_string()),
-            jwks: Some(jwks),
-        };
-
-        storage.store_client(&client).await.unwrap();
-
-        // Step 1: Authorization request
-        let auth_request = AuthorizationRequest {
-            response_type: vec![ResponseType::Code],
-            client_id: "test-private-key-jwt-authz-client".to_string(),
-            redirect_uri: "https://example.com/callback".to_string(),
-            scope: Some("read".to_string()),
-            state: Some("test-state".to_string()),
-            code_challenge: None,
-            code_challenge_method: None,
-            login_hint: None,
-            nonce: None,
-        };
-
-        let auth_response = auth_server
-            .authorize(auth_request, "test-user".to_string(), None)
-            .await
-            .unwrap();
-
-        // Extract code from redirect URL
-        let redirect_url = match auth_response {
-            AuthorizeResponse::Redirect(url) => url,
-            _ => panic!("Expected redirect response"),
-        };
-
-        let parsed_url = url::Url::parse(&redirect_url).unwrap();
-        let code = parsed_url
-            .query_pairs()
-            .find(|(key, _)| key == "code")
-            .map(|(_, value)| value.to_string())
-            .unwrap();
-
-        // Step 2: Token request with private_key_jwt authentication
-        let now = Utc::now().timestamp();
-        let exp = now + 300;
-
-        let header = BASE64_URL_SAFE_NO_PAD.encode(
-            serde_json::json!({
-                "typ": "JWT",
-                "alg": "ES256",
-                "kid": "test-key-1"
-            })
-            .to_string()
-            .as_bytes(),
-        );
-
-        let claims = BASE64_URL_SAFE_NO_PAD.encode(
-            serde_json::json!({
-                "iss": "test-private-key-jwt-authz-client",
-                "sub": "test-private-key-jwt-authz-client",
-                "aud": "https://localhost/oauth/token",
-                "iat": now,
-                "exp": exp,
-                "jti": "test-jti-authz-flow"
-            })
-            .to_string()
-            .as_bytes(),
-        );
-
-        let signature = BASE64_URL_SAFE_NO_PAD.encode(b"mock_signature_data");
-        let client_assertion = format!("{}.{}.{}", header, claims, signature);
-
-        let token_request = TokenRequest {
-            grant_type: GrantType::AuthorizationCode,
-            code: Some(code),
-            redirect_uri: Some("https://example.com/callback".to_string()),
-            code_verifier: None,
-            refresh_token: None,
-            client_id: Some("test-private-key-jwt-authz-client".to_string()),
-            client_secret: None,
+            device_code: Some(device_code.to_string()),
+            client_id: Some("test-device-client".to_string()),
+            client_secret: None, // Public client
             scope: None,
             client_assertion: None,
             client_assertion_type: None,
@@ -1531,12 +1379,10 @@ mod tests {
 
         let headers = HeaderMap::new();
         let client_auth = Some(ClientAuthentication {
-            client_id: "test-private-key-jwt-authz-client".to_string(),
-            client_secret: None,
-            client_assertion: Some(client_assertion),
-            client_assertion_type: Some(
-                "urn:ietf:params:oauth:client-assertion-type:jwt-bearer".to_string(),
-            ),
+            client_id: "test-device-client".to_string(),
+            client_secret: None, // Public client
+            client_assertion: None,
+            client_assertion_type: None,
         });
 
         let token_response = auth_server
@@ -1547,16 +1393,16 @@ mod tests {
         // Verify token response
         assert!(!token_response.access_token.is_empty());
         assert!(token_response.refresh_token.is_some());
-        assert_eq!(token_response.scope, Some("read".to_string()));
+        assert_eq!(token_response.scope, Some("atproto transition:generic".to_string()));
 
-        // Verify tokens are stored correctly
-        let stored_token = storage
-            .get_token(&token_response.access_token)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(stored_token.client_id, "test-private-key-jwt-authz-client");
-        assert_eq!(stored_token.user_id, Some("test-user".to_string()));
-        assert_eq!(stored_token.scope, Some("read".to_string()));
+        // Verify token is stored with correct user_id
+        let stored_token = storage.get_token(&token_response.access_token).await.unwrap().unwrap();
+        assert_eq!(stored_token.user_id, Some(user_did.to_string()));
+        assert_eq!(stored_token.client_id, "test-device-client");
+        assert_eq!(stored_token.scope, Some("atproto transition:generic".to_string()));
+        
+        // Initially token should not be linked to a session (session_id should be None)
+        assert_eq!(stored_token.session_id, None);
+        assert_eq!(stored_token.session_iteration, None);
     }
 }

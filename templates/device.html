@@ -1,0 +1,100 @@
+{% extends "base.html" %} {% block title %}Device Authorization{% endblock %} {%
+block content %}
+<header>
+  <h1>Device Authorization</h1>
+  <p>Authorize your device to access your account</p>
+</header>
+<main>
+  <section>
+    {% if error %}
+    <article>
+      <header>⚠️ Error</header>
+      <p>{{ error }}</p>
+      <footer>
+        <a href="/device" role="button">Try Again</a>
+      </footer>
+    </article>
+    {% endif %}
+
+    <article>
+      {% if user_code %}
+      <!-- Pre-filled user code from URL parameter -->
+      <header>Confirm Device Code</header>
+      <p>
+        <strong>Device code:</strong>
+        <code>{{ user_code }}</code>
+      </p>
+      <p>Please confirm that this is the code shown on your device:</p>
+
+      <form method="post" action="/device/authorize">
+        <input type="hidden" name="user_code" value="{{ user_code }}">
+        {% if user_id %}
+        <input type="hidden" name="user_id" value="{{ user_id }}">
+        {% endif %}
+        <p>
+          <button type="submit">✅ Yes, authorize this device</button>
+        </p>
+        <p>
+          <a href="/device" role="button" class="secondary"
+          >❌ No, this is not my code</a>
+        </p>
+      </form>
+      {% else %}
+      <!-- Manual entry form -->
+      <header>Enter Device Code</header>
+      <p>Enter the code displayed on your device to authorize it:</p>
+
+      <form method="post" action="/device/authorize">
+        <label for="user_code">
+          Device Code
+          <input
+            type="text"
+            id="user_code"
+            name="user_code"
+            placeholder="XXXX-XXXX"
+            pattern="[A-Z0-9]{4}-[A-Z0-9]{2,4}"
+            maxlength="9"
+            style="font-family: monospace; letter-spacing: 2px; text-align: center"
+            required
+            autofocus
+          >
+        </label>
+        <small>
+          Enter the code exactly as shown on your device (e.g., <code
+          >ABCD-1234</code>)
+        </small>
+
+        <button type="submit">Authorize Device</button>
+      </form>
+      {% endif %}
+    </article>
+
+    <article>
+      <details>
+        <summary>What is this?</summary>
+        <p>
+          Your device is requesting authorization to access your account. Only
+          enter the code if you initiated this request from a trusted device.
+        </p>
+        <p>
+          The code will expire in a few minutes for security.
+        </p>
+      </details>
+    </article>
+  </section>
+</main>
+
+<script>
+  // Auto-format user code input (add dash after 4 characters)
+  document.getElementById("user_code")?.addEventListener(
+    "input",
+    function (e) {
+      let value = e.target.value.replace(/[^A-Z0-9]/g, "");
+      if (value.length > 4) {
+        value = value.substring(0, 4) + "-" + value.substring(4, 7);
+      }
+      e.target.value = value.toUpperCase();
+    },
+  );
+</script>
+{% endblock %}

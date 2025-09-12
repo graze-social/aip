@@ -33,12 +33,13 @@ pub async fn oauth_authorization_server_handler(State(state): State<AppState>) -
         "issuer": state.config.external_base,
         "authorization_endpoint": format!("{}/oauth/authorize", state.config.external_base),
         "token_endpoint": format!("{}/oauth/token", state.config.external_base),
+        "device_authorization_endpoint": format!("{}/oauth/device", state.config.external_base),
         "registration_endpoint": format!("{}/oauth/clients/register", state.config.external_base),
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
         "scopes_supported": state.config.oauth_supported_scopes.as_strings(),
         "response_types_supported": ["code"],
         "response_modes_supported": ["query"],
-        "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token"],
+        "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token", "urn:ietf:params:oauth:grant-type:device_code"],
         "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none", "private_key_jwt"],
         "token_endpoint_auth_signing_alg_values_supported": ["ES256"],
         "service_documentation": format!("{}/docs", state.config.external_base),
@@ -191,6 +192,7 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
         });
 
         let atp_session_storage = Arc::new(
