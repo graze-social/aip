@@ -8,6 +8,7 @@ mod app_passwords;
 mod atp_oauth_sessions;
 mod authorization_codes;
 mod authorization_requests;
+mod device_codes;
 mod keys;
 mod oauth_clients;
 mod oauth_request_storage;
@@ -25,6 +26,7 @@ pub use app_passwords::{SqliteAppPasswordSessionStore, SqliteAppPasswordStore};
 pub use atp_oauth_sessions::SqliteAtpOAuthSessionStorage;
 pub use authorization_codes::SqliteAuthorizationCodeStore;
 pub use authorization_requests::SqliteAuthorizationRequestStorage;
+pub use device_codes::SqliteDeviceCodeStore;
 pub use keys::SqliteKeyStore;
 pub use oauth_clients::SqliteOAuthClientStore;
 pub use oauth_request_storage::SqliteOAuthRequestStorage;
@@ -40,6 +42,7 @@ pub struct SqliteOAuthStorage {
     authorization_code_store: Arc<SqliteAuthorizationCodeStore>,
     access_token_store: Arc<SqliteAccessTokenStore>,
     refresh_token_store: Arc<SqliteRefreshTokenStore>,
+    device_code_store: Arc<SqliteDeviceCodeStore>,
     key_store: Arc<SqliteKeyStore>,
     par_storage: Arc<SqlitePARStorage>,
     atp_oauth_session_storage: Arc<SqliteAtpOAuthSessionStorage>,
@@ -55,6 +58,7 @@ impl SqliteOAuthStorage {
         let authorization_code_store = Arc::new(SqliteAuthorizationCodeStore::new(pool.clone()));
         let access_token_store = Arc::new(SqliteAccessTokenStore::new(pool.clone()));
         let refresh_token_store = Arc::new(SqliteRefreshTokenStore::new(pool.clone()));
+        let device_code_store = Arc::new(SqliteDeviceCodeStore::new(pool.clone()));
         let key_store = Arc::new(SqliteKeyStore::new(pool.clone()));
         let par_storage = Arc::new(SqlitePARStorage::new(pool.clone()));
         let atp_oauth_session_storage = Arc::new(SqliteAtpOAuthSessionStorage::new(pool.clone()));
@@ -69,6 +73,7 @@ impl SqliteOAuthStorage {
             authorization_code_store,
             access_token_store,
             refresh_token_store,
+            device_code_store,
             key_store,
             par_storage,
             atp_oauth_session_storage,
@@ -189,6 +194,40 @@ impl RefreshTokenStore for SqliteOAuthStorage {
 }
 
 #[async_trait]
+impl DeviceCodeStore for SqliteOAuthStorage {
+    async fn store_device_code(
+        &self,
+        device_code: &str,
+        user_code: &str,
+        client_id: &str,
+        scope: Option<&str>,
+        expires_in: u64,
+    ) -> Result<()> {
+        self.device_code_store.store_device_code(device_code, user_code, client_id, scope, expires_in).await
+    }
+
+    async fn get_device_code(&self, device_code: &str) -> Result<Option<DeviceCodeEntry>> {
+        self.device_code_store.get_device_code(device_code).await
+    }
+
+    async fn get_device_code_by_user_code(&self, user_code: &str) -> Result<Option<DeviceCodeEntry>> {
+        self.device_code_store.get_device_code_by_user_code(user_code).await
+    }
+
+    async fn authorize_device_code(&self, user_code: &str, user_id: &str) -> Result<()> {
+        self.device_code_store.authorize_device_code(user_code, user_id).await
+    }
+
+    async fn consume_device_code(&self, device_code: &str) -> Result<Option<String>> {
+        self.device_code_store.consume_device_code(device_code).await
+    }
+
+    async fn cleanup_expired_device_codes(&self) -> Result<usize> {
+        self.device_code_store.cleanup_expired_device_codes().await
+    }
+}
+
+#[async_trait]
 impl KeyStore for SqliteOAuthStorage {
     async fn store_signing_key(&self, key: &atproto_identity::key::KeyData) -> Result<()> {
         self.key_store.store_signing_key(key).await
@@ -270,6 +309,13 @@ impl AtpOAuthSessionStorage for SqliteOAuthStorage {
     async fn get_session_by_atp_state(&self, atp_state: &str) -> Result<Option<AtpOAuthSession>> {
         self.atp_oauth_session_storage
             .get_session_by_atp_state(atp_state)
+            .await
+    }
+
+
+    async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>> {
+        self.atp_oauth_session_storage
+            .get_sessions_by_did(did)
             .await
     }
 

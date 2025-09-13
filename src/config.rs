@@ -2,9 +2,15 @@
 
 use anyhow::Result;
 use atproto_identity::key::{KeyData, identify_key, generate_key, KeyType};
+use atproto_oauth::scopes::Scope;
 use std::time::Duration;
 
 use crate::errors::ConfigError;
+
+/// ATProtocol OAuth client metadata endpoint path
+/// This is the path where the ATProtocol client metadata document is served.
+/// The full URL is constructed by prepending the external_base URL.
+pub const ATPROTO_CLIENT_METADATA_PATH: &str = "/oauth-client-metadata.json";
 
 /// HTTP server port configuration
 #[derive(Clone)]
@@ -28,7 +34,7 @@ pub struct PrivateKeys(Vec<KeyData>);
 
 /// OAuth supported scopes configuration
 #[derive(Clone)]
-pub struct OAuthSupportedScopes(Vec<String>);
+pub struct OAuthSupportedScopes(Vec<Scope>);
 
 /// Client default access token expiration configuration
 #[derive(Clone)]
@@ -62,6 +68,10 @@ pub struct AtprotoClientTos(Option<String>);
 #[derive(Clone)]
 pub struct AtprotoClientPolicy(Option<String>);
 
+/// Internal device authorization client configuration
+#[derive(Clone)]
+pub struct InternalDeviceAuthClientId(String);
+
 /// Main application configuration
 #[derive(Clone)]
 pub struct Config {
@@ -91,6 +101,7 @@ pub struct Config {
     pub atproto_client_logo: AtprotoClientLogo,
     pub atproto_client_tos: AtprotoClientTos,
     pub atproto_client_policy: AtprotoClientPolicy,
+    pub internal_device_auth_client_id: InternalDeviceAuthClientId,
 }
 
 impl Config {
@@ -115,7 +126,7 @@ impl Config {
         let oauth_signing_keys: PrivateKeys = optional_env("OAUTH_SIGNING_KEYS").try_into()?;
         let oauth_supported_scopes: OAuthSupportedScopes = default_env(
             "OAUTH_SUPPORTED_SCOPES",
-            "openid profile email atproto:atproto atproto:transition:generic atproto:transition:email",
+            "openid profile email atproto transition:generic transition:email",
         )
         .try_into()?;
         let plc_hostname = default_env("PLC_HOSTNAME", "plc.directory");
@@ -140,6 +151,8 @@ impl Config {
         let atproto_client_tos: AtprotoClientTos = optional_env("ATPROTO_CLIENT_TOS").try_into()?;
         let atproto_client_policy: AtprotoClientPolicy =
             optional_env("ATPROTO_CLIENT_POLICY").try_into()?;
+        let internal_device_auth_client_id: InternalDeviceAuthClientId =
+            default_env("INTERNAL_DEVICE_AUTH_CLIENT_ID", "aip-internal-device-auth").try_into()?;
 
         Ok(Self {
             version: version()?,
@@ -168,6 +181,7 @@ impl Config {
             atproto_client_logo,
             atproto_client_tos,
             atproto_client_policy,
+            internal_device_auth_client_id,
         })
     }
 }
@@ -370,17 +384,23 @@ impl TryFrom<Option<String>> for OAuthSupportedScopes {
     fn try_from(value: Option<String>) -> Result<Self, Self::Error> {
         let value = value.unwrap_or_default();
         if value.is_empty() {
-            return Ok(Self(vec![
-                "atproto:atproto".to_string(),
-                "atproto:transition:generic".to_string(),
-                "atproto:transition:email".to_string(),
-            ]));
+            // Parse default scopes
+            let default_scopes = "atproto transition:generic transition:email";
+            let scopes = Scope::parse_multiple_reduced(default_scopes).map_err(|e| {
+                ConfigError::InvalidScope(format!("Failed to parse default scopes: {}", e))
+            })?;
+            return Ok(Self(scopes));
         }
 
-        let scopes = value
-            .split_whitespace()
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>();
+        // Apply compat_scopes to normalize scope format before parsing
+        let normalized_value = crate::oauth::scope_validation::compat_scopes(&value);
+        
+        // Parse the provided scopes
+        let scopes = Scope::parse_multiple(&normalized_value)
+            .map_err(|e| ConfigError::InvalidScope(format!("Failed to parse scopes: {}", e)))?;
+
+        // Validate scope requirements
+        Self::validate_scope_requirements(&scopes)?;
 
         Ok(Self(scopes))
     }
@@ -394,9 +414,23 @@ impl TryFrom<String> for OAuthSupportedScopes {
     }
 }
 
-impl AsRef<Vec<String>> for OAuthSupportedScopes {
-    fn as_ref(&self) -> &Vec<String> {
+impl AsRef<Vec<Scope>> for OAuthSupportedScopes {
+    fn as_ref(&self) -> &Vec<Scope> {
         &self.0
+    }
+}
+
+impl OAuthSupportedScopes {
+    /// Validate that scopes contain required AT Protocol scopes when certain OAuth scopes are present
+    /// This delegates to the centralized validation in scope_validation module
+    pub fn validate_scope_requirements(scopes: &[Scope]) -> Result<(), ConfigError> {
+        crate::oauth::scope_validation::validate_oauth_scope_requirements(scopes)
+            .map_err(|e| ConfigError::InvalidScope(e.to_string()))
+    }
+
+    /// Get scopes as a Vec of strings for serialization
+    pub fn as_strings(&self) -> Vec<String> {
+        self.0.iter().map(|s| s.to_string_normalized()).collect()
     }
 }
 
@@ -491,6 +525,109 @@ impl TryFrom<String> for AtprotoClientName {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_oauth_supported_scopes_validation() {
+        // Test 0: Invalid scopes - missing required atproto scope
+        let missing_atproto =
+            OAuthSupportedScopes::try_from("openid transition:generic".to_string());
+        assert!(
+            missing_atproto.is_err(),
+            "Configuration without atproto scope should fail"
+        );
+        if let Err(e) = missing_atproto {
+            let error_msg = e.to_string();
+            assert!(error_msg.contains("atproto") && error_msg.contains("required"));
+        }
+
+        // Test 1: Valid scopes with openid (no transition:generic required)
+        let valid_openid =
+            OAuthSupportedScopes::try_from("atproto openid".to_string());
+        if let Err(ref e) = valid_openid {
+            eprintln!("Test 1 failed with error: {}", e);
+        }
+        assert!(
+            valid_openid.is_ok(),
+            "openid with atproto should be valid"
+        );
+
+        // Test 2: Valid scopes with email (requires openid and email capability)
+        let valid_email =
+            OAuthSupportedScopes::try_from("atproto openid email transition:email".to_string());
+        assert!(
+            valid_email.is_ok(),
+            "email with openid and transition:email should be valid"
+        );
+
+        // Test 3: Valid scopes - profile with openid
+        let valid_profile =
+            OAuthSupportedScopes::try_from("atproto openid profile".to_string());
+        assert!(
+            valid_profile.is_ok(),
+            "profile with openid should be valid"
+        );
+
+        // Test 4: Invalid scopes - email and profile without openid
+        let invalid_email = OAuthSupportedScopes::try_from("atproto email profile".to_string());
+        assert!(
+            invalid_email.is_err(),
+            "email and profile without openid should fail"
+        );
+        if let Err(e) = invalid_email {
+            let error_msg = e.to_string();
+            // Should fail on profile or email requiring openid
+            assert!(
+                error_msg.contains("openid"),
+                "Expected error about openid requirement, got: {}",
+                error_msg
+            );
+        }
+
+        // Test 5: Invalid scopes - email without openid
+        let invalid_email_no_openid = OAuthSupportedScopes::try_from("atproto email transition:email".to_string());
+        assert!(
+            invalid_email_no_openid.is_err(),
+            "email without openid should be invalid"
+        );
+        if let Err(e) = invalid_email_no_openid {
+            let error_msg = e.to_string();
+            assert!(error_msg.contains("email") && error_msg.contains("openid"));
+        }
+
+        // Test 6: Valid email with account:email?action=read
+        let valid_email_alt =
+            OAuthSupportedScopes::try_from("atproto openid email account:email?action=read".to_string());
+        assert!(
+            valid_email_alt.is_ok(),
+            "email with openid and account:email?action=read should be valid"
+        );
+
+        // Test 6: Valid scopes with both openid and email with all requirements
+        let valid_both = OAuthSupportedScopes::try_from(
+            "atproto openid email transition:generic transition:email".to_string(),
+        );
+        assert!(
+            valid_both.is_ok(),
+            "openid and email with all requirements should be valid"
+        );
+
+        // Test 7: Invalid scopes - email with transition:generic (doesn't grant email)
+        let invalid_email_with_generic =
+            OAuthSupportedScopes::try_from("atproto openid email transition:generic".to_string());
+        assert!(
+            invalid_email_with_generic.is_err(),
+            "email with only transition:generic should be invalid (doesn't grant email access)"
+        );
+        if let Err(e) = invalid_email_with_generic {
+            let error_msg = e.to_string();
+            assert!(error_msg.contains("email") && error_msg.contains("requires"));
+        }
+    }
+}
+
 impl AsRef<String> for AtprotoClientName {
     fn as_ref(&self) -> &String {
         &self.0
@@ -535,6 +672,20 @@ impl TryFrom<Option<String>> for AtprotoClientPolicy {
 
 impl AsRef<Option<String>> for AtprotoClientPolicy {
     fn as_ref(&self) -> &Option<String> {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for InternalDeviceAuthClientId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Ok(Self(value))
+    }
+}
+
+impl AsRef<String> for InternalDeviceAuthClientId {
+    fn as_ref(&self) -> &String {
         &self.0
     }
 }

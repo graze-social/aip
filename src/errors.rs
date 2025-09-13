@@ -36,6 +36,10 @@ pub enum ConfigError {
         "error-aip-config-7 Failed to parse boolean '{0}': expected true/false/1/0/yes/no/on/off"
     )]
     BoolParsingFailed(String),
+
+    /// Error when OAuth scopes don't meet requirements
+    #[error("error-aip-config-8 Invalid scope configuration: {0}")]
+    InvalidScope(String),
 }
 
 /// HTTP server errors
@@ -108,6 +112,10 @@ pub enum OAuthError {
     /// Temporarily unavailable
     #[error("error-aip-oauth-13 Temporarily unavailable: {0}")]
     TemporarilyUnavailable(String),
+
+    /// Authorization pending (RFC 8628 device flow)
+    #[error("error-aip-oauth-14 Authorization pending: {0}")]
+    AuthorizationPending(String),
 }
 
 /// Identity resolution errors

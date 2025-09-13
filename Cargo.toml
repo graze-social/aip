@@ -19,11 +19,11 @@ path = "src/lib.rs"
 [dependencies]
 axum = { version = "0.8" }
 
-atproto-identity = { version = "0.11.0", features = ["lru", "zeroize", "hickory-dns"] }
-atproto-oauth = { version = "0.11.0", features = ["lru", "zeroize", "hickory-dns"] }
-atproto-oauth-axum = { version = "0.11.0", features = ["zeroize"] }
-atproto-client = { version = "0.11.0" }
-atproto-xrpcs = { version = "0.11.0", features = ["hickory-dns"] }
+atproto-identity = { version = "0.11.3", features = ["lru", "zeroize", "hickory-dns"] }
+atproto-oauth = { version = "0.11.3", features = ["lru", "zeroize", "hickory-dns"] }
+atproto-oauth-axum = { version = "0.11.3", features = ["zeroize"] }
+atproto-client = { version = "0.11.3" }
+atproto-xrpcs = { version = "0.11.3", features = ["hickory-dns"] }
 
 axum-template = { version = "3.0", features = ["minijinja"] }
 minijinja = { version = "2.7", features = ["builtins"] }

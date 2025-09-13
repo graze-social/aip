@@ -6,6 +6,7 @@ pub mod clients;
 pub mod dpop;
 pub mod dpop_nonce;
 pub mod openid;
+pub mod scope_validation;
 pub mod types;
 pub mod utils_app_password;
 pub mod utils_atprotocol_oauth;

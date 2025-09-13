@@ -16,7 +16,7 @@ pub async fn oauth_protected_resource_handler(State(state): State<AppState>) -> 
         "resource": state.config.external_base,
         "authorization_servers": [state.config.external_base],
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
-        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
+        "scopes_supported": state.config.oauth_supported_scopes.as_strings(),
         "bearer_methods_supported": ["header", "body"],
         "dpop_signing_alg_values_supported": ["ES256"]
     });
@@ -33,12 +33,13 @@ pub async fn oauth_authorization_server_handler(State(state): State<AppState>) -
         "issuer": state.config.external_base,
         "authorization_endpoint": format!("{}/oauth/authorize", state.config.external_base),
         "token_endpoint": format!("{}/oauth/token", state.config.external_base),
+        "device_authorization_endpoint": format!("{}/oauth/device", state.config.external_base),
         "registration_endpoint": format!("{}/oauth/clients/register", state.config.external_base),
         "jwks_uri": format!("{}/.well-known/jwks.json", state.config.external_base),
-        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
+        "scopes_supported": state.config.oauth_supported_scopes.as_strings(),
         "response_types_supported": ["code"],
         "response_modes_supported": ["query"],
-        "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token"],
+        "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token", "urn:ietf:params:oauth:grant-type:device_code"],
         "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none", "private_key_jwt"],
         "token_endpoint_auth_signing_alg_values_supported": ["ES256"],
         "service_documentation": format!("{}/docs", state.config.external_base),
@@ -78,7 +79,7 @@ pub async fn openid_configuration_handler(State(state): State<AppState>) -> Json
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["ES256"],
         "userinfo_signed_response_alg": ["ES256"],
-        "scopes_supported": ["openid", "atproto:atproto", "atproto:transition:generic", "atproto:transition:email", "profile", "email"],
+        "scopes_supported": state.config.oauth_supported_scopes.as_strings(),
         "claims_supported": ["iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "at_hash", "c_hash", "email", "did", "name", "profile", "pds_endpoint"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "response_modes_supported": ["query", "fragment"],
@@ -175,7 +176,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "openid atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
@@ -191,6 +192,7 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
         });
 
         let atp_session_storage = Arc::new(

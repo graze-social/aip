@@ -114,7 +114,7 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
             e.insert(session.clone());
             Ok(())
         } else {
-            Err(StorageError::QueryFailed("Session not found".to_string()))
+            Err(StorageError::NotFound("ATProtocol OAuth session not found".to_string()))
         }
     }
 
@@ -126,6 +126,21 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
         } else {
             Ok(None)
         }
+    }
+
+
+    async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>> {
+        let sessions = self.sessions.read().await;
+
+        let mut result: Vec<AtpOAuthSession> = sessions
+            .values()
+            .filter(|s| s.did.as_ref().map(|d| d.as_str()) == Some(did))
+            .cloned()
+            .collect();
+
+        // Sort by creation time, newest first
+        result.sort_by(|a, b| b.session_created_at.cmp(&a.session_created_at));
+        Ok(result)
     }
 
     async fn update_session_tokens(
@@ -149,7 +164,7 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
             session.access_token_scopes = access_token_scopes;
             Ok(())
         } else {
-            Err(StorageError::QueryFailed("Session not found".to_string()))
+            Err(StorageError::NotFound("ATProtocol OAuth session not found".to_string()))
         }
     }
 

@@ -1,12 +1,14 @@
 //! Bridge for ATProtocol OAuth authentication within base OAuth 2.1 flows.
 
 use crate::errors::OAuthError;
+use crate::oauth::dpop::compute_jwk_thumbprint;
 use crate::oauth::{
     auth_server::{AuthorizationServer, AuthorizeResponse},
     types::*,
 };
 use atproto_identity::key::{KeyType, generate_key, identify_key, to_public};
 use atproto_oauth::resources::{oauth_authorization_server, oauth_protected_resource};
+use atproto_oauth::scopes::Scope;
 use atproto_oauth::{
     jwk::generate as generate_jwk,
     pkce,
@@ -16,8 +18,6 @@ use chrono::{Duration, Utc};
 use std::sync::Arc;
 use ulid::Ulid;
 use uuid::Uuid;
-
-use crate::oauth::dpop::compute_jwk_thumbprint;
 
 // Re-export unified storage types
 pub use crate::storage::traits::AtpOAuthSession;
@@ -51,6 +51,13 @@ pub trait AtpOAuthSessionStorage: Send + Sync {
         &self,
         atp_state: &str,
     ) -> Result<Option<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>>;
+
+
+    /// Get all sessions for a specific DID
+    async fn get_sessions_by_did(
+        &self,
+        did: &str,
+    ) -> Result<Vec<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Remove session by DID, session ID, and iteration
     async fn remove_session(
@@ -311,49 +318,36 @@ impl AtpBackedAuthorizationServer {
         // Create OAuth client for ATProtocol workflow
         let oauth_client = OAuthClient {
             redirect_uri: format!("{}/oauth/atp/callback", self.external_base),
-            client_id: format!("{}/oauth/atp/client-metadata", self.external_base),
+            client_id: format!(
+                "{}{}",
+                self.external_base,
+                crate::config::ATPROTO_CLIENT_METADATA_PATH
+            ),
             private_signing_key_data: signing_key.clone(),
         };
 
         // Create OAuth request state for ATProtocol workflow
-        // Filter original scope to only include atprotocol scopes, removing the prefix
-        // Also add transition scopes based on profile and email scopes
+        // Parse, validate, and filter scopes for AT Protocol OAuth
         let filtered_scope = if let Some(ref original_scope) = request.scope {
-            let scopes: Vec<&str> = original_scope.split_whitespace().collect();
-            let mut atprotocol_scopes: Vec<String> = scopes
-                .iter()
-                .filter_map(|scope| {
-                    if scope.starts_with("atproto:") {
-                        Some(scope.strip_prefix("atproto:").unwrap().to_string())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+            // Apply compat_scopes to normalize scope format before parsing
+            let normalized_scope = crate::oauth::scope_validation::compat_scopes(original_scope);
+            
+            // Parse the scopes using Scope::parse_multiple
+            let scopes = Scope::parse_multiple(&normalized_scope)
+                .map_err(|e| OAuthError::InvalidScope(format!("Failed to parse scopes: {}", e)))?;
 
-            // Add transition:generic scope if profile scope is present
-            if scopes.contains(&"profile")
-                && !atprotocol_scopes.contains(&"transition:generic".to_string())
-            {
-                atprotocol_scopes.push("transition:generic".to_string());
-            }
+            // Validate and filter the scopes for AT Protocol OAuth
+            // This will fail if required scopes are missing
+            let filtered_scopes = crate::oauth::scope_validation::filter_atprotocol_scopes(&scopes)?;
 
-            // Add transition:email scope if email scope is present
-            if scopes.contains(&"email")
-                && !atprotocol_scopes.contains(&"transition:email".to_string())
-            {
-                atprotocol_scopes.push("transition:email".to_string());
-            }
-
-            if atprotocol_scopes.is_empty() {
-                // If no atprotocol scopes found, use default
-                "atproto transition:generic".to_string()
-            } else {
-                atprotocol_scopes.join(" ")
-            }
+            // Serialize the filtered scopes
+            Scope::serialize_multiple(&filtered_scopes)
         } else {
-            // If no scope provided, use default
-            "atproto transition:generic".to_string()
+            // If no scope provided, default to just atproto scope
+            let scopes = vec![Scope::Atproto];
+            
+            // Serialize the scopes
+            Scope::serialize_multiple(&scopes)
         };
 
         let atpoauth_request_state = OAuthRequestState {
@@ -456,7 +450,7 @@ impl AtpBackedAuthorizationServer {
             .session_storage
             .get_session_by_atp_state(&state)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Session storage error: {}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidState("Session not found".to_string()))?;
 
         // Verify this is the first iteration as expected during callback
@@ -481,7 +475,7 @@ impl AtpBackedAuthorizationServer {
             .oauth_request_storage
             .get_oauth_request_by_state(&state)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("OAuth request storage error: {}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidState("OAuth request not found".to_string()))?;
 
         // Parse the DPoP private key from storage
@@ -503,7 +497,11 @@ impl AtpBackedAuthorizationServer {
         // Create OAuth client for the workflow
         let oauth_client = OAuthClient {
             redirect_uri: format!("{}/oauth/atp/callback", self.external_base),
-            client_id: format!("{}/oauth/atp/client-metadata", self.external_base),
+            client_id: format!(
+                "{}{}",
+                self.external_base,
+                crate::config::ATPROTO_CLIENT_METADATA_PATH
+            ),
             private_signing_key_data: signing_key,
         };
 
@@ -584,7 +582,7 @@ impl AtpBackedAuthorizationServer {
             .get_authorization_request(&session.session_id)
             .await
             .map_err(|e| {
-                OAuthError::ServerError(format!("Authorization request storage error: {}", e))
+                OAuthError::ServerError(e.to_string())
             })?
             .ok_or_else(|| {
                 OAuthError::InvalidState("Authorization request not found".to_string())
@@ -607,21 +605,21 @@ impl AtpBackedAuthorizationServer {
         self.oauth_request_storage
             .delete_oauth_request_by_state(&state)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("OAuth request cleanup error: {}", e)))?;
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?;
 
         // Clean up authorization request storage
         self.authorization_request_storage
             .remove_authorization_request(&session_id)
             .await
             .map_err(|e| {
-                OAuthError::ServerError(format!("Authorization request cleanup error: {}", e))
+                OAuthError::ServerError(e.to_string())
             })?;
 
         match auth_response {
             AuthorizeResponse::Redirect(url) => Ok(url),
-            AuthorizeResponse::Error { error, description } => Err(OAuthError::ServerError(
-                format!("Authorization failed: {} - {}", error, description),
-            )),
+            AuthorizeResponse::Error { error, description } => {
+                Err(OAuthError::AuthorizationFailed(format!("{} - {}", error, description)))
+            }
         }
     }
 
@@ -637,7 +635,7 @@ impl AtpBackedAuthorizationServer {
         let client = storage
             .get_client(&request.client_id)
             .await
-            .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidClient("Client not found".to_string()))?;
 
         // Validate redirect URI
@@ -799,6 +797,40 @@ impl AtpOAuthSessionStorage for UnifiedAtpOAuthSessionStorageAdapter {
         Ok(oauth_session)
     }
 
+
+    async fn get_sessions_by_did(
+        &self,
+        did: &str,
+    ) -> Result<Vec<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>> {
+        let storage_sessions = self
+            .storage
+            .get_sessions_by_did(did)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        let oauth_sessions = storage_sessions
+            .into_iter()
+            .map(|s| AtpOAuthSession {
+                session_id: s.session_id,
+                did: s.did,
+                session_created_at: s.session_created_at,
+                atp_oauth_state: s.atp_oauth_state,
+                signing_key_jkt: s.signing_key_jkt,
+                dpop_key: s.dpop_key,
+                access_token: s.access_token,
+                refresh_token: s.refresh_token,
+                access_token_created_at: s.access_token_created_at,
+                access_token_expires_at: s.access_token_expires_at,
+                access_token_scopes: s.access_token_scopes,
+                session_exchanged_at: s.session_exchanged_at,
+                exchange_error: s.exchange_error,
+                iteration: s.iteration,
+            })
+            .collect();
+
+        Ok(oauth_sessions)
+    }
+
     async fn remove_session(
         &self,
         did: &str,
@@ -908,7 +940,10 @@ mod tests {
             atproto_identity::key::generate_key(atproto_identity::key::KeyType::P256Private)
                 .unwrap();
         let client_config = atproto_oauth_axum::state::OAuthClientConfig {
-            client_id: "https://localhost/oauth/atp/client-metadata".to_string(),
+            client_id: format!(
+                "https://localhost{}",
+                crate::config::ATPROTO_CLIENT_METADATA_PATH
+            ),
             redirect_uris: "https://localhost/oauth/atp/callback".to_string(),
             jwks_uri: Some("https://localhost/.well-known/jwks.json".to_string()),
             signing_keys: vec![test_signing_key],
@@ -917,9 +952,7 @@ mod tests {
             logo_uri: None,
             tos_uri: None,
             policy_uri: None,
-            scope: Some(
-                "atproto:atproto atproto:transition:generic atproto:transition:email".to_string(),
-            ),
+            scope: Some("atproto transition:generic transition:email".to_string()),
         };
 
         // Create session storage using unified adapter
@@ -1099,6 +1132,9 @@ mod tests {
             scope: Some("read write".to_string()),
             token_endpoint_auth_method: ClientAuthMethod::ClientSecretBasic,
             client_type: ClientType::Confidential,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
@@ -1120,7 +1156,7 @@ mod tests {
             response_type: vec![ResponseType::Code],
             client_id: "test-client".to_string(),
             redirect_uri: "https://example.com/callback".to_string(),
-            scope: Some("read".to_string()),
+            scope: Some("atproto transition:generic".to_string()),
             state: Some("client-state".to_string()),
             code_challenge: None,
             code_challenge_method: None,
@@ -1143,8 +1179,11 @@ mod tests {
         assert!(
             error_message.contains("AuthorizationFailed")
                 || error_message.contains("OAuth init failed")
+                || error_message.contains("Failed to resolve subject")
+                || error_message.contains("PDS discovery failed")
         );
         assert!(!error_message.contains("InvalidClient"));
+        assert!(!error_message.contains("Invalid scope"));
         assert!(!error_message.contains("Invalid redirect URI"));
     }
 
@@ -1515,7 +1554,7 @@ mod tests {
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             let server = create_test_atp_backed_server();
 
-            // Test scope filtering with profile scope
+            // Test scope filtering with profile scope - missing required AT Protocol scopes
             let request_with_profile = AuthorizationRequest {
                 response_type: vec![ResponseType::Code],
                 client_id: "test-client".to_string(),
@@ -1536,9 +1575,12 @@ mod tests {
                 redirect_uris: vec!["https://example.com/callback".to_string()],
                 grant_types: vec![crate::oauth::types::GrantType::AuthorizationCode],
                 response_types: vec![crate::oauth::types::ResponseType::Code],
-                scope: Some("openid profile email".to_string()),
+                scope: Some("openid profile email atproto transition:generic transition:email".to_string()),
                 token_endpoint_auth_method: crate::oauth::types::ClientAuthMethod::None,
                 client_type: crate::oauth::types::ClientType::Public,
+                application_type: None,
+                software_id: None,
+                software_version: None,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
                 metadata: serde_json::json!({}),
@@ -1556,24 +1598,22 @@ mod tests {
                 .await
                 .unwrap();
 
-            // Test with profile scope - should add transition:generic
+            // Test with profile scope - should fail due to missing required AT Protocol scopes
             let result_profile = server
                 .authorize_with_atprotocol(request_with_profile, "alice.bsky.social".to_string())
                 .await;
 
-            // The test will fail at ATProtocol OAuth step, but we can verify it passed our validation
+            // The test should fail with scope validation error
             assert!(result_profile.is_err());
             let error_message = result_profile.unwrap_err().to_string();
             println!("Profile error message: {}", error_message);
             assert!(
-                error_message.contains("Failed to resolve subject")
-                    || error_message.contains("PDS discovery failed")
-                    || error_message.contains("error-aip-resolve-1")
-                    || error_message.contains("error-aip-oauth-1")
-                    || error_message.contains("OAuth init failed")
+                error_message.contains("atproto") && error_message.contains("required"),
+                "Expected scope validation error about missing atproto scope, got: {}",
+                error_message
             );
 
-            // Test scope filtering with email scope
+            // Test scope filtering with email scope - missing required AT Protocol scopes
             let request_with_email = AuthorizationRequest {
                 response_type: vec![ResponseType::Code],
                 client_id: "test-client".to_string(),
@@ -1586,24 +1626,22 @@ mod tests {
                 nonce: None,
             };
 
-            // Test with email scope - should add transition:email
+            // Test with email scope - should fail due to missing required AT Protocol scopes
             let result_email = server
                 .authorize_with_atprotocol(request_with_email, "alice.bsky.social".to_string())
                 .await;
 
-            // The test will fail at ATProtocol OAuth step, but we can verify it passed our validation
+            // The test should fail with scope validation error
             assert!(result_email.is_err());
             let error_message = result_email.unwrap_err().to_string();
             println!("Email error message: {}", error_message);
             assert!(
-                error_message.contains("Failed to resolve subject")
-                    || error_message.contains("PDS discovery failed")
-                    || error_message.contains("error-aip-resolve-1")
-                    || error_message.contains("error-aip-oauth-1")
-                    || error_message.contains("OAuth init failed")
+                error_message.contains("atproto") && error_message.contains("required"),
+                "Expected scope validation error about missing atproto scope, got: {}",
+                error_message
             );
 
-            // Test scope filtering with both profile and email scopes
+            // Test scope filtering with both profile and email scopes - missing required AT Protocol scopes
             let request_with_both = AuthorizationRequest {
                 response_type: vec![ResponseType::Code],
                 client_id: "test-client".to_string(),
@@ -1616,21 +1654,19 @@ mod tests {
                 nonce: None,
             };
 
-            // Test with both scopes - should add both transition scopes
+            // Test with both scopes - should fail due to missing required AT Protocol scopes
             let result_both = server
                 .authorize_with_atprotocol(request_with_both, "alice.bsky.social".to_string())
                 .await;
 
-            // The test will fail at ATProtocol OAuth step, but we can verify it passed our validation
+            // The test should fail with scope validation error
             assert!(result_both.is_err());
             let error_message = result_both.unwrap_err().to_string();
             println!("Both scopes error message: {}", error_message);
             assert!(
-                error_message.contains("Failed to resolve subject")
-                    || error_message.contains("PDS discovery failed")
-                    || error_message.contains("error-aip-resolve-1")
-                    || error_message.contains("error-aip-oauth-1")
-                    || error_message.contains("OAuth init failed")
+                error_message.contains("atproto") && error_message.contains("required"),
+                "Expected scope validation error about missing atproto scope, got: {}",
+                error_message
             );
         });
     }

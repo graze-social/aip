@@ -93,13 +93,20 @@ pub fn normalize_login_hint(login_hint: &str) -> Result<String, OAuthError> {
     }
     // Otherwise, treat it as a handle
     else {
-        if !(is_valid_hostname(trimmed) && trimmed.contains('.')) {
+        // If it doesn't contain a dot, append .bsky.social
+        let handle = if !trimmed.contains('.') {
+            format!("{}.bsky.social", trimmed)
+        } else {
+            trimmed.to_string()
+        };
+
+        if !(is_valid_hostname(&handle) && handle.contains('.')) {
             return Err(OAuthError::InvalidRequest(
                 "Invalid handle format".to_string(),
             ));
         }
 
-        Ok(trimmed.to_string())
+        Ok(handle)
     }
 }
 
@@ -168,7 +175,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
@@ -184,6 +191,7 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
         });
 
         let atp_session_storage = Arc::new(
@@ -251,7 +259,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
@@ -267,6 +275,7 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
         });
 
         app_state.config = custom_config;
@@ -306,6 +315,15 @@ mod tests {
             normalize_login_hint("  @example.com  ").unwrap(),
             "example.com"
         );
+
+        // Handle without dot gets .bsky.social appended
+        assert_eq!(normalize_login_hint("nick").unwrap(), "nick.bsky.social");
+
+        // Handle with @ prefix and no dot gets .bsky.social appended
+        assert_eq!(normalize_login_hint("@alice").unwrap(), "alice.bsky.social");
+
+        // Handle with at:// prefix and no dot gets .bsky.social appended
+        assert_eq!(normalize_login_hint("at://bob").unwrap(), "bob.bsky.social");
     }
 
     #[test]
@@ -381,11 +399,6 @@ mod tests {
 
         // Only whitespace
         assert!(normalize_login_hint("   ").is_err());
-
-        // Invalid handle (no dot) - ATProtocol validation will catch these
-        assert!(normalize_login_hint("invalid").is_err());
-        assert!(normalize_login_hint("@invalid").is_err());
-        assert!(normalize_login_hint("at://invalid").is_err());
 
         // Invalid DID PLC (wrong format)
         assert!(normalize_login_hint("did:plc:invalid").is_err());

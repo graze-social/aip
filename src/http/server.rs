@@ -17,6 +17,8 @@ use super::{
     handler_atprotocol_oauth_authorize::handle_oauth_authorize,
     handler_atprotocol_oauth_callback::handle_atpoauth_callback,
     handler_atprotocol_session::get_atprotocol_session_handler,
+    handler_device_code::device_authorization_handler,
+    handler_device_authorization::{device_authorization_page, device_authorize, device_oauth_callback},
     handler_index::handle_index,
     handler_oauth::handle_oauth_token,
     handler_oauth_clients::{
@@ -51,11 +53,11 @@ pub fn build_router(ctx: AppState) -> Router {
     let mut oauth_routes = Router::new()
         .route("/authorize", get(handle_oauth_authorize))
         .route("/token", post(handle_oauth_token))
+        .route("/device", post(device_authorization_handler))
         .route("/userinfo", get(get_userinfo_handler))
         .route("/userinfo", post(get_userinfo_handler))
         .route("/par", post(pushed_authorization_request_handler))
-        .route("/atp/callback", get(handle_atpoauth_callback))
-        .route("/atp/client-metadata", get(handle_atpoauth_client_metadata));
+        .route("/atp/callback", get(handle_atpoauth_callback));
 
     // Conditionally add client API endpoints
     if ctx.config.enable_client_api {
@@ -116,9 +118,16 @@ pub fn build_router(ctx: AppState) -> Router {
     // Build the main router
     Router::new()
         .route("/", get(handle_index))
+        .route("/device", get(device_authorization_page))
+        .route("/device/authorize", post(device_authorize))
+        .route("/device/callback", get(device_oauth_callback))
         .nest("/api", protected_api_routes)
         .nest("/oauth", oauth_routes)
         .nest("/.well-known", well_known_routes)
+        .route(
+            crate::config::ATPROTO_CLIENT_METADATA_PATH,
+            get(handle_atpoauth_client_metadata),
+        )
         .route(
             "/xrpc/tools.graze.aip.clients.Update",
             post(xrpc_clients_update_handler),
@@ -203,7 +212,7 @@ mod tests {
             atproto_oauth_signing_keys: Default::default(),
             oauth_signing_keys: Default::default(),
             oauth_supported_scopes: crate::config::OAuthSupportedScopes::try_from(
-                "read write atproto:atproto".to_string(),
+                "atproto transition:generic transition:email".to_string(),
             )
             .unwrap(),
             dpop_nonce_seed: "seed".to_string(),
@@ -219,6 +228,7 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
         });
 
         let atp_session_storage = Arc::new(
