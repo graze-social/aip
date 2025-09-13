@@ -97,20 +97,35 @@ impl ClientRegistrationService {
             ClientType::Public
         };
 
-        // Set defaults
+        // Set defaults based on application type
         let redirect_uris = request.redirect_uris.clone().unwrap_or_default();
-        let grant_types = request
-            .grant_types
-            .clone()
-            .unwrap_or_else(|| vec![GrantType::AuthorizationCode]);
-        let response_types = request
-            .response_types
-            .clone()
-            .unwrap_or_else(|| vec![ResponseType::Code]);
-        let auth_method = request
-            .token_endpoint_auth_method
-            .clone()
-            .unwrap_or(self.default_auth_method.clone());
+        
+        // For native applications, default to device code flow
+        let grant_types = request.grant_types.clone().unwrap_or_else(|| {
+            match &request.application_type {
+                Some(crate::oauth::types::ApplicationType::Native) => {
+                    vec![GrantType::DeviceCode, GrantType::RefreshToken]
+                }
+                _ => vec![GrantType::AuthorizationCode]
+            }
+        });
+        
+        let response_types = request.response_types.clone().unwrap_or_else(|| {
+            if grant_types.contains(&GrantType::DeviceCode) {
+                vec![ResponseType::DeviceCode]
+            } else {
+                vec![ResponseType::Code]
+            }
+        });
+        
+        // For device flow, default to no authentication
+        let auth_method = request.token_endpoint_auth_method.clone().unwrap_or_else(|| {
+            if grant_types.contains(&GrantType::DeviceCode) {
+                crate::oauth::types::ClientAuthMethod::None
+            } else {
+                self.default_auth_method.clone()
+            }
+        });
 
         let now = Utc::now();
 
@@ -128,6 +143,9 @@ impl ClientRegistrationService {
             scope: request.scope.clone(),
             token_endpoint_auth_method: auth_method.clone(),
             client_type,
+            application_type: request.application_type.clone(),
+            software_id: request.software_id.clone(),
+            software_version: request.software_version.clone(),
             created_at: now,
             updated_at: now,
             metadata: request.metadata.clone(),
@@ -159,6 +177,9 @@ impl ClientRegistrationService {
             response_types,
             scope: request.scope,
             token_endpoint_auth_method: auth_method,
+            application_type: request.application_type,
+            software_id: request.software_id,
+            software_version: request.software_version,
             registration_access_token,
             registration_client_uri,
             client_id_issued_at: now.timestamp(),
@@ -210,6 +231,9 @@ impl ClientRegistrationService {
             response_types: client.response_types,
             scope: client.scope,
             token_endpoint_auth_method: client.token_endpoint_auth_method,
+            application_type: client.application_type,
+            software_id: client.software_id,
+            software_version: client.software_version,
             registration_access_token: "redacted".to_string(), // Don't return the actual token
             registration_client_uri: format!("/oauth/clients/{}", client_id_for_uri),
             client_id_issued_at: client.created_at.timestamp(),
@@ -274,6 +298,15 @@ impl ClientRegistrationService {
         }
         if let Some(auth_method) = request.token_endpoint_auth_method {
             client.token_endpoint_auth_method = auth_method;
+        }
+        if request.application_type.is_some() {
+            client.application_type = request.application_type.clone();
+        }
+        if request.software_id.is_some() {
+            client.software_id = request.software_id.clone();
+        }
+        if request.software_version.is_some() {
+            client.software_version = request.software_version.clone();
         }
 
         client.updated_at = Utc::now();
@@ -366,6 +399,33 @@ impl ClientRegistrationService {
                     "authorization_code grant requires code response type".to_string(),
                 ));
             }
+            
+            // Validate device code grant type requirements
+            if grant_types.contains(&GrantType::DeviceCode) {
+                if !response_types.contains(&ResponseType::DeviceCode) {
+                    return Err(ClientRegistrationError::InvalidClientMetadata(
+                        "device_code grant requires device_code response type".to_string(),
+                    ));
+                }
+                
+                // Device flow clients should be native applications
+                if let Some(app_type) = &request.application_type {
+                    if *app_type != crate::oauth::types::ApplicationType::Native {
+                        return Err(ClientRegistrationError::InvalidClientMetadata(
+                            "device_code grant is typically used with native applications".to_string(),
+                        ));
+                    }
+                }
+                
+                // Device flow clients should use no authentication by default
+                if let Some(auth_method) = &request.token_endpoint_auth_method {
+                    if *auth_method != crate::oauth::types::ClientAuthMethod::None {
+                        return Err(ClientRegistrationError::InvalidClientMetadata(
+                            "device_code grant typically uses 'none' authentication method".to_string(),
+                        ));
+                    }
+                }
+            }
         }
 
         // Validate scope
@@ -416,7 +476,7 @@ impl ClientRegistrationService {
             ClientRegistrationError::InvalidRedirectUri(format!("Invalid URI format: {}", e))
         })?;
 
-        // Must use HTTPS (except for localhost for development)
+        // Must use HTTPS (except for localhost for development) or custom scheme for native apps
         match parsed.scheme() {
             "https" => {} // Always allowed
             "http" => {
@@ -433,10 +493,15 @@ impl ClientRegistrationService {
                     ));
                 }
             }
-            _ => {
-                return Err(ClientRegistrationError::InvalidRedirectUri(
-                    "Redirect URI must use HTTP or HTTPS".to_string(),
-                ));
+            scheme => {
+                // Allow custom schemes for native applications (RFC 8252)
+                // Custom schemes should not be "http" or "https" and should be unique to the application
+                if scheme.len() < 3 || !scheme.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '+') {
+                    return Err(ClientRegistrationError::InvalidRedirectUri(
+                        "Custom scheme must be at least 3 characters and contain only alphanumeric characters, hyphens, dots, or plus signs".to_string(),
+                    ));
+                }
+                // Allow custom schemes for native apps - these are typically used for device/CLI applications
             }
         }
 
@@ -486,6 +551,9 @@ mod tests {
             token_endpoint_auth_method: Some(ClientAuthMethod::ClientSecretBasic),
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -516,6 +584,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -549,6 +620,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -588,6 +662,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -606,6 +683,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -647,6 +727,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -668,6 +751,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -689,6 +775,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -736,6 +825,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -757,6 +849,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -779,6 +874,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -825,6 +923,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -846,6 +947,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 
@@ -875,6 +979,9 @@ mod tests {
             token_endpoint_auth_method: None,
             jwks: None,
             jwks_uri: None,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             metadata: serde_json::Value::Null,
         };
 

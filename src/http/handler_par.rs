@@ -412,6 +412,9 @@ mod tests {
             scope: Some("atproto transition:generic transition:email".to_string()),
             token_endpoint_auth_method: ClientAuthMethod::ClientSecretBasic,
             client_type: ClientType::Confidential,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
@@ -478,6 +481,7 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
         };
 
         let auth_request =
@@ -501,6 +505,9 @@ mod tests {
             scope: Some("atproto transition:generic".to_string()),
             token_endpoint_auth_method: ClientAuthMethod::ClientSecretBasic,
             client_type: ClientType::Confidential,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
@@ -558,6 +565,7 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
         };
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);
@@ -579,6 +587,9 @@ mod tests {
             scope: Some("atproto".to_string()), // Only 'read' allowed
             token_endpoint_auth_method: ClientAuthMethod::ClientSecretBasic,
             client_type: ClientType::Confidential,
+            application_type: None,
+            software_id: None,
+            software_version: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             metadata: serde_json::Value::Null,
@@ -636,6 +647,7 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
         };
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);

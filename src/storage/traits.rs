@@ -82,6 +82,51 @@ pub trait RefreshTokenStore {
     async fn cleanup_expired_refresh_tokens(&self) -> Result<usize>;
 }
 
+/// Device code entry for RFC 8628 device authorization grant
+#[derive(Clone, Serialize, Deserialize)]
+#[cfg_attr(any(debug_assertions, test), derive(Debug))]
+pub struct DeviceCodeEntry {
+    pub device_code: String,
+    pub user_code: String,
+    pub client_id: String,
+    pub scope: Option<String>,
+    pub authorized_user: Option<String>,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Trait for storing and retrieving device codes (RFC 8628)
+#[async_trait]
+pub trait DeviceCodeStore {
+    /// Store a new device code
+    async fn store_device_code(
+        &self,
+        device_code: &str,
+        user_code: &str,
+        client_id: &str,
+        scope: Option<&str>,
+        expires_in: u64,
+    ) -> Result<()>;
+
+    /// Retrieve a device code entry
+    async fn get_device_code(&self, device_code: &str) -> Result<Option<DeviceCodeEntry>>;
+    /// Retrieve a device code entry by user code
+    async fn get_device_code_by_user_code(&self, user_code: &str) -> Result<Option<DeviceCodeEntry>>;
+
+    /// Authorize a device code with a user
+    async fn authorize_device_code(
+        &self,
+        user_code: &str,
+        user_id: &str,
+    ) -> Result<()>;
+
+    /// Consume (and delete) a device code, returning the authorized user if any
+    async fn consume_device_code(&self, device_code: &str) -> Result<Option<String>>;
+
+    /// Clean up expired device codes
+    async fn cleanup_expired_device_codes(&self) -> Result<usize>;
+}
+
 /// Trait for storing and retrieving cryptographic keys
 #[async_trait]
 pub trait KeyStore {
@@ -190,6 +235,8 @@ pub trait AtpOAuthSessionStorage: Send + Sync {
 
     /// Get session by ATProtocol OAuth state
     async fn get_session_by_atp_state(&self, atp_state: &str) -> Result<Option<AtpOAuthSession>>;
+    /// Get all sessions for a given DID (most recent first)
+    async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>>;
 
     /// Update existing session
     async fn update_session(&self, session: &AtpOAuthSession) -> Result<()>;
@@ -347,6 +394,7 @@ pub trait OAuthStorage:
     + AuthorizationCodeStore
     + AccessTokenStore
     + RefreshTokenStore
+    + DeviceCodeStore
     + KeyStore
     + PARStorage
     + AtpOAuthSessionStorage
