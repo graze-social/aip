@@ -10,9 +10,13 @@ path = "src/main.rs"
 
 [dependencies]
 # ATProtocol dependencies - Update paths as needed for your setup
-atproto-client = { path = "/Users/nick/development/tangled.sh/smokesignal.events/atproto-identity-rs/crates/atproto-client" }
-atproto-identity = { path = "/Users/nick/development/tangled.sh/smokesignal.events/atproto-identity-rs/crates/atproto-identity" }
-atproto-oauth = { path = "/Users/nick/development/tangled.sh/smokesignal.events/atproto-identity-rs/crates/atproto-oauth" }
+# atproto-client = { path = "/Users/nick/development/tangled.sh/smokesignal.events/atproto-identity-rs/crates/atproto-client" }
+# atproto-identity = { path = "/Users/nick/development/tangled.sh/smokesignal.events/atproto-identity-rs/crates/atproto-identity" }
+# atproto-oauth = { path = "/Users/nick/development/tangled.sh/smokesignal.events/atproto-identity-rs/crates/atproto-oauth" }
+
+atproto-oauth = { version = "0.11.3", features = ["lru", "zeroize", "hickory-dns"] }
+atproto-identity = { version = "0.11.3", features = ["zeroize"] }
+atproto-client = { version = "0.11.3" }
 
 # Web framework
 axum = { version = "0.8" }

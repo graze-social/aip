@@ -57,7 +57,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "atproto-client"
-version = "0.6.0"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f84bef751a7d3796826160f892e1a555ff26db327e7ae3e35eca48d789f54d6e"
 dependencies = [
  "anyhow",
  "atproto-identity",
@@ -77,15 +79,15 @@ dependencies = [
 
 [[package]]
 name = "atproto-identity"
-version = "0.6.0"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aaac8751c7e4329a95714c01d9e47d22d94bc8c96e78079098312235128acb9f"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
  "ecdsa",
  "elliptic-curve",
  "hickory-resolver",
- "http",
  "k256",
  "lru",
  "multibase",
@@ -99,21 +101,22 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]
 name = "atproto-oauth"
-version = "0.6.0"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee92a16f57838093bf72aa517a462613d3786603a2b5e5cd734e2215a971448f"
 dependencies = [
  "anyhow",
  "async-trait",
  "atproto-identity",
- "axum",
  "base64",
  "chrono",
  "ecdsa",
  "elliptic-curve",
- "http",
  "k256",
  "lru",
  "multibase",
@@ -131,25 +134,23 @@ dependencies = [
  "tokio",
  "tracing",
  "ulid",
+ "zeroize",
 ]
 
 [[package]]
 name = "atproto-record"
-version = "0.6.0"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34e7c05334833c46feb38e2dbc5e80df6c2f044d32e6248198665809b405dc28"
 dependencies = [
  "anyhow",
  "atproto-identity",
+ "base64",
  "chrono",
- "ecdsa",
- "k256",
- "multibase",
- "p256",
  "serde",
  "serde_ipld_dagcbor",
  "serde_json",
  "thiserror 2.0.12",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -165,7 +166,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "021e862c184ae977658b36c4500f7feac3221ca5da43e3f25bd04ab6c79a29b5"
 dependencies = [
  "axum-core",
- "axum-macros",
  "bytes",
  "form_urlencoded",
  "futures-util",
@@ -211,17 +211,6 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "axum-macros"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "604fde5e028fea851ce1d8570bbdc034bec850d157f7569d10f347d06808c05c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -327,6 +316,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c469d952047f47f91b68d1cba3f10d63c11d73e4636f24f08daf0278abf01c4d"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -3118,6 +3108,20 @@ name = "zeroize"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "zerotrie"

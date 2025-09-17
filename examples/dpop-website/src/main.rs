@@ -150,6 +150,7 @@ struct OAuthState {
 #[derive(Debug, Serialize)]
 struct PARRequest {
     client_id: String,
+    client_secret: String,
     response_type: String,
     redirect_uri: String,
     scope: String,
@@ -481,7 +482,7 @@ async fn register_client(
         response_types: vec!["code".to_string()],
         grant_types: vec!["authorization_code".to_string()],
         token_endpoint_auth_method: "client_secret_post".to_string(),
-        scope: "atproto:atproto atproto:transition:generic".to_string(),
+        scope: "openid email profile atproto account:email repo:* rpc:*".to_string(),
         contacts: Some(vec!["admin@demo-dpop-client.example".to_string()]),
         logo_uri: None,
         policy_uri: Some(format!("{}/policy", config.demo_base_url)),
@@ -870,7 +871,7 @@ async fn login_handler(
 
     // Step 3: Prepare OAuth parameters
     let redirect_uri = format!("{}/callback", state.config.demo_base_url);
-    let scope = "atproto:atproto atproto:transition:generic".to_string();
+    let scope = "openid email profile atproto account:email repo:* rpc:*".to_string();
 
     let oauth_state_data = OAuthState {
         state: oauth_state.clone(),
@@ -908,6 +909,7 @@ async fn login_handler(
         // Make PAR request with DPoP
         let par_request = PARRequest {
             client_id: client_credentials.client_id.clone(),
+            client_secret: client_credentials.client_secret.unwrap(),
             response_type: "code".to_string(),
             redirect_uri: redirect_uri.clone(),
             scope: scope.clone(),
