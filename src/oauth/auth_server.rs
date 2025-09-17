@@ -92,16 +92,16 @@ impl AuthorizationServer {
         }
 
         // Validate scope
-        if let Some(ref requested_scope) = request.scope {
-            if let Some(ref client_scope) = client.scope {
-                let requested_scopes = parse_scope(requested_scope);
-                let allowed_scopes = parse_scope(client_scope);
+        if let Some(ref requested_scope) = request.scope
+            && let Some(ref client_scope) = client.scope
+        {
+            let requested_scopes = parse_scope(requested_scope);
+            let allowed_scopes = parse_scope(client_scope);
 
-                if !requested_scopes.is_subset(&allowed_scopes) {
-                    return Err(OAuthError::InvalidScope(
-                        "Requested scope exceeds allowed scope".to_string(),
-                    ));
-                }
+            if !requested_scopes.is_subset(&allowed_scopes) {
+                return Err(OAuthError::InvalidScope(
+                    "Requested scope exceeds allowed scope".to_string(),
+                ));
             }
         }
 
@@ -174,7 +174,8 @@ impl AuthorizationServer {
                     .await
             }
             GrantType::DeviceCode => {
-                self.handle_device_code_grant(request, headers, client_auth).await
+                self.handle_device_code_grant(request, headers, client_auth)
+                    .await
             }
         }
     }
@@ -522,7 +523,9 @@ impl AuthorizationServer {
             .get_device_code(device_code)
             .await
             .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
-            .ok_or_else(|| OAuthError::InvalidGrant("Invalid or expired device code".to_string()))?;
+            .ok_or_else(|| {
+                OAuthError::InvalidGrant("Invalid or expired device code".to_string())
+            })?;
 
         // Check if device code is expired
         if device_entry.expires_at <= chrono::Utc::now() {
@@ -532,7 +535,11 @@ impl AuthorizationServer {
         // Check if device code is authorized
         let _authorized_user = match device_entry.authorized_user {
             Some(user) => user,
-            None => return Err(OAuthError::AuthorizationPending("Device code not yet authorized".to_string())),
+            None => {
+                return Err(OAuthError::AuthorizationPending(
+                    "Device code not yet authorized".to_string(),
+                ));
+            }
         };
 
         // Use the client_id from the device code entry
@@ -551,7 +558,8 @@ impl AuthorizationServer {
 
         // Now consume the device code since we're going to issue tokens
         // Only consume after successful authentication to avoid consuming on auth failures
-        let consumed_authorized_user = self.storage
+        let consumed_authorized_user = self
+            .storage
             .consume_device_code(device_code)
             .await
             .map_err(|e| OAuthError::ServerError(format!("Storage error: {:?}", e)))?
@@ -870,7 +878,9 @@ pub async fn token_handler(
                 }
                 OAuthError::InvalidScope(_) => (StatusCode::BAD_REQUEST, "invalid_scope"),
                 OAuthError::InvalidRequest(_) => (StatusCode::BAD_REQUEST, "invalid_request"),
-                OAuthError::AuthorizationPending(_) => (StatusCode::ACCEPTED, "authorization_pending"),
+                OAuthError::AuthorizationPending(_) => {
+                    (StatusCode::ACCEPTED, "authorization_pending")
+                }
                 _ => (StatusCode::INTERNAL_SERVER_ERROR, "server_error"),
             };
 
@@ -904,23 +914,20 @@ pub fn extract_client_auth(headers: &HeaderMap, form: &TokenForm) -> Option<Clie
     }
 
     // Try Authorization header (HTTP Basic)
-    if let Some(auth_header) = headers.get("Authorization") {
-        if let Ok(auth_str) = auth_header.to_str() {
-            if let Some(encoded) = auth_str.strip_prefix("Basic ") {
-                if let Ok(decoded) = BASE64_STANDARD.decode(encoded) {
-                    if let Ok(credentials) = String::from_utf8(decoded) {
-                        let parts: Vec<&str> = credentials.splitn(2, ':').collect();
-                        if parts.len() == 2 {
-                            return Some(ClientAuthentication {
-                                client_id: parts[0].to_string(),
-                                client_secret: Some(parts[1].to_string()),
-                                client_assertion: None,
-                                client_assertion_type: None,
-                            });
-                        }
-                    }
-                }
-            }
+    if let Some(auth_header) = headers.get("Authorization")
+        && let Ok(auth_str) = auth_header.to_str()
+        && let Some(encoded) = auth_str.strip_prefix("Basic ")
+        && let Ok(decoded) = BASE64_STANDARD.decode(encoded)
+        && let Ok(credentials) = String::from_utf8(decoded)
+    {
+        let parts: Vec<&str> = credentials.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            return Some(ClientAuthentication {
+                client_id: parts[0].to_string(),
+                client_secret: Some(parts[1].to_string()),
+                client_assertion: None,
+                client_assertion_type: None,
+            });
         }
     }
 
@@ -1017,11 +1024,11 @@ pub fn validate_client_assertion(
     // 3. Audience must include the token endpoint or current endpoint
     let audience_valid = match aud {
         serde_json::Value::String(aud_str) => {
-            aud_str == token_endpoint || current_endpoint.map_or(false, |ep| aud_str == ep)
+            aud_str == token_endpoint || current_endpoint.is_some_and(|ep| aud_str == ep)
         }
         serde_json::Value::Array(aud_array) => aud_array.iter().any(|v| {
             v.as_str() == Some(token_endpoint)
-                || current_endpoint.map_or(false, |ep| v.as_str() == Some(ep))
+                || current_endpoint.is_some_and(|ep| v.as_str() == Some(ep))
         }),
         _ => false,
     };
@@ -1128,7 +1135,7 @@ pub fn validate_client_assertion(
 mod tests {
     use super::*;
     use crate::storage::inmemory::MemoryOAuthStorage;
-    use crate::storage::traits::{OAuthClientStore, AccessTokenStore, DeviceCodeStore};
+    use crate::storage::traits::{AccessTokenStore, DeviceCodeStore, OAuthClientStore};
 
     #[tokio::test]
     async fn test_authorization_code_flow() {
@@ -1310,7 +1317,11 @@ mod tests {
         assert!(token_result.is_err());
         match token_result {
             Err(OAuthError::InvalidClient(msg)) => {
-                assert!(msg.contains("JWT"), "Expected JWT validation error, got: {}", msg);
+                assert!(
+                    msg.contains("JWT"),
+                    "Expected JWT validation error, got: {}",
+                    msg
+                );
             }
             other => panic!("Expected InvalidClient with JWT error, got: {:?}", other),
         }
@@ -1350,17 +1361,23 @@ mod tests {
         // Step 1: Store a device code
         let device_code = "device_test123";
         let user_code = "ABCD-EFGH";
-        storage.store_device_code(
-            device_code,
-            user_code,
-            "test-device-client",
-            Some("atproto transition:generic"),
-            1800, // 30 minutes
-        ).await.unwrap();
+        storage
+            .store_device_code(
+                device_code,
+                user_code,
+                "test-device-client",
+                Some("atproto transition:generic"),
+                1800, // 30 minutes
+            )
+            .await
+            .unwrap();
 
         // Step 2: Authorize the device code (simulate user authorization)
         let user_did = "did:plc:test123";
-        storage.authorize_device_code(user_code, user_did).await.unwrap();
+        storage
+            .authorize_device_code(user_code, user_did)
+            .await
+            .unwrap();
 
         // Step 3: Exchange device code for token
         let token_request = TokenRequest {
@@ -1393,14 +1410,24 @@ mod tests {
         // Verify token response
         assert!(!token_response.access_token.is_empty());
         assert!(token_response.refresh_token.is_some());
-        assert_eq!(token_response.scope, Some("atproto transition:generic".to_string()));
+        assert_eq!(
+            token_response.scope,
+            Some("atproto transition:generic".to_string())
+        );
 
         // Verify token is stored with correct user_id
-        let stored_token = storage.get_token(&token_response.access_token).await.unwrap().unwrap();
+        let stored_token = storage
+            .get_token(&token_response.access_token)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(stored_token.user_id, Some(user_did.to_string()));
         assert_eq!(stored_token.client_id, "test-device-client");
-        assert_eq!(stored_token.scope, Some("atproto transition:generic".to_string()));
-        
+        assert_eq!(
+            stored_token.scope,
+            Some("atproto transition:generic".to_string())
+        );
+
         // Initially token should not be linked to a session (session_id should be None)
         assert_eq!(stored_token.session_id, None);
         assert_eq!(stored_token.session_iteration, None);

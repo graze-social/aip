@@ -4,7 +4,7 @@ use crate::errors::StorageError;
 use crate::storage::traits::{DeviceCodeEntry, DeviceCodeStore, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::{sqlite::SqlitePool, Row};
+use sqlx::{Row, sqlite::SqlitePool};
 
 /// SQLite implementation of device code storage
 pub struct SqliteDeviceCodeStore {
@@ -81,7 +81,10 @@ impl DeviceCodeStore for SqliteDeviceCodeStore {
         }
     }
 
-    async fn get_device_code_by_user_code(&self, user_code: &str) -> Result<Option<DeviceCodeEntry>> {
+    async fn get_device_code_by_user_code(
+        &self,
+        user_code: &str,
+    ) -> Result<Option<DeviceCodeEntry>> {
         let row = sqlx::query(
             r#"
             SELECT device_code, user_code, client_id, scope, authorized_user, expires_at, created_at
@@ -92,7 +95,9 @@ impl DeviceCodeStore for SqliteDeviceCodeStore {
         .bind(user_code)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| StorageError::DatabaseError(format!("Failed to get device code by user code: {}", e)))?;
+        .map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get device code by user code: {}", e))
+        })?;
 
         if let Some(row) = row {
             Ok(Some(DeviceCodeEntry {
@@ -125,19 +130,24 @@ impl DeviceCodeStore for SqliteDeviceCodeStore {
         .bind(now_timestamp)
         .execute(&self.pool)
         .await
-        .map_err(|e| StorageError::DatabaseError(format!("Failed to authorize device code: {}", e)))?
+        .map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to authorize device code: {}", e))
+        })?
         .rows_affected();
 
         if rows_affected == 0 {
-            return Err(StorageError::NotFound("Device code not found or expired".to_string()));
+            return Err(StorageError::NotFound(
+                "Device code not found or expired".to_string(),
+            ));
         }
 
         Ok(())
     }
 
     async fn consume_device_code(&self, device_code: &str) -> Result<Option<String>> {
-        let mut transaction = self.pool.begin().await
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to start transaction: {}", e)))?;
+        let mut transaction = self.pool.begin().await.map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to start transaction: {}", e))
+        })?;
 
         // Get the device code entry
         let row = sqlx::query(
@@ -162,10 +172,16 @@ impl DeviceCodeStore for SqliteDeviceCodeStore {
                     .bind(device_code)
                     .execute(&mut *transaction)
                     .await
-                    .map_err(|e| StorageError::DatabaseError(format!("Failed to delete expired device code: {}", e)))?;
-                
-                transaction.commit().await
-                    .map_err(|e| StorageError::DatabaseError(format!("Failed to commit transaction: {}", e)))?;
+                    .map_err(|e| {
+                        StorageError::DatabaseError(format!(
+                            "Failed to delete expired device code: {}",
+                            e
+                        ))
+                    })?;
+
+                transaction.commit().await.map_err(|e| {
+                    StorageError::DatabaseError(format!("Failed to commit transaction: {}", e))
+                })?;
                 return Ok(None);
             }
 
@@ -174,28 +190,35 @@ impl DeviceCodeStore for SqliteDeviceCodeStore {
                 .bind(device_code)
                 .execute(&mut *transaction)
                 .await
-                .map_err(|e| StorageError::DatabaseError(format!("Failed to delete device code: {}", e)))?;
+                .map_err(|e| {
+                    StorageError::DatabaseError(format!("Failed to delete device code: {}", e))
+                })?;
 
-            transaction.commit().await
-                .map_err(|e| StorageError::DatabaseError(format!("Failed to commit transaction: {}", e)))?;
+            transaction.commit().await.map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to commit transaction: {}", e))
+            })?;
 
             Ok(row.get("authorized_user"))
         } else {
-            transaction.rollback().await
-                .map_err(|e| StorageError::DatabaseError(format!("Failed to rollback transaction: {}", e)))?;
+            transaction.rollback().await.map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to rollback transaction: {}", e))
+            })?;
             Ok(None)
         }
     }
 
     async fn cleanup_expired_device_codes(&self) -> Result<usize> {
         let now_timestamp = Utc::now().timestamp();
-        let result = sqlx::query(
-            "DELETE FROM device_codes WHERE expires_at <= ?"
-        )
-        .bind(now_timestamp)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| StorageError::DatabaseError(format!("Failed to cleanup expired device codes: {}", e)))?;
+        let result = sqlx::query("DELETE FROM device_codes WHERE expires_at <= ?")
+            .bind(now_timestamp)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                StorageError::DatabaseError(format!(
+                    "Failed to cleanup expired device codes: {}",
+                    e
+                ))
+            })?;
 
         Ok(result.rows_affected() as usize)
     }

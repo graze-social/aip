@@ -191,7 +191,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         let atp_session_storage = Arc::new(
@@ -275,7 +278,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         app_state.config = custom_config;

@@ -349,24 +349,22 @@ pub async fn build_openid_claims_with_document_info(
     }
 
     // Add email information if we can provide it
-    if can_provide_email {
-        if let Some(session) = session {
-            let email = if let (Some(atp_access_token), Some(pds_endpoint)) =
-                (&session.access_token, document.pds_endpoints().first())
-            {
-                fetch_email_from_pds(
-                    http_client,
-                    atp_access_token,
-                    &session.dpop_key,
-                    pds_endpoint,
-                )
-                .await?
-            } else {
-                None
-            };
-            if email.is_some() {
-                claims = claims.with_email(email);
-            }
+    if can_provide_email && let Some(session) = session {
+        let email = if let (Some(atp_access_token), Some(pds_endpoint)) =
+            (&session.access_token, document.pds_endpoints().first())
+        {
+            fetch_email_from_pds(
+                http_client,
+                atp_access_token,
+                &session.dpop_key,
+                pds_endpoint,
+            )
+            .await?
+        } else {
+            None
+        };
+        if email.is_some() {
+            claims = claims.with_email(email);
         }
     }
 
@@ -490,7 +488,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         let atp_session_storage = Arc::new(
@@ -573,7 +574,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         app_state.config = custom_config;

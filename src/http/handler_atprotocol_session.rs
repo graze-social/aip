@@ -125,7 +125,9 @@ pub async fn get_atprotocol_session_handler(
 
     // Try app-password session if requested or if "best" mode
     if query.access_token_type == "app_password_session" || query.access_token_type == "best" {
-        match get_app_password_session_with_refresh(&state, &access_token.client_id, &document).await {
+        match get_app_password_session_with_refresh(&state, &access_token.client_id, &document)
+            .await
+        {
             Ok(current_session) => {
                 // Build response for app-password session
                 let response = AtpSessionResponse {
@@ -210,52 +212,51 @@ pub async fn get_atprotocol_session_handler(
         };
 
         // Use the helper function for OAuth session flow with automatic refresh
-        let current_session =
-            get_atprotocol_session_with_refresh(&state, &document, &session_id)
-                .await
-                .map_err(|e| {
-                    let error_msg = e.to_string();
-                    let (status, error_type, error_desc) = if query.access_token_type == "best" {
-                        // For "best" mode, we tried both and both failed
-                        (
-                            StatusCode::NOT_FOUND,
-                            "no_session_found",
-                            "No valid app-password or OAuth session found",
-                        )
-                    } else if error_msg.contains("No sessions found") {
-                        (
-                            StatusCode::NOT_FOUND,
-                            "session_not_found",
-                            "Session not found or expired",
-                        )
-                    } else if error_msg.contains("DID document not found") {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "session_incomplete",
-                            "Session found but ATProtocol identity not yet established",
-                        )
-                    } else if error_msg.contains("Session has exchange error") {
-                        (StatusCode::BAD_REQUEST, "session_error", error_msg.as_str())
-                    } else if error_msg.contains("refresh") {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "refresh_failed",
-                            error_msg.as_str(),
-                        )
-                    } else {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "server_error",
-                            error_msg.as_str(),
-                        )
-                    };
+        let current_session = get_atprotocol_session_with_refresh(&state, &document, &session_id)
+            .await
+            .map_err(|e| {
+                let error_msg = e.to_string();
+                let (status, error_type, error_desc) = if query.access_token_type == "best" {
+                    // For "best" mode, we tried both and both failed
+                    (
+                        StatusCode::NOT_FOUND,
+                        "no_session_found",
+                        "No valid app-password or OAuth session found",
+                    )
+                } else if error_msg.contains("No sessions found") {
+                    (
+                        StatusCode::NOT_FOUND,
+                        "session_not_found",
+                        "Session not found or expired",
+                    )
+                } else if error_msg.contains("DID document not found") {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "session_incomplete",
+                        "Session found but ATProtocol identity not yet established",
+                    )
+                } else if error_msg.contains("Session has exchange error") {
+                    (StatusCode::BAD_REQUEST, "session_error", error_msg.as_str())
+                } else if error_msg.contains("refresh") {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "refresh_failed",
+                        error_msg.as_str(),
+                    )
+                } else {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "server_error",
+                        error_msg.as_str(),
+                    )
+                };
 
-                    let error_response = json!({
-                        "error": error_type,
-                        "error_description": error_desc
-                    });
-                    (status, Json(error_response))
-                })?;
+                let error_response = json!({
+                    "error": error_type,
+                    "error_description": error_desc
+                });
+                (status, Json(error_response))
+            })?;
 
         let (access_token, expires_at, scopes) = match (
             current_session.access_token.clone(),

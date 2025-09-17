@@ -328,13 +328,14 @@ impl AtpOAuthSessionStorage for SqliteAtpOAuthSessionStorage {
         }
     }
 
-
     async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>> {
-        let rows = sqlx::query("SELECT * FROM atp_oauth_sessions WHERE did = ? ORDER BY session_created_at DESC")
-            .bind(did)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let rows = sqlx::query(
+            "SELECT * FROM atp_oauth_sessions WHERE did = ? ORDER BY session_created_at DESC",
+        )
+        .bind(did)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
 
         let mut sessions = Vec::new();
         for row in rows {

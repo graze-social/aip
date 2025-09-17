@@ -142,27 +142,27 @@ pub async fn create_app_password_handler(
             })?;
     }
 
-        // Create app password entry
-        let app_password_entry = AppPassword {
-            client_id: access_token.client_id.clone(),
-            did: did.clone(),
-            app_password: app_password.clone(),
-            created_at: now,
-            updated_at: now,
-        };
-    
-        // Store the app password
-        state
-            .oauth_storage
-            .store_app_password(&app_password_entry)
-            .await
-            .map_err(|e| {
-                let error_response = json!({
-                    "error": "server_error",
-                    "error_description": format!("Failed to store app password: {}", e)
-                });
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
-            })?;
+    // Create app password entry
+    let app_password_entry = AppPassword {
+        client_id: access_token.client_id.clone(),
+        did: did.clone(),
+        app_password: app_password.clone(),
+        created_at: now,
+        updated_at: now,
+    };
+
+    // Store the app password
+    state
+        .oauth_storage
+        .store_app_password(&app_password_entry)
+        .await
+        .map_err(|e| {
+            let error_response = json!({
+                "error": "server_error",
+                "error_description": format!("Failed to store app password: {}", e)
+            });
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+        })?;
 
     // Get the DID document to extract PDS endpoint for session creation
     let document = state

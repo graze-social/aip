@@ -306,9 +306,10 @@ impl PostgresOAuthClientStore {
                 ))
             })?;
 
-        let application_type_str: Option<String> = row.try_get("application_type").map_err(|e| {
-            StorageError::DatabaseError(format!("Failed to get application_type: {}", e))
-        })?;
+        let application_type_str: Option<String> =
+            row.try_get("application_type").map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to get application_type: {}", e))
+            })?;
         let application_type = match application_type_str {
             Some(s) => Some(Self::string_to_application_type(&s)?),
             None => None,
@@ -362,7 +363,10 @@ impl OAuthClientStore for PostgresOAuthClientStore {
         let response_types_json = Self::serialize_response_types(&client.response_types);
         let auth_method_str = Self::auth_method_to_string(&client.token_endpoint_auth_method);
         let client_type_str = Self::client_type_to_string(&client.client_type);
-        let application_type_str = client.application_type.as_ref().map(Self::application_type_to_string);
+        let application_type_str = client
+            .application_type
+            .as_ref()
+            .map(Self::application_type_to_string);
         let access_token_expiration_seconds =
             Self::duration_to_seconds(&client.access_token_expiration);
         let refresh_token_expiration_seconds =
@@ -434,7 +438,10 @@ impl OAuthClientStore for PostgresOAuthClientStore {
         let response_types_json = Self::serialize_response_types(&client.response_types);
         let auth_method_str = Self::auth_method_to_string(&client.token_endpoint_auth_method);
         let client_type_str = Self::client_type_to_string(&client.client_type);
-        let application_type_str = client.application_type.as_ref().map(Self::application_type_to_string);
+        let application_type_str = client
+            .application_type
+            .as_ref()
+            .map(Self::application_type_to_string);
         let access_token_expiration_seconds =
             Self::duration_to_seconds(&client.access_token_expiration);
         let refresh_token_expiration_seconds =

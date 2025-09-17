@@ -33,7 +33,7 @@ pub(crate) fn match_issuer(authorization: &Authorization, issuer: &str) -> bool 
         .is_some_and(|value| value == issuer)
 }
 
-pub(crate) fn match_any_issuer(authorization: &Authorization, issuers: &Vec<String>) -> bool {
+pub(crate) fn match_any_issuer(authorization: &Authorization, issuers: &[String]) -> bool {
     authorization
         .1
         .private
@@ -99,7 +99,7 @@ pub async fn xrpc_clients_update_handler(
     match service
         .update_client_with_supported_scopes(
             &request.client_id,
-            &ClientServiceAuth::DID,
+            &ClientServiceAuth::Did,
             client_registration_request,
             Some(&state.config.oauth_supported_scopes),
         )

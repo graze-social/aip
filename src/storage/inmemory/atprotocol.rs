@@ -130,13 +130,12 @@ impl AtpOAuthSessionStorage for MemoryAtpOAuthSessionStorage {
         }
     }
 
-
     async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>> {
         let sessions = self.sessions.read().await;
 
         let mut result: Vec<AtpOAuthSession> = sessions
             .values()
-            .filter(|s| s.did.as_ref().map(|d| d.as_str()) == Some(did))
+            .filter(|s| s.did.as_deref() == Some(did))
             .cloned()
             .collect();
 

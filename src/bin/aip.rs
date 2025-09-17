@@ -350,10 +350,12 @@ async fn ensure_internal_device_auth_client(
     oauth_storage: &Arc<dyn aip::storage::traits::OAuthStorage>,
     config: &Config,
 ) -> Result<()> {
-    use aip::oauth::types::{OAuthClient, ApplicationType, GrantType, ResponseType, ClientAuthMethod, ClientType};
-    
+    use aip::oauth::types::{
+        ApplicationType, ClientAuthMethod, ClientType, GrantType, OAuthClient, ResponseType,
+    };
+
     let client_id = config.internal_device_auth_client_id.as_ref();
-    
+
     // Check if client already exists
     match oauth_storage.get_client(client_id).await {
         Ok(Some(_)) => {
@@ -368,7 +370,7 @@ async fn ensure_internal_device_auth_client(
             // Continue to try creating the client
         }
     }
-    
+
     // Create the internal client
     let redirect_uri = format!("{}/device/callback", config.external_base);
     let now = chrono::Utc::now();
@@ -394,10 +396,15 @@ async fn ensure_internal_device_auth_client(
         registration_access_token: None,
         jwks: None,
     };
-    
-    oauth_storage.store_client(&client).await
+
+    oauth_storage
+        .store_client(&client)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to create internal device auth client: {}", e))?;
-    
-    tracing::info!("Internal device auth client created successfully: {}", client_id);
+
+    tracing::info!(
+        "Internal device auth client created successfully: {}",
+        client_id
+    );
     Ok(())
 }

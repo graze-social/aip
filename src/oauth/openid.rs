@@ -163,10 +163,10 @@ impl OpenIDClaims {
     pub fn with_name(mut self, handle: Option<String>) -> Self {
         self.name = handle.or(Some("unknown".to_string()));
         // Also set profile if we have a handle
-        if let Some(ref name) = self.name {
-            if name != "unknown" {
-                self.profile = Some(format!("https://bsky.app/profile/{}", name));
-            }
+        if let Some(ref name) = self.name
+            && name != "unknown"
+        {
+            self.profile = Some(format!("https://bsky.app/profile/{}", name));
         }
         self
     }

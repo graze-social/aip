@@ -17,8 +17,10 @@ use super::{
     handler_atprotocol_oauth_authorize::handle_oauth_authorize,
     handler_atprotocol_oauth_callback::handle_atpoauth_callback,
     handler_atprotocol_session::get_atprotocol_session_handler,
+    handler_device_authorization::{
+        device_authorization_page, device_authorize, device_oauth_callback,
+    },
     handler_device_code::device_authorization_handler,
-    handler_device_authorization::{device_authorization_page, device_authorize, device_oauth_callback},
     handler_index::handle_index,
     handler_oauth::handle_oauth_token,
     handler_oauth_clients::{
@@ -228,7 +230,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         let atp_session_storage = Arc::new(

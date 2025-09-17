@@ -57,20 +57,32 @@ pub async fn handle_oauth_token(
     {
         Ok(mut value) => {
             // For device code grants, link the access token to an existing ATProtocol session
-            if matches!(request.grant_type, crate::oauth::types::GrantType::DeviceCode) {
+            if matches!(
+                request.grant_type,
+                crate::oauth::types::GrantType::DeviceCode
+            ) {
                 match state.oauth_storage.get_token(&value.access_token).await {
                     Ok(Some(mut access_token)) => {
                         if let Some(ref user_did) = access_token.user_id {
-                            match state.atp_session_storage.get_sessions_by_did(user_did).await {
+                            match state
+                                .atp_session_storage
+                                .get_sessions_by_did(user_did)
+                                .await
+                            {
                                 Ok(sessions) => {
-                                    if let Some(latest_session) = sessions.into_iter()
-                                        .max_by_key(|s| s.session_created_at) {
+                                    if let Some(latest_session) =
+                                        sessions.into_iter().max_by_key(|s| s.session_created_at)
+                                    {
                                         // Update the access token with the session_id
-                                        access_token.session_id = Some(latest_session.session_id.clone());
-                                        access_token.session_iteration = Some(latest_session.iteration);
+                                        access_token.session_id =
+                                            Some(latest_session.session_id.clone());
+                                        access_token.session_iteration =
+                                            Some(latest_session.iteration);
 
                                         // Store the updated access token
-                                        if let Err(e) = state.oauth_storage.store_token(&access_token).await {
+                                        if let Err(e) =
+                                            state.oauth_storage.store_token(&access_token).await
+                                        {
                                             tracing::error!(
                                                 error = %e,
                                                 "Failed to store updated access token"
@@ -230,7 +242,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         let atp_session_storage = Arc::new(

@@ -95,14 +95,14 @@ pub async fn pushed_authorization_request_handler(
     };
 
     // Authenticate client if credentials provided
-    if let Some(auth) = client_auth {
-        if let Err(e) = authenticate_client(&client, &auth, &state.config.external_base) {
-            let error_response = json!({
-                "error": "invalid_client",
-                "error_description": e.to_string()
-            });
-            return Err((StatusCode::UNAUTHORIZED, Json(error_response)));
-        }
+    if let Some(auth) = client_auth
+        && let Err(e) = authenticate_client(&client, &auth, &state.config.external_base)
+    {
+        let error_response = json!({
+            "error": "invalid_client",
+            "error_description": e.to_string()
+        });
+        return Err((StatusCode::UNAUTHORIZED, Json(error_response)));
     }
 
     // Validate authorization request parameters
@@ -275,23 +275,20 @@ fn validate_and_convert_par_request(
 
 /// Extract client authentication from Authorization header
 fn extract_client_auth_from_headers(headers: &HeaderMap) -> Option<ClientAuthentication> {
-    if let Some(auth_header) = headers.get("Authorization") {
-        if let Ok(auth_str) = auth_header.to_str() {
-            if let Some(encoded) = auth_str.strip_prefix("Basic ") {
-                if let Ok(decoded) = base64::prelude::BASE64_STANDARD.decode(encoded) {
-                    if let Ok(credentials) = String::from_utf8(decoded) {
-                        let parts: Vec<&str> = credentials.splitn(2, ':').collect();
-                        if parts.len() == 2 {
-                            return Some(ClientAuthentication {
-                                client_id: parts[0].to_string(),
-                                client_secret: Some(parts[1].to_string()),
-                                client_assertion: None,
-                                client_assertion_type: None,
-                            });
-                        }
-                    }
-                }
-            }
+    if let Some(auth_header) = headers.get("Authorization")
+        && let Ok(auth_str) = auth_header.to_str()
+        && let Some(encoded) = auth_str.strip_prefix("Basic ")
+        && let Ok(decoded) = base64::prelude::BASE64_STANDARD.decode(encoded)
+        && let Ok(credentials) = String::from_utf8(decoded)
+    {
+        let parts: Vec<&str> = credentials.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            return Some(ClientAuthentication {
+                client_id: parts[0].to_string(),
+                client_secret: Some(parts[1].to_string()),
+                client_assertion: None,
+                client_assertion_type: None,
+            });
         }
     }
     None
@@ -483,7 +480,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         };
 
         let auth_request =
@@ -568,7 +568,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         };
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);
@@ -651,7 +654,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         };
 
         let result = validate_and_convert_par_request(&par_request, &client, &test_config);

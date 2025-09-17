@@ -52,7 +52,6 @@ pub trait AtpOAuthSessionStorage: Send + Sync {
         atp_state: &str,
     ) -> Result<Option<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>>;
 
-
     /// Get all sessions for a specific DID
     async fn get_sessions_by_did(
         &self,
@@ -427,13 +426,12 @@ impl AtpBackedAuthorizationServer {
             .await;
 
         // If there was an error, try to update the session with the error info
-        if let Err(ref error) = result {
-            if let Ok(Some(mut session)) =
+        if let Err(ref error) = result
+            && let Ok(Some(mut session)) =
                 self.session_storage.get_session_by_atp_state(&state).await
-            {
-                session.exchange_error = Some(error.to_string());
-                let _ = self.session_storage.store_session(&session).await;
-            }
+        {
+            session.exchange_error = Some(error.to_string());
+            let _ = self.session_storage.store_session(&session).await;
         }
 
         result
@@ -793,7 +791,6 @@ impl AtpOAuthSessionStorage for UnifiedAtpOAuthSessionStorageAdapter {
 
         Ok(oauth_session)
     }
-
 
     async fn get_sessions_by_did(
         &self,
