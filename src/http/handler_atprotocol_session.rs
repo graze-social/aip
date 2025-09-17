@@ -67,7 +67,7 @@ pub async fn get_atprotocol_session_handler(
     ExtractedAuth(access_token): ExtractedAuth,
 ) -> Result<Json<AtpSessionResponse>, (StatusCode, Json<Value>)> {
     // For app_password_session, handle sub parameter logic
-    let did = if query.access_token_type == "app_password_session" {
+    let did = if query.access_token_type == "app_password_session" || query.access_token_type == "best" {
         match (&access_token.user_id, &query.sub) {
             // Both user_id and sub are set - they must match
             (Some(user_id), Some(sub)) => {
