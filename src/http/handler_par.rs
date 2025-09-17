@@ -26,6 +26,7 @@ use crate::oauth::{
 pub(super) struct PushedAuthorizationRequest {
     pub response_type: String,
     pub client_id: String,
+    pub client_secret: Option<String>,
     pub redirect_uri: String,
     pub scope: Option<String>,
     pub state: Option<String>,
@@ -319,7 +320,7 @@ fn extract_client_auth_from_request(
     // But we'll support client_id from the form
     Some(ClientAuthentication {
         client_id: request.client_id.clone(),
-        client_secret: None,
+        client_secret: request.client_secret.clone(),
         client_assertion: None,
         client_assertion_type: None,
     })
@@ -437,6 +438,7 @@ mod tests {
         let par_request = PushedAuthorizationRequest {
             response_type: "code".to_string(),
             client_id: client.client_id.clone(),
+            client_secret: None,
             redirect_uri: "https://example.com/callback".to_string(),
             scope: Some("atproto".to_string()),
             state: Some("test-state".to_string()),
@@ -521,6 +523,7 @@ mod tests {
         let par_request = PushedAuthorizationRequest {
             response_type: "code".to_string(),
             client_id: client.client_id.clone(),
+            client_secret: None,
             redirect_uri: "https://evil.com/callback".to_string(), // Invalid redirect URI
             scope: Some("atproto".to_string()),
             state: Some("test-state".to_string()),
@@ -603,6 +606,7 @@ mod tests {
         let par_request = PushedAuthorizationRequest {
             response_type: "code".to_string(),
             client_id: client.client_id.clone(),
+            client_secret: None,
             redirect_uri: "https://example.com/callback".to_string(),
             scope: Some("atproto transition:email".to_string()), // Requesting more than allowed
             state: Some("test-state".to_string()),
