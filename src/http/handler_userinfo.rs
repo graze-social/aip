@@ -234,7 +234,7 @@ mod tests {
             .with_name(Some("test.bsky.social".to_string()))
             .with_email(Some("test@example.com".to_string()));
 
-        assert_eq!(response.sub, "did:plc:test123");
+        assert_eq!(response.sub, Some("did:plc:test123".to_string()));
         assert_eq!(response.name, Some("test.bsky.social".to_string()));
         assert_eq!(response.email, Some("test@example.com".to_string()));
     }
@@ -243,7 +243,7 @@ mod tests {
     fn test_userinfo_response_minimal() {
         let response = OpenIDClaims::new_userinfo("did:plc:user123".to_string());
 
-        assert_eq!(response.sub, "did:plc:user123");
+        assert_eq!(response.sub, Some("did:plc:user123".to_string()));
         assert_eq!(response.name, None);
         assert_eq!(response.email, None);
     }
@@ -325,7 +325,7 @@ mod tests {
         let response = result.unwrap().0;
 
         // Should return just the DID
-        assert_eq!(response.sub, "did:plc:test123");
+        assert_eq!(response.sub, Some("did:plc:test123".to_string()));
         assert_eq!(response.did, Some("did:plc:test123".to_string()));
         assert_eq!(response.email, None);
     }
@@ -440,7 +440,7 @@ mod tests {
         assert!(result.is_ok());
         let response = result.unwrap();
 
-        assert_eq!(response.sub, "did:plc:user123");
+        assert_eq!(response.sub, Some("did:plc:user123".to_string()));
         assert_eq!(response.did, Some("did:plc:user123".to_string()));
         assert_eq!(response.email, None);
     }

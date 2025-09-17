@@ -333,7 +333,7 @@ pub async fn build_openid_claims_with_document_info(
     let can_provide_email = has_email_scope && has_atproto && grants_email_read;
 
     // Always set the DID from the document
-    claims = claims.with_did(document.id.clone());
+    claims = claims.with_did(Some(document.id.clone()));
 
     // Early return if no relevant scopes are present
     if !has_profile_scope && !has_email_scope {

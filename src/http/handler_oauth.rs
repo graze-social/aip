@@ -124,16 +124,13 @@ pub async fn handle_oauth_token(
                     .unwrap();
                 let access_token: crate::oauth::AccessToken = access_token.unwrap();
 
-                let did = access_token.user_id.unwrap();
-
                 let claims = OpenIDClaims::new_id_token(
                     state.config.external_base.clone(),
-                    did.clone(),
                     access_token.client_id.clone(),
                     now,
                 )
-                .with_did(did.clone())
-                .with_c_hash(request.code.unwrap().as_str())
+                .with_did(access_token.user_id.clone())
+                .with_c_hash(request.code.as_deref())
                 .with_at_hash(&access_token.token)
                 .with_nonce(access_token.nonce);
 
