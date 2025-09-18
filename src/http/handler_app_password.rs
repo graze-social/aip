@@ -36,6 +36,48 @@ pub struct AppPasswordResponse {
     pub timestamp: String,
 }
 
+/// Check if app password exists
+/// GET /api/atprotocol/app-password
+///
+/// Returns 204 No Content if an app password exists for the authenticated user
+/// and the OAuth client, or 404 Not Found if it doesn't exist.
+pub async fn get_app_password_handler(
+    State(state): State<AppState>,
+    ExtractedAuth(access_token): ExtractedAuth,
+) -> Result<StatusCode, (StatusCode, Json<Value>)> {
+    // Extract DID from the access token
+    let did = access_token.user_id.as_ref().ok_or_else(|| {
+        let error_response = json!({
+            "error": "invalid_token",
+            "error_description": "Token missing user_id (DID)"
+        });
+        (StatusCode::UNAUTHORIZED, Json(error_response))
+    })?;
+
+    // Check if app password exists
+    let existing = state
+        .oauth_storage
+        .get_app_password(&access_token.client_id, did)
+        .await
+        .map_err(|e| {
+            let error_response = json!({
+                "error": "server_error",
+                "error_description": format!("Failed to check app password: {}", e)
+            });
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+        })?;
+
+    if existing.is_some() {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        let error_response = json!({
+            "error": "not_found",
+            "error_description": "No app password found for this client and user"
+        });
+        Err((StatusCode::NOT_FOUND, Json(error_response)))
+    }
+}
+
 /// Create or update app password
 /// POST /api/atprotocol/app-password
 ///
@@ -84,6 +126,43 @@ pub async fn create_app_password_handler(
         })?;
 
     let is_update = existing.is_some();
+
+    // If this was an update, delete all associated sessions
+    if is_update {
+        state
+            .oauth_storage
+            .delete_app_password_sessions(&access_token.client_id, did)
+            .await
+            .map_err(|e| {
+                let error_response = json!({
+                    "error": "server_error",
+                    "error_description": format!("Failed to delete existing sessions: {}", e)
+                });
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+            })?;
+    }
+
+    // Create app password entry
+    let app_password_entry = AppPassword {
+        client_id: access_token.client_id.clone(),
+        did: did.clone(),
+        app_password: app_password.clone(),
+        created_at: now,
+        updated_at: now,
+    };
+
+    // Store the app password
+    state
+        .oauth_storage
+        .store_app_password(&app_password_entry)
+        .await
+        .map_err(|e| {
+            let error_response = json!({
+                "error": "server_error",
+                "error_description": format!("Failed to store app password: {}", e)
+            });
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+        })?;
 
     // Get the DID document to extract PDS endpoint for session creation
     let document = state
@@ -136,43 +215,6 @@ pub async fn create_app_password_handler(
         });
         (StatusCode::UNAUTHORIZED, Json(error_response))
     })?;
-
-    // Create app password entry
-    let app_password_entry = AppPassword {
-        client_id: access_token.client_id.clone(),
-        did: did.clone(),
-        app_password,
-        created_at: existing.as_ref().map(|e| e.created_at).unwrap_or(now),
-        updated_at: now,
-    };
-
-    // Store the app password
-    state
-        .oauth_storage
-        .store_app_password(&app_password_entry)
-        .await
-        .map_err(|e| {
-            let error_response = json!({
-                "error": "server_error",
-                "error_description": format!("Failed to store app password: {}", e)
-            });
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
-        })?;
-
-    // If this was an update, delete all associated sessions
-    if is_update {
-        state
-            .oauth_storage
-            .delete_app_password_sessions(&access_token.client_id, did)
-            .await
-            .map_err(|e| {
-                let error_response = json!({
-                    "error": "server_error",
-                    "error_description": format!("Failed to delete existing sessions: {}", e)
-                });
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
-            })?;
-    }
 
     let response = AppPasswordResponse {
         client_id: access_token.client_id,

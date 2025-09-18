@@ -21,7 +21,7 @@ pub struct MemoryOAuthStorage {
     access_tokens: Mutex<HashMap<String, AccessToken>>,
     refresh_tokens: Mutex<HashMap<String, RefreshToken>>,
     device_codes: Mutex<HashMap<String, DeviceCodeEntry>>, // device_code -> DeviceCodeEntry
-    keys: Mutex<HashMap<String, String>>, // Store as KeyData string serialization
+    keys: Mutex<HashMap<String, String>>,                  // Store as KeyData string serialization
     signing_key: Mutex<Option<KeyData>>,
     par_requests: Mutex<HashMap<String, StoredPushedRequest>>,
     // ATProtocol session storage
@@ -268,10 +268,10 @@ impl RefreshTokenStore for MemoryOAuthStorage {
 
         if let Some(refresh_token) = tokens.remove(token) {
             // Check if token is expired (if it has an expiry)
-            if let Some(expires_at) = refresh_token.expires_at {
-                if expires_at < Utc::now() {
-                    return Ok(None);
-                }
+            if let Some(expires_at) = refresh_token.expires_at
+                && expires_at < Utc::now()
+            {
+                return Ok(None);
             }
             Ok(Some(refresh_token))
         } else {
@@ -332,7 +332,10 @@ impl DeviceCodeStore for MemoryOAuthStorage {
         Ok(device_codes.get(device_code).cloned())
     }
 
-    async fn get_device_code_by_user_code(&self, user_code: &str) -> Result<Option<DeviceCodeEntry>> {
+    async fn get_device_code_by_user_code(
+        &self,
+        user_code: &str,
+    ) -> Result<Option<DeviceCodeEntry>> {
         let device_codes = self
             .device_codes
             .lock()
@@ -364,7 +367,9 @@ impl DeviceCodeStore for MemoryOAuthStorage {
         }
 
         if !found {
-            return Err(StorageError::NotFound("Device code not found or expired".to_string()));
+            return Err(StorageError::NotFound(
+                "Device code not found or expired".to_string(),
+            ));
         }
 
         Ok(())
@@ -564,7 +569,9 @@ impl AtpOAuthSessionStorage for MemoryOAuthStorage {
             e.insert(session.clone());
             Ok(())
         } else {
-            Err(StorageError::NotFound("ATProtocol OAuth session not found".to_string()))
+            Err(StorageError::NotFound(
+                "ATProtocol OAuth session not found".to_string(),
+            ))
         }
     }
 
@@ -578,17 +585,16 @@ impl AtpOAuthSessionStorage for MemoryOAuthStorage {
         }
     }
 
-
     async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>> {
         let sessions = self.atp_sessions.read().await;
         let mut result = Vec::new();
 
         // Search through all sessions to find ones with matching DID
         for session in sessions.values() {
-            if let Some(session_did) = &session.did {
-                if session_did == did {
-                    result.push(session.clone());
-                }
+            if let Some(session_did) = &session.did
+                && session_did == did
+            {
+                result.push(session.clone());
             }
         }
 
@@ -618,7 +624,9 @@ impl AtpOAuthSessionStorage for MemoryOAuthStorage {
             session.access_token_scopes = access_token_scopes;
             Ok(())
         } else {
-            Err(StorageError::NotFound("ATProtocol OAuth session not found".to_string()))
+            Err(StorageError::NotFound(
+                "ATProtocol OAuth session not found".to_string(),
+            ))
         }
     }
 

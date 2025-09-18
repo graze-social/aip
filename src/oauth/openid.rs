@@ -12,7 +12,7 @@ pub struct OpenIDClaims {
     pub iss: Option<String>,
 
     /// Subject - DID of the end user
-    pub sub: String,
+    pub sub: Option<String>,
 
     /// Audience - Client ID that this token is intended for
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,7 +73,7 @@ pub(crate) struct IdTokenClaims {
     /// Issuer - The URL of the authorization server
     pub iss: String,
     /// Subject - Unique identifier for the end user
-    pub sub: String,
+    pub sub: Option<String>,
     /// Audience - Client ID that this token is intended for
     pub aud: String,
     /// Expiration time - Unix timestamp when token expires
@@ -96,12 +96,7 @@ pub(crate) struct IdTokenClaims {
 
 impl OpenIDClaims {
     /// Create new claims for ID token
-    pub fn new_id_token(
-        issuer: String,
-        subject: String,
-        audience: String,
-        auth_time: DateTime<Utc>,
-    ) -> Self {
+    pub fn new_id_token(issuer: String, audience: String, auth_time: DateTime<Utc>) -> Self {
         let now = Utc::now();
         // Set expiration to 14 days from now
         let exp = (now + chrono::Duration::days(14)).timestamp();
@@ -110,7 +105,34 @@ impl OpenIDClaims {
 
         Self {
             iss: Some(issuer),
-            sub: subject,
+            sub: None,
+            aud: Some(audience),
+            exp: Some(exp),
+            iat: Some(iat),
+            auth_time: Some(auth_time.timestamp()),
+            nonce: None,
+            at_hash: None,
+            c_hash: None,
+            did: None,
+            name: None,
+            profile: None,
+            pds_endpoint: None,
+            email: None,
+            additional_claims: HashMap::new(),
+        }
+    }
+
+    /// Create new claims for ID token
+    pub fn new_userless_token(issuer: String, audience: String, auth_time: DateTime<Utc>) -> Self {
+        let now = Utc::now();
+        // Set expiration to 14 days from now
+        let exp = (now + chrono::Duration::days(14)).timestamp();
+        // Set issued at to 30 seconds ago
+        let iat = (now - chrono::Duration::seconds(30)).timestamp();
+
+        Self {
+            iss: Some(issuer),
+            sub: None,
             aud: Some(audience),
             exp: Some(exp),
             iat: Some(iat),
@@ -130,7 +152,7 @@ impl OpenIDClaims {
     /// Create new claims for UserInfo response
     pub fn new_userinfo(subject: String) -> Self {
         Self {
-            sub: subject,
+            sub: Some(subject),
             ..Default::default()
         }
     }
@@ -148,14 +170,14 @@ impl OpenIDClaims {
     }
 
     /// Set code hash (for ID tokens)
-    pub fn with_c_hash(mut self, code: &str) -> Self {
-        self.c_hash = Some(calculate_hash(code));
+    pub fn with_c_hash(mut self, code: Option<&str>) -> Self {
+        self.c_hash = code.map(calculate_hash);
         self
     }
 
     /// Set DID
-    pub fn with_did(mut self, did: String) -> Self {
-        self.did = Some(did);
+    pub fn with_did(mut self, did: Option<String>) -> Self {
+        self.did = did;
         self
     }
 
@@ -163,10 +185,10 @@ impl OpenIDClaims {
     pub fn with_name(mut self, handle: Option<String>) -> Self {
         self.name = handle.or(Some("unknown".to_string()));
         // Also set profile if we have a handle
-        if let Some(ref name) = self.name {
-            if name != "unknown" {
-                self.profile = Some(format!("https://bsky.app/profile/{}", name));
-            }
+        if let Some(ref name) = self.name
+            && name != "unknown"
+        {
+            self.profile = Some(format!("https://bsky.app/profile/{}", name));
         }
         self
     }
@@ -212,7 +234,7 @@ mod tests {
         let claims = OpenIDClaims::new_userinfo("did:plc:test123".to_string())
             .with_name(Some("alice.bsky.social".to_string()));
 
-        assert_eq!(claims.sub, "did:plc:test123");
+        assert_eq!(claims.sub, Some("did:plc:test123".to_string()));
         assert_eq!(claims.name, Some("alice.bsky.social".to_string()));
         assert_eq!(
             claims.profile,
@@ -224,7 +246,7 @@ mod tests {
     fn test_openid_claims_with_unknown_name() {
         let claims = OpenIDClaims::new_userinfo("did:plc:test123".to_string()).with_name(None);
 
-        assert_eq!(claims.sub, "did:plc:test123");
+        assert_eq!(claims.sub, Some("did:plc:test123".to_string()));
         assert_eq!(claims.name, Some("unknown".to_string()));
         // Profile should not be set for "unknown" handle
         assert_eq!(claims.profile, None);

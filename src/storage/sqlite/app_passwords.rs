@@ -249,9 +249,9 @@ impl SqliteAppPasswordSessionStore {
                 iter as u32
             },
             session_exchanged_at,
-            exchange_error: row.try_get("exchange_error").map_err(|e| {
-                StorageError::DatabaseError(e.to_string())
-            })?,
+            exchange_error: row
+                .try_get("exchange_error")
+                .map_err(|e| StorageError::DatabaseError(e.to_string()))?,
         })
     }
 }

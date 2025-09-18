@@ -52,7 +52,6 @@ pub trait AtpOAuthSessionStorage: Send + Sync {
         atp_state: &str,
     ) -> Result<Option<AtpOAuthSession>, Box<dyn std::error::Error + Send + Sync>>;
 
-
     /// Get all sessions for a specific DID
     async fn get_sessions_by_did(
         &self,
@@ -331,21 +330,22 @@ impl AtpBackedAuthorizationServer {
         let filtered_scope = if let Some(ref original_scope) = request.scope {
             // Apply compat_scopes to normalize scope format before parsing
             let normalized_scope = crate::oauth::scope_validation::compat_scopes(original_scope);
-            
+
             // Parse the scopes using Scope::parse_multiple
             let scopes = Scope::parse_multiple(&normalized_scope)
                 .map_err(|e| OAuthError::InvalidScope(format!("Failed to parse scopes: {}", e)))?;
 
             // Validate and filter the scopes for AT Protocol OAuth
             // This will fail if required scopes are missing
-            let filtered_scopes = crate::oauth::scope_validation::filter_atprotocol_scopes(&scopes)?;
+            let filtered_scopes =
+                crate::oauth::scope_validation::filter_atprotocol_scopes(&scopes)?;
 
             // Serialize the filtered scopes
             Scope::serialize_multiple(&filtered_scopes)
         } else {
             // If no scope provided, default to just atproto scope
             let scopes = vec![Scope::Atproto];
-            
+
             // Serialize the scopes
             Scope::serialize_multiple(&scopes)
         };
@@ -426,13 +426,12 @@ impl AtpBackedAuthorizationServer {
             .await;
 
         // If there was an error, try to update the session with the error info
-        if let Err(ref error) = result {
-            if let Ok(Some(mut session)) =
+        if let Err(ref error) = result
+            && let Ok(Some(mut session)) =
                 self.session_storage.get_session_by_atp_state(&state).await
-            {
-                session.exchange_error = Some(error.to_string());
-                let _ = self.session_storage.store_session(&session).await;
-            }
+        {
+            session.exchange_error = Some(error.to_string());
+            let _ = self.session_storage.store_session(&session).await;
         }
 
         result
@@ -565,7 +564,7 @@ impl AtpBackedAuthorizationServer {
 
         let mut updated_session = session.clone();
         updated_session.access_token = Some(token_response.access_token.clone());
-        updated_session.refresh_token = Some(token_response.refresh_token.clone());
+        updated_session.refresh_token = token_response.refresh_token.clone();
         updated_session.access_token_created_at = Some(now);
         updated_session.access_token_expires_at = Some(expires_at);
         updated_session.access_token_scopes = Some(parsed_scopes);
@@ -581,9 +580,7 @@ impl AtpBackedAuthorizationServer {
             .authorization_request_storage
             .get_authorization_request(&session.session_id)
             .await
-            .map_err(|e| {
-                OAuthError::ServerError(e.to_string())
-            })?
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| {
                 OAuthError::InvalidState("Authorization request not found".to_string())
             })?;
@@ -611,15 +608,13 @@ impl AtpBackedAuthorizationServer {
         self.authorization_request_storage
             .remove_authorization_request(&session_id)
             .await
-            .map_err(|e| {
-                OAuthError::ServerError(e.to_string())
-            })?;
+            .map_err(|e| OAuthError::ServerError(e.to_string()))?;
 
         match auth_response {
             AuthorizeResponse::Redirect(url) => Ok(url),
-            AuthorizeResponse::Error { error, description } => {
-                Err(OAuthError::AuthorizationFailed(format!("{} - {}", error, description)))
-            }
+            AuthorizeResponse::Error { error, description } => Err(
+                OAuthError::AuthorizationFailed(format!("{} - {}", error, description)),
+            ),
         }
     }
 
@@ -796,7 +791,6 @@ impl AtpOAuthSessionStorage for UnifiedAtpOAuthSessionStorageAdapter {
 
         Ok(oauth_session)
     }
-
 
     async fn get_sessions_by_did(
         &self,
@@ -1575,7 +1569,9 @@ mod tests {
                 redirect_uris: vec!["https://example.com/callback".to_string()],
                 grant_types: vec![crate::oauth::types::GrantType::AuthorizationCode],
                 response_types: vec![crate::oauth::types::ResponseType::Code],
-                scope: Some("openid profile email atproto transition:generic transition:email".to_string()),
+                scope: Some(
+                    "openid profile email atproto transition:generic transition:email".to_string(),
+                ),
                 token_endpoint_auth_method: crate::oauth::types::ClientAuthMethod::None,
                 client_type: crate::oauth::types::ClientType::Public,
                 application_type: None,

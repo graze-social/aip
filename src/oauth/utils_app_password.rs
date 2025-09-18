@@ -2,6 +2,7 @@
 
 use crate::http::AppState;
 use crate::storage::traits::AppPasswordSession;
+use atproto_client::com::atproto::server;
 use atproto_identity::model::Document;
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -22,21 +23,6 @@ struct CreateSessionResponse {
     refresh_jwt: String,
 }
 
-/// Request for com.atproto.server.refreshSession
-#[derive(Debug, Serialize)]
-struct RefreshSessionRequest {
-    #[serde(rename = "refreshJwt")]
-    refresh_jwt: String,
-}
-
-/// Response from com.atproto.server.refreshSession
-#[derive(Debug, Deserialize)]
-struct RefreshSessionResponse {
-    #[serde(rename = "accessJwt")]
-    access_jwt: String,
-    #[serde(rename = "refreshJwt")]
-    refresh_jwt: String,
-}
 
 /// Create a new app-password session using ATProtocol createSession XRPC
 ///
@@ -80,7 +66,11 @@ pub async fn create_app_password_session(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("ATProtocol createSession failed with status {}: {}", status, body).into());
+        return Err(format!(
+            "ATProtocol createSession failed with status {}: {}",
+            status, body
+        )
+        .into());
     }
 
     let session_response: CreateSessionResponse = response
@@ -132,8 +122,6 @@ pub async fn refresh_app_password_session(
     session: &AppPasswordSession,
     pds_endpoint: &str,
 ) -> Result<AppPasswordSession, Box<dyn std::error::Error + Send + Sync>> {
-    let refresh_session_url = format!("{}/xrpc/com.atproto.server.refreshSession", pds_endpoint);
-
     let now = Utc::now();
     let new_iteration = session.iteration + 1;
 
@@ -164,46 +152,20 @@ pub async fn refresh_app_password_session(
         }
     };
 
-    let request_body = RefreshSessionRequest {
-        refresh_jwt: refresh_token.clone(),
-    };
+    // Attempt to refresh the session using the ATProtocol client library
+    match server::refresh_session(&state.http_client, pds_endpoint, refresh_token).await {
+        Ok(refresh_response) => {
+            // Update session with new tokens
+            new_session.access_token = refresh_response.access_jwt;
+            new_session.refresh_token = Some(refresh_response.refresh_jwt);
+            new_session.access_token_created_at = now;
 
-    // Attempt to refresh the session
-    match state
-        .http_client
-        .post(&refresh_session_url)
-        .header("Authorization", format!("Bearer {}", refresh_token))
-        .json(&request_body)
-        .send()
-        .await
-    {
-        Ok(response) => {
-            if response.status().is_success() {
-                match response.json::<RefreshSessionResponse>().await {
-                    Ok(token_response) => {
-                        // Update session with new tokens
-                        new_session.access_token = token_response.access_jwt;
-                        new_session.refresh_token = Some(token_response.refresh_jwt);
-                        new_session.access_token_created_at = now;
-
-                        // Calculate new expiration (typically 2 hours)
-                        new_session.access_token_expires_at = now + Duration::hours(2);
-                    }
-                    Err(e) => {
-                        new_session.exchange_error =
-                            Some(format!("ATProtocol refreshSession response parse error: {}", e));
-                    }
-                }
-            } else {
-                let status = response.status();
-                let body = response.text().await.unwrap_or_default();
-                new_session.exchange_error =
-                    Some(format!("ATProtocol refreshSession failed with status {}: {}", status, body));
-            }
+            // Calculate new expiration (typically 2 hours)
+            new_session.access_token_expires_at = now + Duration::hours(2);
         }
         Err(e) => {
             // Store the refresh error in the new session
-            new_session.exchange_error = Some(format!("ATProtocol refreshSession network error: {}", e));
+            new_session.exchange_error = Some(format!("ATProtocol refreshSession failed: {}", e));
         }
     }
 
@@ -408,7 +370,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         let atp_session_storage = Arc::new(

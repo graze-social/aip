@@ -12,13 +12,15 @@ use tracing::Span;
 
 use super::{
     context::AppState,
-    handler_app_password::create_app_password_handler,
+    handler_app_password::{create_app_password_handler, get_app_password_handler},
     handler_atprotocol_client_metadata::handle_atpoauth_client_metadata,
     handler_atprotocol_oauth_authorize::handle_oauth_authorize,
     handler_atprotocol_oauth_callback::handle_atpoauth_callback,
     handler_atprotocol_session::get_atprotocol_session_handler,
+    handler_device_authorization::{
+        device_authorization_page, device_authorize, device_oauth_callback,
+    },
     handler_device_code::device_authorization_handler,
-    handler_device_authorization::{device_authorization_page, device_authorize, device_oauth_callback},
     handler_index::handle_index,
     handler_oauth::handle_oauth_token,
     handler_oauth_clients::{
@@ -42,7 +44,7 @@ pub fn build_router(ctx: AppState) -> Router {
         .route("/atprotocol/session", get(get_atprotocol_session_handler))
         .route(
             "/atprotocol/app-password",
-            post(create_app_password_handler),
+            post(create_app_password_handler).get(get_app_password_handler),
         )
         .layer(middleware::map_response_with_state(
             ctx.clone(),
@@ -228,7 +230,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         let atp_session_storage = Arc::new(

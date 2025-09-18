@@ -6,9 +6,9 @@
 
 use crate::http::context::AppState;
 use axum::{
+    Form,
     extract::{Query, State},
     response::{IntoResponse, Redirect},
-    Form,
 };
 use axum_template::RenderHtml;
 use base64::prelude::*;
@@ -54,10 +54,15 @@ pub async fn device_authorization_page(
                 user_id => user_id,
                 title => "Device Authorization",
             },
-        ).into_response()
+        )
+        .into_response()
     } else if !user_code.is_empty() {
         // Look up the device code to verify it exists
-        match state.oauth_storage.get_device_code_by_user_code(user_code).await {
+        match state
+            .oauth_storage
+            .get_device_code_by_user_code(user_code)
+            .await
+        {
             Ok(Some(device_entry)) => {
                 // Device code exists, redirect to OAuth authorization flow
                 // The user needs to authenticate first before authorizing the device
@@ -79,9 +84,11 @@ pub async fn device_authorization_page(
                 let device_auth_state = format!("{}:{}", user_code, code_verifier);
 
                 // Redirect to the existing OAuth authorize endpoint
-                let mut oauth_url = Url::parse(&format!("{}/oauth/authorize", state.config.external_base))
-                    .expect("Invalid external_base URL");
-                oauth_url.query_pairs_mut()
+                let mut oauth_url =
+                    Url::parse(&format!("{}/oauth/authorize", state.config.external_base))
+                        .expect("Invalid external_base URL");
+                oauth_url
+                    .query_pairs_mut()
                     .append_pair("response_type", "code")
                     .append_pair("client_id", internal_client_id)
                     .append_pair("redirect_uri", &redirect_uri)
@@ -102,7 +109,8 @@ pub async fn device_authorization_page(
                         error => "Invalid or expired device code",
                         title => "Device Authorization - Error",
                     },
-                ).into_response()
+                )
+                .into_response()
             }
         }
     } else {
@@ -114,7 +122,8 @@ pub async fn device_authorization_page(
                 user_code => "",
                 title => "Device Authorization",
             },
-        ).into_response()
+        )
+        .into_response()
     }
 }
 
@@ -144,7 +153,11 @@ pub async fn device_authorize(
     } else {
         // No session provided - redirect to OAuth login first
         // Look up the device code to verify it exists before redirecting
-        match state.oauth_storage.get_device_code_by_user_code(&user_code).await {
+        match state
+            .oauth_storage
+            .get_device_code_by_user_code(&user_code)
+            .await
+        {
             Ok(Some(device_entry)) => {
                 // Device code exists, redirect to OAuth authorization flow
                 // The user needs to authenticate first before authorizing the device
@@ -166,9 +179,11 @@ pub async fn device_authorize(
                 let device_auth_state = format!("{}:{}", user_code, code_verifier);
 
                 // Redirect to the existing OAuth authorize endpoint
-                let mut oauth_url = Url::parse(&format!("{}/oauth/authorize", state.config.external_base))
-                    .expect("Invalid external_base URL");
-                oauth_url.query_pairs_mut()
+                let mut oauth_url =
+                    Url::parse(&format!("{}/oauth/authorize", state.config.external_base))
+                        .expect("Invalid external_base URL");
+                oauth_url
+                    .query_pairs_mut()
                     .append_pair("response_type", "code")
                     .append_pair("client_id", internal_client_id)
                     .append_pair("redirect_uri", &redirect_uri)
@@ -189,13 +204,18 @@ pub async fn device_authorize(
                         user_code => "",
                         title => "Device Authorization - Error",
                     },
-                ).into_response();
+                )
+                .into_response();
             }
         }
     };
 
     // Try to authorize the device code
-    match state.oauth_storage.authorize_device_code(&user_code, &user_did).await {
+    match state
+        .oauth_storage
+        .authorize_device_code(&user_code, &user_did)
+        .await
+    {
         Ok(()) => {
             // Success! Show confirmation page
             RenderHtml(
@@ -206,7 +226,8 @@ pub async fn device_authorize(
                     user_code => user_code,
                     title => "Device Authorized",
                 },
-            ).into_response()
+            )
+            .into_response()
         }
         Err(e) => {
             // Handle different error types
@@ -226,7 +247,8 @@ pub async fn device_authorize(
                     user_code => "",
                     title => "Device Authorization - Error",
                 },
-            ).into_response()
+            )
+            .into_response()
         }
     }
 }
@@ -247,7 +269,9 @@ pub async fn device_oauth_callback(
 ) -> impl IntoResponse {
     // Handle OAuth errors
     if let Some(_error) = query.error {
-        let description = query.error_description.unwrap_or_else(|| "OAuth authentication failed".to_string());
+        let description = query
+            .error_description
+            .unwrap_or_else(|| "OAuth authentication failed".to_string());
 
         return RenderHtml(
             "device.html",
@@ -256,7 +280,8 @@ pub async fn device_oauth_callback(
                 error => format!("Authentication failed: {}", description),
                 title => "Device Authorization - Error",
             },
-        ).into_response();
+        )
+        .into_response();
     }
 
     // Extract authorization code and user_code from state
@@ -270,12 +295,18 @@ pub async fn device_oauth_callback(
                     error => "No authorization code received",
                     title => "Device Authorization - Error",
                 },
-            ).into_response();
+            )
+            .into_response();
         }
     };
 
     // Extract user_code and code_verifier from state parameter
-    let state_parts: Vec<&str> = query.state.as_deref().unwrap_or_default().split(':').collect();
+    let state_parts: Vec<&str> = query
+        .state
+        .as_deref()
+        .unwrap_or_default()
+        .split(':')
+        .collect();
     let (user_code, code_verifier) = if state_parts.len() >= 2 {
         (state_parts[0].to_string(), state_parts[1].to_string())
     } else {
@@ -284,19 +315,23 @@ pub async fn device_oauth_callback(
 
     // Exchange authorization code for access token using internal client
     let internal_client_id = state.config.internal_device_auth_client_id.as_ref();
-    let token_response = match exchange_auth_code_for_token(&state, &auth_code, internal_client_id, &code_verifier).await {
-        Ok(token) => token,
-        Err(e) => {
-            return RenderHtml(
-                "device.html",
-                state.template_env,
-                context! {
-                    error => format!("Token exchange failed: {}", e),
-                    title => "Device Authorization - Error",
-                },
-            ).into_response();
-        }
-    };
+    let token_response =
+        match exchange_auth_code_for_token(&state, &auth_code, internal_client_id, &code_verifier)
+            .await
+        {
+            Ok(token) => token,
+            Err(e) => {
+                return RenderHtml(
+                    "device.html",
+                    state.template_env,
+                    context! {
+                        error => format!("Token exchange failed: {}", e),
+                        title => "Device Authorization - Error",
+                    },
+                )
+                .into_response();
+            }
+        };
 
     // Get the user's DID from the access token
     let user_did = match get_user_did_from_token(&state, &token_response.access_token).await {
@@ -309,11 +344,12 @@ pub async fn device_oauth_callback(
                     error => format!("Failed to get user identity: {}", e),
                     title => "Device Authorization - Error",
                 },
-            ).into_response();
+            )
+            .into_response();
         }
     };
 
-    // Instead of immediately authorizing, redirect to confirmation page 
+    // Instead of immediately authorizing, redirect to confirmation page
     // Pass the user DID as the user_id parameter so the confirmation page knows who is authenticated
     let redirect_url = format!("/device?user_code={}&user_id={}", user_code, user_did);
     Redirect::to(&redirect_url).into_response()
@@ -330,7 +366,10 @@ async fn exchange_auth_code_for_token(
     use crate::oauth::types::TokenRequest;
 
     // Get the client for authentication
-    let client = state.oauth_storage.get_client(client_id).await?
+    let client = state
+        .oauth_storage
+        .get_client(client_id)
+        .await?
         .ok_or("Client not found")?;
 
     // Build token request
@@ -338,7 +377,11 @@ async fn exchange_auth_code_for_token(
         grant_type: "authorization_code".to_string(),
         code: Some(auth_code.to_string()),
         redirect_uri: Some(format!("{}/device/callback", state.config.external_base)),
-        code_verifier: if code_verifier.is_empty() { None } else { Some(code_verifier.to_string()) },
+        code_verifier: if code_verifier.is_empty() {
+            None
+        } else {
+            Some(code_verifier.to_string())
+        },
         refresh_token: None,
         device_code: None,
         client_id: Some(client.client_id.clone()),
@@ -350,24 +393,34 @@ async fn exchange_auth_code_for_token(
 
     let request = TokenRequest::try_from(form)?;
     let headers = axum::http::HeaderMap::new();
-    let client_auth = extract_client_auth(&headers, &TokenForm {
-        grant_type: "authorization_code".to_string(),
-        code: Some(auth_code.to_string()),
-        redirect_uri: Some(format!("{}/device/callback", state.config.external_base)),
-        code_verifier: if code_verifier.is_empty() { None } else { Some(code_verifier.to_string()) },
-        refresh_token: None,
-        device_code: None,
-        client_id: Some(client.client_id),
-        client_secret: client.client_secret,
-        scope: None,
-        client_assertion: None,
-        client_assertion_type: None,
-    });
+    let client_auth = extract_client_auth(
+        &headers,
+        &TokenForm {
+            grant_type: "authorization_code".to_string(),
+            code: Some(auth_code.to_string()),
+            redirect_uri: Some(format!("{}/device/callback", state.config.external_base)),
+            code_verifier: if code_verifier.is_empty() {
+                None
+            } else {
+                Some(code_verifier.to_string())
+            },
+            refresh_token: None,
+            device_code: None,
+            client_id: Some(client.client_id),
+            client_secret: client.client_secret,
+            scope: None,
+            client_assertion: None,
+            client_assertion_type: None,
+        },
+    );
 
     // Create authorization server and exchange token
-    let auth_server = crate::http::utils_oauth::create_base_auth_server(state).await
+    let auth_server = crate::http::utils_oauth::create_base_auth_server(state)
+        .await
         .map_err(|e| format!("Failed to create auth server: {}", e))?;
-    let token_response = auth_server.token(request, &headers, client_auth).await
+    let token_response = auth_server
+        .token(request, &headers, client_auth)
+        .await
         .map_err(|e| format!("Token exchange failed: {}", e))?;
 
     Ok(token_response)
@@ -379,10 +432,12 @@ async fn get_user_did_from_token(
     access_token: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Look up the access token to get the user_id (which should be the DID)
-    let token = state.oauth_storage.get_token(access_token).await?
+    let token = state
+        .oauth_storage
+        .get_token(access_token)
+        .await?
         .ok_or("Access token not found")?;
 
     let user_did = token.user_id.ok_or("No user ID in access token")?;
     Ok(user_did)
 }
-

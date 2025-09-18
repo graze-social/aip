@@ -27,7 +27,7 @@ pub struct ClientRegistrationService {
 }
 
 pub(crate) enum ClientServiceAuth {
-    DID,
+    Did,
     RegistrationToken(String),
 }
 
@@ -99,17 +99,19 @@ impl ClientRegistrationService {
 
         // Set defaults based on application type
         let redirect_uris = request.redirect_uris.clone().unwrap_or_default();
-        
+
         // For native applications, default to device code flow
-        let grant_types = request.grant_types.clone().unwrap_or_else(|| {
-            match &request.application_type {
-                Some(crate::oauth::types::ApplicationType::Native) => {
-                    vec![GrantType::DeviceCode, GrantType::RefreshToken]
-                }
-                _ => vec![GrantType::AuthorizationCode]
-            }
-        });
-        
+        let grant_types =
+            request
+                .grant_types
+                .clone()
+                .unwrap_or_else(|| match &request.application_type {
+                    Some(crate::oauth::types::ApplicationType::Native) => {
+                        vec![GrantType::DeviceCode, GrantType::RefreshToken]
+                    }
+                    _ => vec![GrantType::AuthorizationCode],
+                });
+
         let response_types = request.response_types.clone().unwrap_or_else(|| {
             if grant_types.contains(&GrantType::DeviceCode) {
                 vec![ResponseType::DeviceCode]
@@ -117,15 +119,18 @@ impl ClientRegistrationService {
                 vec![ResponseType::Code]
             }
         });
-        
+
         // For device flow, default to no authentication
-        let auth_method = request.token_endpoint_auth_method.clone().unwrap_or_else(|| {
-            if grant_types.contains(&GrantType::DeviceCode) {
-                crate::oauth::types::ClientAuthMethod::None
-            } else {
-                self.default_auth_method.clone()
-            }
-        });
+        let auth_method = request
+            .token_endpoint_auth_method
+            .clone()
+            .unwrap_or_else(|| {
+                if grant_types.contains(&GrantType::DeviceCode) {
+                    crate::oauth::types::ClientAuthMethod::None
+                } else {
+                    self.default_auth_method.clone()
+                }
+            });
 
         let now = Utc::now();
 
@@ -199,9 +204,7 @@ impl ClientRegistrationService {
             .storage
             .get_client(client_id)
             .await
-            .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(e.to_string())
-            })?
+            .map_err(|e| ClientRegistrationError::InvalidClientMetadata(e.to_string()))?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
         if let ClientServiceAuth::RegistrationToken(registration_token) = client_service_auth {
@@ -258,9 +261,7 @@ impl ClientRegistrationService {
             .storage
             .get_client(client_id)
             .await
-            .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(e.to_string())
-            })?
+            .map_err(|e| ClientRegistrationError::InvalidClientMetadata(e.to_string()))?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
         if let ClientServiceAuth::RegistrationToken(registration_token) = client_service_auth {
@@ -339,9 +340,7 @@ impl ClientRegistrationService {
             .storage
             .get_client(client_id)
             .await
-            .map_err(|e| {
-                ClientRegistrationError::InvalidClientMetadata(e.to_string())
-            })?
+            .map_err(|e| ClientRegistrationError::InvalidClientMetadata(e.to_string()))?
             .ok_or_else(|| ClientRegistrationError::ClientNotFound(client_id.to_string()))?;
 
         if let ClientServiceAuth::RegistrationToken(registration_token) = client_service_auth {
@@ -405,7 +404,7 @@ impl ClientRegistrationService {
                     "authorization_code grant requires code response type".to_string(),
                 ));
             }
-            
+
             // Validate device code grant type requirements
             if grant_types.contains(&GrantType::DeviceCode) {
                 if !response_types.contains(&ResponseType::DeviceCode) {
@@ -413,23 +412,23 @@ impl ClientRegistrationService {
                         "device_code grant requires device_code response type".to_string(),
                     ));
                 }
-                
+
                 // Device flow clients should be native applications
-                if let Some(app_type) = &request.application_type {
-                    if *app_type != crate::oauth::types::ApplicationType::Native {
-                        return Err(ClientRegistrationError::InvalidClientMetadata(
-                            "device_code grant is typically used with native applications".to_string(),
-                        ));
-                    }
+                if let Some(app_type) = &request.application_type
+                    && *app_type != crate::oauth::types::ApplicationType::Native
+                {
+                    return Err(ClientRegistrationError::InvalidClientMetadata(
+                        "device_code grant is typically used with native applications".to_string(),
+                    ));
                 }
-                
+
                 // Device flow clients should use no authentication by default
-                if let Some(auth_method) = &request.token_endpoint_auth_method {
-                    if *auth_method != crate::oauth::types::ClientAuthMethod::None {
-                        return Err(ClientRegistrationError::InvalidClientMetadata(
-                            "device_code grant typically uses 'none' authentication method".to_string(),
-                        ));
-                    }
+                if let Some(auth_method) = &request.token_endpoint_auth_method
+                    && *auth_method != crate::oauth::types::ClientAuthMethod::None
+                {
+                    return Err(ClientRegistrationError::InvalidClientMetadata(
+                        "device_code grant typically uses 'none' authentication method".to_string(),
+                    ));
                 }
             }
         }
@@ -502,7 +501,11 @@ impl ClientRegistrationService {
             scheme => {
                 // Allow custom schemes for native applications (RFC 8252)
                 // Custom schemes should not be "http" or "https" and should be unique to the application
-                if scheme.len() < 3 || !scheme.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '+') {
+                if scheme.len() < 3
+                    || !scheme
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '+')
+                {
                     return Err(ClientRegistrationError::InvalidRedirectUri(
                         "Custom scheme must be at least 3 characters and contain only alphanumeric characters, hyphens, dots, or plus signs".to_string(),
                     ));
@@ -816,7 +819,8 @@ mod tests {
 
         // Test with supported scopes including required AT Protocol scopes
         let supported_scopes = crate::config::OAuthSupportedScopes::try_from(
-            "openid email atproto transition:generic transition:email account:email?action=read".to_string(),
+            "openid email atproto transition:generic transition:email account:email?action=read"
+                .to_string(),
         )
         .unwrap();
 
@@ -973,7 +977,7 @@ mod tests {
                 error_msg
             );
         }
-        
+
         // Test: openid and email without any transition scopes should fail
         let invalid_request = ClientRegistrationRequest {
             client_name: Some("Test Client".to_string()),
@@ -1000,7 +1004,9 @@ mod tests {
         if let Err(error) = result {
             let error_msg = error.to_string();
             assert!(
-                error_msg.contains("email") && (error_msg.contains("read access") || error_msg.contains("transition:email")),
+                error_msg.contains("email")
+                    && (error_msg.contains("read access")
+                        || error_msg.contains("transition:email")),
                 "Error should mention email requires read access capability. Got: {}",
                 error_msg
             );
@@ -1123,13 +1129,13 @@ fn validate_jwk(jwk: &serde_json::Value, index: usize) -> Result<(), ClientRegis
     }
 
     // Key usage should be 'sig' for signing
-    if let Some(use_val) = jwk.get("use").and_then(|v| v.as_str()) {
-        if use_val != "sig" {
-            return Err(ClientRegistrationError::InvalidClientMetadata(format!(
-                "{}: key use must be 'sig' for JWT signing",
-                error_prefix
-            )));
-        }
+    if let Some(use_val) = jwk.get("use").and_then(|v| v.as_str())
+        && use_val != "sig"
+    {
+        return Err(ClientRegistrationError::InvalidClientMetadata(format!(
+            "{}: key use must be 'sig' for JWT signing",
+            error_prefix
+        )));
     }
 
     Ok(())

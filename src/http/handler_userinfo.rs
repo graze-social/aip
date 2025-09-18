@@ -52,7 +52,7 @@ pub async fn get_userinfo_handler(
         Some(ref scope_str) => {
             // Apply compat_scopes to normalize scope format before parsing
             let normalized_scope = crate::oauth::scope_validation::compat_scopes(scope_str);
-            
+
             // Parse all scopes at once using Scope::parse_multiple
             match Scope::parse_multiple(&normalized_scope) {
                 Ok(parsed_scopes) => parsed_scopes.into_iter().collect(),
@@ -189,7 +189,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         let atp_session_storage = Arc::new(
@@ -231,7 +234,7 @@ mod tests {
             .with_name(Some("test.bsky.social".to_string()))
             .with_email(Some("test@example.com".to_string()));
 
-        assert_eq!(response.sub, "did:plc:test123");
+        assert_eq!(response.sub, Some("did:plc:test123".to_string()));
         assert_eq!(response.name, Some("test.bsky.social".to_string()));
         assert_eq!(response.email, Some("test@example.com".to_string()));
     }
@@ -240,7 +243,7 @@ mod tests {
     fn test_userinfo_response_minimal() {
         let response = OpenIDClaims::new_userinfo("did:plc:user123".to_string());
 
-        assert_eq!(response.sub, "did:plc:user123");
+        assert_eq!(response.sub, Some("did:plc:user123".to_string()));
         assert_eq!(response.name, None);
         assert_eq!(response.email, None);
     }
@@ -322,7 +325,7 @@ mod tests {
         let response = result.unwrap().0;
 
         // Should return just the DID
-        assert_eq!(response.sub, "did:plc:test123");
+        assert_eq!(response.sub, Some("did:plc:test123".to_string()));
         assert_eq!(response.did, Some("did:plc:test123".to_string()));
         assert_eq!(response.email, None);
     }
@@ -437,7 +440,7 @@ mod tests {
         assert!(result.is_ok());
         let response = result.unwrap();
 
-        assert_eq!(response.sub, "did:plc:user123");
+        assert_eq!(response.sub, Some("did:plc:user123".to_string()));
         assert_eq!(response.did, Some("did:plc:user123".to_string()));
         assert_eq!(response.email, None);
     }

@@ -1,13 +1,8 @@
 //! RFC 8628 Device Authorization Grant endpoints
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json as ResponseJson,
-    Form,
-};
+use axum::{Form, extract::State, http::StatusCode, response::Json as ResponseJson};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::http::context::AppState;
@@ -46,7 +41,7 @@ pub async fn device_authorization_handler(
 ) -> Result<ResponseJson<DeviceAuthorizationResponse>, (StatusCode, ResponseJson<Value>)> {
     // TODO: Implement device authorization logic
     // For now, return a placeholder implementation
-    
+
     // Validate client_id exists by checking storage directly
     let client = state
         .oauth_storage
@@ -72,7 +67,10 @@ pub async fn device_authorization_handler(
         })?;
 
     // Check if client supports device_code grant
-    if !client.grant_types.contains(&crate::oauth::types::GrantType::DeviceCode) {
+    if !client
+        .grant_types
+        .contains(&crate::oauth::types::GrantType::DeviceCode)
+    {
         return Err((
             StatusCode::BAD_REQUEST,
             ResponseJson(json!({
@@ -85,7 +83,7 @@ pub async fn device_authorization_handler(
     // Generate device code and user code
     let device_code = format!("device_{}", Uuid::new_v4().to_string().replace('-', ""));
     let user_code = generate_user_code();
-    
+
     // Store device code in storage
     state
         .oauth_storage
@@ -106,16 +104,16 @@ pub async fn device_authorization_handler(
                 })),
             )
         })?;
-    
+
     let verification_uri = format!("{}/device", state.config.external_base);
     let verification_uri_complete = Some(format!("{}?user_code={}", verification_uri, user_code));
-    
+
     let response = DeviceAuthorizationResponse {
         device_code,
         user_code,
         verification_uri,
         verification_uri_complete,
-        expires_in: 1800, // 30 minutes
+        expires_in: 1800,  // 30 minutes
         interval: Some(5), // 5 seconds
     };
 
@@ -126,15 +124,13 @@ pub async fn device_authorization_handler(
 fn generate_user_code() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    
+
     // Generate 8-character alphanumeric code
     let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Excluding confusing chars
     let code: String = (0..8)
-        .map(|_| {
-            chars.chars().nth(rng.gen_range(0..chars.len())).unwrap()
-        })
+        .map(|_| chars.chars().nth(rng.gen_range(0..chars.len())).unwrap())
         .collect();
-    
+
     code
 }
 
@@ -146,7 +142,7 @@ mod tests {
     fn test_generate_user_code() {
         let code = generate_user_code();
         assert_eq!(code.len(), 8);
-        
+
         // Should only contain valid characters
         let valid_chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         for c in code.chars() {

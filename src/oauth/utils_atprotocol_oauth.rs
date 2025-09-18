@@ -104,7 +104,11 @@ pub async fn get_atprotocol_session_with_refresh(
 
     // Check if session has an exchange error
     if let Some(ref exchange_error) = session.exchange_error {
-        return Err(format!("ATProtocol OAuth session exchange error: {}", exchange_error).into());
+        return Err(format!(
+            "ATProtocol OAuth session exchange error: {}",
+            exchange_error
+        )
+        .into());
     }
 
     // Check if token needs refreshing
@@ -210,7 +214,7 @@ pub async fn refresh_session(
                 Ok(token_response) => {
                     // Update session with new tokens
                     new_session.access_token = Some(token_response.access_token.clone());
-                    new_session.refresh_token = Some(token_response.refresh_token.clone());
+                    new_session.refresh_token = token_response.refresh_token.clone();
                     new_session.access_token_created_at = Some(now);
                     new_session.access_token_expires_at =
                         Some(now + Duration::seconds(token_response.expires_in as i64));
@@ -308,8 +312,9 @@ pub async fn build_openid_claims_with_document_info(
         resource: atproto_oauth::scopes::AccountResource::Email,
         action: atproto_oauth::scopes::AccountAction::Read,
     });
-    let grants_email_read = has_transition_email || scopes.iter().any(|s| s.grants(&email_read_scope));
-    
+    let grants_email_read =
+        has_transition_email || scopes.iter().any(|s| s.grants(&email_read_scope));
+
     // The 'atproto' scope is required for all AT Protocol operations
     // Additional transition scopes grant specific capabilities:
     // - 'transition:generic' grants general read access (profile but NOT email)
@@ -328,7 +333,7 @@ pub async fn build_openid_claims_with_document_info(
     let can_provide_email = has_email_scope && has_atproto && grants_email_read;
 
     // Always set the DID from the document
-    claims = claims.with_did(document.id.clone());
+    claims = claims.with_did(Some(document.id.clone()));
 
     // Early return if no relevant scopes are present
     if !has_profile_scope && !has_email_scope {
@@ -344,24 +349,22 @@ pub async fn build_openid_claims_with_document_info(
     }
 
     // Add email information if we can provide it
-    if can_provide_email {
-        if let Some(session) = session {
-            let email = if let (Some(atp_access_token), Some(pds_endpoint)) =
-                (&session.access_token, document.pds_endpoints().first())
-            {
-                fetch_email_from_pds(
-                    http_client,
-                    atp_access_token,
-                    &session.dpop_key,
-                    pds_endpoint,
-                )
-                .await?
-            } else {
-                None
-            };
-            if email.is_some() {
-                claims = claims.with_email(email);
-            }
+    if can_provide_email && let Some(session) = session {
+        let email = if let (Some(atp_access_token), Some(pds_endpoint)) =
+            (&session.access_token, document.pds_endpoints().first())
+        {
+            fetch_email_from_pds(
+                http_client,
+                atp_access_token,
+                &session.dpop_key,
+                pds_endpoint,
+            )
+            .await?
+        } else {
+            None
+        };
+        if email.is_some() {
+            claims = claims.with_email(email);
         }
     }
 
@@ -485,7 +488,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         let atp_session_storage = Arc::new(
@@ -568,7 +574,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         app_state.config = custom_config;

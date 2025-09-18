@@ -203,23 +203,34 @@ impl DeviceCodeStore for SqliteOAuthStorage {
         scope: Option<&str>,
         expires_in: u64,
     ) -> Result<()> {
-        self.device_code_store.store_device_code(device_code, user_code, client_id, scope, expires_in).await
+        self.device_code_store
+            .store_device_code(device_code, user_code, client_id, scope, expires_in)
+            .await
     }
 
     async fn get_device_code(&self, device_code: &str) -> Result<Option<DeviceCodeEntry>> {
         self.device_code_store.get_device_code(device_code).await
     }
 
-    async fn get_device_code_by_user_code(&self, user_code: &str) -> Result<Option<DeviceCodeEntry>> {
-        self.device_code_store.get_device_code_by_user_code(user_code).await
+    async fn get_device_code_by_user_code(
+        &self,
+        user_code: &str,
+    ) -> Result<Option<DeviceCodeEntry>> {
+        self.device_code_store
+            .get_device_code_by_user_code(user_code)
+            .await
     }
 
     async fn authorize_device_code(&self, user_code: &str, user_id: &str) -> Result<()> {
-        self.device_code_store.authorize_device_code(user_code, user_id).await
+        self.device_code_store
+            .authorize_device_code(user_code, user_id)
+            .await
     }
 
     async fn consume_device_code(&self, device_code: &str) -> Result<Option<String>> {
-        self.device_code_store.consume_device_code(device_code).await
+        self.device_code_store
+            .consume_device_code(device_code)
+            .await
     }
 
     async fn cleanup_expired_device_codes(&self) -> Result<usize> {
@@ -311,7 +322,6 @@ impl AtpOAuthSessionStorage for SqliteOAuthStorage {
             .get_session_by_atp_state(atp_state)
             .await
     }
-
 
     async fn get_sessions_by_did(&self, did: &str) -> Result<Vec<AtpOAuthSession>> {
         self.atp_oauth_session_storage

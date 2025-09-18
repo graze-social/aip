@@ -111,14 +111,13 @@ pub trait DeviceCodeStore {
     /// Retrieve a device code entry
     async fn get_device_code(&self, device_code: &str) -> Result<Option<DeviceCodeEntry>>;
     /// Retrieve a device code entry by user code
-    async fn get_device_code_by_user_code(&self, user_code: &str) -> Result<Option<DeviceCodeEntry>>;
-
-    /// Authorize a device code with a user
-    async fn authorize_device_code(
+    async fn get_device_code_by_user_code(
         &self,
         user_code: &str,
-        user_id: &str,
-    ) -> Result<()>;
+    ) -> Result<Option<DeviceCodeEntry>>;
+
+    /// Authorize a device code with a user
+    async fn authorize_device_code(&self, user_code: &str, user_id: &str) -> Result<()>;
 
     /// Consume (and delete) a device code, returning the authorized user if any
     async fn consume_device_code(&self, device_code: &str) -> Result<Option<String>>;

@@ -196,9 +196,9 @@ impl PostgresAppPasswordSessionStore {
             session_exchanged_at: row.try_get("session_exchanged_at").map_err(|e| {
                 StorageError::DatabaseError(format!("Failed to get session_exchanged_at: {}", e))
             })?,
-            exchange_error: row.try_get("exchange_error").map_err(|e| {
-                StorageError::DatabaseError(e.to_string())
-            })?,
+            exchange_error: row
+                .try_get("exchange_error")
+                .map_err(|e| StorageError::DatabaseError(e.to_string()))?,
         })
     }
 }

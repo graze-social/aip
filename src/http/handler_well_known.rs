@@ -99,17 +99,17 @@ pub async fn jwks_handler(
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let mut jwks_keys = Vec::new();
     for key_data in state.config.oauth_signing_keys.as_ref() {
-        if let Ok(public_key_data) = to_public(key_data) {
-            if let Ok(jwk) = generate(&public_key_data) {
-                jwks_keys.push(jwk);
-            }
+        if let Ok(public_key_data) = to_public(key_data)
+            && let Ok(jwk) = generate(&public_key_data)
+        {
+            jwks_keys.push(jwk);
         }
     }
     for key_data in state.config.atproto_oauth_signing_keys.as_ref() {
-        if let Ok(public_key_data) = to_public(key_data) {
-            if let Ok(jwk) = generate(&public_key_data) {
-                jwks_keys.push(jwk);
-            }
+        if let Ok(public_key_data) = to_public(key_data)
+            && let Ok(jwk) = generate(&public_key_data)
+        {
+            jwks_keys.push(jwk);
         }
     }
 
@@ -192,7 +192,10 @@ mod tests {
             atproto_client_logo: None::<String>.try_into().unwrap(),
             atproto_client_tos: None::<String>.try_into().unwrap(),
             atproto_client_policy: None::<String>.try_into().unwrap(),
-            internal_device_auth_client_id: "aip-internal-device-auth".to_string().try_into().unwrap(),
+            internal_device_auth_client_id: "aip-internal-device-auth"
+                .to_string()
+                .try_into()
+                .unwrap(),
         });
 
         let atp_session_storage = Arc::new(
