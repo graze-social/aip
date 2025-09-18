@@ -564,7 +564,7 @@ impl AtpBackedAuthorizationServer {
 
         let mut updated_session = session.clone();
         updated_session.access_token = Some(token_response.access_token.clone());
-        updated_session.refresh_token = Some(token_response.refresh_token.clone());
+        updated_session.refresh_token = token_response.refresh_token.clone();
         updated_session.access_token_created_at = Some(now);
         updated_session.access_token_expires_at = Some(expires_at);
         updated_session.access_token_scopes = Some(parsed_scopes);
