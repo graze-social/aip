@@ -195,7 +195,14 @@ async fn process_authorization_query(
         let supported_scopes =
             crate::oauth::types::parse_scope(&config.oauth_supported_scopes.as_strings().join(" "));
 
-        if !requested_scopes.is_subset(&supported_scopes) {
+        let supported_scope_strings = config.oauth_supported_scopes.as_strings();
+        let all_scopes_supported = requested_scopes.iter().all(|requested| {
+            supported_scopes.contains(requested) ||
+                // Support the special repo:* wildcard for any repo scope
+                (supported_scope_strings.contains(&"repo:*".to_string()) && requested.starts_with("repo:"))
+        });
+
+        if !all_scopes_supported {
             return Err(serde_json::json!({
                 "error": "invalid_scope",
                 "error_description": "One or more requested scopes are not supported by this server"
