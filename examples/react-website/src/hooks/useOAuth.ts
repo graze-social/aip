@@ -176,7 +176,7 @@ export function useOAuth() {
         response_types: ['code'],
         grant_types: ['authorization_code'],
         token_endpoint_auth_method: 'client_secret_post',
-        scope: 'atproto:atproto atproto:transition:generic',
+        scope: 'atproto transition:generic',
         contacts: ['admin@demo-client.example'],
         policy_uri: `${CONFIG.DEMO_BASE_URL}/policy`,
         tos_uri: `${CONFIG.DEMO_BASE_URL}/terms`,
@@ -223,7 +223,7 @@ export function useOAuth() {
       const { codeVerifier, codeChallenge } = await generatePKCEAsync();
       const oauthState = generateState();
       const redirectUri = `${CONFIG.DEMO_BASE_URL}/callback`;
-      const scope = 'atproto:atproto atproto:transition:generic';
+      const scope = 'atproto transition:generic';
       
       // Store OAuth state for callback verification
       const stateData = {
@@ -241,6 +241,7 @@ export function useOAuth() {
         // Use PAR flow
         const parRequest = {
           client_id: state.registeredClient.client_id,
+          client_secret: state.registeredClient.client_secret,
           response_type: 'code',
           redirect_uri: redirectUri,
           scope,
