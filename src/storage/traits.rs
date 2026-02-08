@@ -397,6 +397,39 @@ pub trait AppPasswordSessionStore: Send + Sync {
     ) -> Result<Vec<AppPasswordSession>>;
 }
 
+// ===== Delegate Access Storage Traits =====
+
+/// A grant allowing one DID to act on behalf of another
+#[derive(Clone, Serialize, Deserialize)]
+#[cfg_attr(any(debug_assertions, test), derive(Debug))]
+pub struct DelegateGrant {
+    /// The DID of the account owner who grants access
+    pub owner_did: String,
+    /// The DID of the delegate who receives access
+    pub delegate_did: String,
+    /// When the delegation was granted
+    pub granted_at: DateTime<Utc>,
+}
+
+/// Trait for storing and managing delegate access grants
+#[async_trait]
+pub trait DelegateAccessStore: Send + Sync {
+    /// Grant delegate access from owner to delegate
+    async fn grant_delegate(&self, owner_did: &str, delegate_did: &str) -> Result<()>;
+
+    /// Revoke delegate access from owner to delegate
+    async fn revoke_delegate(&self, owner_did: &str, delegate_did: &str) -> Result<()>;
+
+    /// Check if delegate_did is a delegate for owner_did
+    async fn is_delegate(&self, owner_did: &str, delegate_did: &str) -> Result<bool>;
+
+    /// List all delegates for an owner
+    async fn list_delegates(&self, owner_did: &str) -> Result<Vec<DelegateGrant>>;
+
+    /// List all owners that a delegate has access to
+    async fn list_owners(&self, delegate_did: &str) -> Result<Vec<DelegateGrant>>;
+}
+
 // ===== Combined Storage Trait =====
 
 /// Combined OAuth storage trait
@@ -412,6 +445,7 @@ pub trait OAuthStorage:
     + AuthorizationRequestStorage
     + AppPasswordStore
     + AppPasswordSessionStore
+    + DelegateAccessStore
     + Send
     + Sync
 {

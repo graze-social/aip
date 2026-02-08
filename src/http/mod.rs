@@ -7,6 +7,8 @@ mod handler_atprotocol_client_metadata;
 mod handler_atprotocol_oauth_authorize;
 mod handler_atprotocol_oauth_callback;
 mod handler_atprotocol_session;
+mod handler_delegate;
+mod handler_dpop_proof;
 mod handler_device_authorization;
 mod handler_device_code;
 

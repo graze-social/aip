@@ -8,6 +8,7 @@ mod app_passwords;
 mod atp_oauth_sessions;
 mod authorization_codes;
 mod authorization_requests;
+mod delegate_access;
 mod device_codes;
 mod keys;
 mod oauth_clients;
@@ -26,6 +27,7 @@ pub use app_passwords::{SqliteAppPasswordSessionStore, SqliteAppPasswordStore};
 pub use atp_oauth_sessions::SqliteAtpOAuthSessionStorage;
 pub use authorization_codes::SqliteAuthorizationCodeStore;
 pub use authorization_requests::SqliteAuthorizationRequestStorage;
+pub use delegate_access::SqliteDelegateAccessStore;
 pub use device_codes::SqliteDeviceCodeStore;
 pub use keys::SqliteKeyStore;
 pub use oauth_clients::SqliteOAuthClientStore;
@@ -49,6 +51,7 @@ pub struct SqliteOAuthStorage {
     authorization_request_storage: Arc<SqliteAuthorizationRequestStorage>,
     app_password_store: Arc<SqliteAppPasswordStore>,
     app_password_session_store: Arc<SqliteAppPasswordSessionStore>,
+    delegate_access_store: Arc<SqliteDelegateAccessStore>,
 }
 
 impl SqliteOAuthStorage {
@@ -66,6 +69,7 @@ impl SqliteOAuthStorage {
             Arc::new(SqliteAuthorizationRequestStorage::new(pool.clone()));
         let app_password_store = Arc::new(SqliteAppPasswordStore::new(pool.clone()));
         let app_password_session_store = Arc::new(SqliteAppPasswordSessionStore::new(pool.clone()));
+        let delegate_access_store = Arc::new(SqliteDelegateAccessStore::new(pool.clone()));
 
         Self {
             pool,
@@ -80,6 +84,7 @@ impl SqliteOAuthStorage {
             authorization_request_storage,
             app_password_store,
             app_password_session_store,
+            delegate_access_store,
         }
     }
 
@@ -489,6 +494,35 @@ impl AppPasswordSessionStore for SqliteOAuthStorage {
         self.app_password_session_store
             .list_app_password_sessions_by_client(client_id)
             .await
+    }
+}
+
+#[async_trait]
+impl DelegateAccessStore for SqliteOAuthStorage {
+    async fn grant_delegate(&self, owner_did: &str, delegate_did: &str) -> Result<()> {
+        self.delegate_access_store
+            .grant_delegate(owner_did, delegate_did)
+            .await
+    }
+
+    async fn revoke_delegate(&self, owner_did: &str, delegate_did: &str) -> Result<()> {
+        self.delegate_access_store
+            .revoke_delegate(owner_did, delegate_did)
+            .await
+    }
+
+    async fn is_delegate(&self, owner_did: &str, delegate_did: &str) -> Result<bool> {
+        self.delegate_access_store
+            .is_delegate(owner_did, delegate_did)
+            .await
+    }
+
+    async fn list_delegates(&self, owner_did: &str) -> Result<Vec<DelegateGrant>> {
+        self.delegate_access_store.list_delegates(owner_did).await
+    }
+
+    async fn list_owners(&self, delegate_did: &str) -> Result<Vec<DelegateGrant>> {
+        self.delegate_access_store.list_owners(delegate_did).await
     }
 }
 
