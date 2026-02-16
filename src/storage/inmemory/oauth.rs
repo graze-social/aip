@@ -33,6 +33,8 @@ pub struct MemoryOAuthStorage {
     // App password storage
     app_passwords: tokio::sync::RwLock<HashMap<String, AppPassword>>, // "client_id:did" -> AppPassword
     app_password_sessions: tokio::sync::RwLock<HashMap<String, AppPasswordSession>>, // "client_id:did" -> AppPasswordSession
+    // Delegate access storage
+    delegate_grants: tokio::sync::RwLock<HashMap<String, DelegateGrant>>, // "owner_did:delegate_did" -> DelegateGrant
 }
 
 impl MemoryOAuthStorage {
@@ -53,6 +55,11 @@ impl MemoryOAuthStorage {
     /// Generate a unique app password key from client_id and DID
     fn app_password_key(client_id: &str, did: &str) -> String {
         format!("{}:{}", client_id, did)
+    }
+
+    /// Generate a unique delegate grant key from owner_did and delegate_did
+    fn delegate_key(owner_did: &str, delegate_did: &str) -> String {
+        format!("{}:{}", owner_did, delegate_did)
     }
 }
 
@@ -871,6 +878,53 @@ impl AppPasswordSessionStore for MemoryOAuthStorage {
         let result: Vec<_> = sessions
             .values()
             .filter(|s| s.client_id == client_id)
+            .cloned()
+            .collect();
+        Ok(result)
+    }
+}
+
+#[async_trait]
+impl DelegateAccessStore for MemoryOAuthStorage {
+    async fn grant_delegate(&self, owner_did: &str, delegate_did: &str) -> Result<()> {
+        let mut grants = self.delegate_grants.write().await;
+        let key = Self::delegate_key(owner_did, delegate_did);
+        grants.entry(key).or_insert_with(|| DelegateGrant {
+            owner_did: owner_did.to_string(),
+            delegate_did: delegate_did.to_string(),
+            granted_at: Utc::now(),
+        });
+        Ok(())
+    }
+
+    async fn revoke_delegate(&self, owner_did: &str, delegate_did: &str) -> Result<()> {
+        let mut grants = self.delegate_grants.write().await;
+        let key = Self::delegate_key(owner_did, delegate_did);
+        grants.remove(&key);
+        Ok(())
+    }
+
+    async fn is_delegate(&self, owner_did: &str, delegate_did: &str) -> Result<bool> {
+        let grants = self.delegate_grants.read().await;
+        let key = Self::delegate_key(owner_did, delegate_did);
+        Ok(grants.contains_key(&key))
+    }
+
+    async fn list_delegates(&self, owner_did: &str) -> Result<Vec<DelegateGrant>> {
+        let grants = self.delegate_grants.read().await;
+        let result: Vec<_> = grants
+            .values()
+            .filter(|g| g.owner_did == owner_did)
+            .cloned()
+            .collect();
+        Ok(result)
+    }
+
+    async fn list_owners(&self, delegate_did: &str) -> Result<Vec<DelegateGrant>> {
+        let grants = self.delegate_grants.read().await;
+        let result: Vec<_> = grants
+            .values()
+            .filter(|g| g.delegate_did == delegate_did)
             .cloned()
             .collect();
         Ok(result)

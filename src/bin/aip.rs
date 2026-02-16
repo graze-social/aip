@@ -319,7 +319,7 @@ async fn main() -> Result<()> {
         let http_port = *inner_config.http_port.as_ref();
         let inner_token = token.clone();
         tracker.spawn(async move {
-            let bind_address = format!("0.0.0.0:{http_port}");
+            let bind_address = format!("[::]:{http_port}");
             tracing::info!("Starting server on {bind_address}");
             let listener = TcpListener::bind(&bind_address).await.unwrap();
 

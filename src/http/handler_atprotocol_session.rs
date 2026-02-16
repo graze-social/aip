@@ -26,6 +26,8 @@ pub struct SessionQuery {
     pub access_token_type: String,
     /// Subject DID for app password session lookup (optional)
     pub sub: Option<String>,
+    /// DID of the account owner to act on behalf of (delegate access)
+    pub delegate_for: Option<String>,
 }
 
 fn default_access_token_type() -> String {
@@ -102,6 +104,44 @@ pub async fn get_atprotocol_session_handler(
             });
             (StatusCode::UNAUTHORIZED, Json(error_response))
         })?
+    };
+
+    // Handle delegate_for: if present, verify caller is a delegate and switch to owner's DID
+    let did = if let Some(ref owner_did) = query.delegate_for {
+        // Validate the DID format
+        if let Err(e) = super::utils_oauth::validate_did(owner_did) {
+            let error_response = json!({
+                "error": "invalid_request",
+                "error_description": format!("Invalid delegate_for DID: {}", e)
+            });
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+        }
+
+        // Verify the caller is a delegate for the requested owner
+        let is_delegate = state
+            .oauth_storage
+            .is_delegate(owner_did, did)
+            .await
+            .map_err(|e| {
+                let error_response = json!({
+                    "error": "server_error",
+                    "error_description": format!("Failed to check delegate access: {}", e)
+                });
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+            })?;
+
+        if !is_delegate {
+            let error_response = json!({
+                "error": "forbidden",
+                "error_description": "You are not a delegate for this account"
+            });
+            return Err((StatusCode::FORBIDDEN, Json(error_response)));
+        }
+
+        // Use the owner's DID for session lookup
+        owner_did
+    } else {
+        did
     };
 
     // Retrieve the DID document from DocumentStorage
@@ -182,6 +222,76 @@ pub async fn get_atprotocol_session_handler(
             Err(err) => {
                 tracing::warn!(?err, "no app-password session found");
                 // For "best" mode, continue to OAuth session below
+            }
+        }
+    }
+
+    // If delegate_for is set and we haven't returned yet, look up the owner's sessions by DID
+    if query.delegate_for.is_some() {
+        // For delegation, find the owner's latest session by DID
+        let owner_sessions = state
+            .oauth_storage
+            .get_sessions_by_did(did)
+            .await
+            .map_err(|e| {
+                let error_response = json!({
+                    "error": "server_error",
+                    "error_description": format!("Failed to look up owner sessions: {}", e)
+                });
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+            })?;
+
+        // Find the best session: prefer one with a valid access token
+        let best_session = owner_sessions
+            .iter()
+            .filter(|s| s.access_token.is_some() && s.session_exchanged_at.is_some() && s.exchange_error.is_none())
+            .max_by_key(|s| s.access_token_expires_at);
+
+        match best_session {
+            Some(session) => {
+                let (access_token_val, expires_at, scopes) = match (
+                    session.access_token.clone(),
+                    session.access_token_expires_at,
+                    session.access_token_scopes.clone(),
+                ) {
+                    (Some(at), Some(exp), Some(sc)) => (at, exp.timestamp(), sc),
+                    _ => {
+                        let error_response = json!({
+                            "error": "session_incomplete",
+                            "error_description": "Owner session found but is not valid"
+                        });
+                        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
+                    }
+                };
+
+                // Never return private key for delegated sessions — delegates must use
+                // the /api/atprotocol/dpop-proof endpoint for per-request signing
+                let dpop_key = None;
+                let dpop_jwk = None;
+
+                let response = AtpSessionResponse {
+                    did: document.id.clone(),
+                    handle: document.handles().unwrap_or("unknown.unknown").to_string(),
+                    access_token: access_token_val,
+                    token_type: "dpop".to_string(),
+                    scopes,
+                    pds_endpoint: document
+                        .pds_endpoints()
+                        .first()
+                        .map_or("", |v| v)
+                        .to_string(),
+                    dpop_key,
+                    dpop_jwk,
+                    expires_at,
+                };
+                return Ok(Json(response));
+            }
+            None => {
+                let error_response = json!({
+                    "error": "session_not_found",
+                    "error_description": "No valid session found for the delegated account"
+                });
+                return Err((StatusCode::NOT_FOUND, Json(error_response)));
             }
         }
     }

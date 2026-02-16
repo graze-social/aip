@@ -18,6 +18,11 @@ use super::{
     handler_atprotocol_oauth_authorize::handle_oauth_authorize,
     handler_atprotocol_oauth_callback::handle_atpoauth_callback,
     handler_atprotocol_session::get_atprotocol_session_handler,
+    handler_delegate::{
+        grant_delegate_handler, list_delegates_handler, list_owners_handler,
+        revoke_delegate_handler,
+    },
+    handler_dpop_proof::dpop_proof_handler,
     handler_device_authorization::{
         device_authorization_page, device_authorize, device_oauth_callback,
     },
@@ -48,6 +53,11 @@ pub fn build_router(ctx: AppState) -> Router {
             "/atprotocol/app-password",
             post(create_app_password_handler).get(get_app_password_handler),
         )
+        .route("/delegate/grant", post(grant_delegate_handler))
+        .route("/delegate/revoke", post(revoke_delegate_handler))
+        .route("/delegate/delegates", get(list_delegates_handler))
+        .route("/delegate/owners", get(list_owners_handler))
+        .route("/atprotocol/dpop-proof", post(dpop_proof_handler))
         .layer(middleware::map_response_with_state(
             ctx.clone(),
             set_dpop_headers,

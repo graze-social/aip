@@ -130,6 +130,28 @@ pub fn normalize_login_hint_typed(login_hint: &str) -> Result<LoginHintType, OAu
     normalize_as_handle(authority)
 }
 
+/// Validate that a string is a properly formatted DID (did:plc: or did:web:)
+///
+/// Returns Ok(()) if valid, or a human-readable error string if not.
+pub fn validate_did(did: &str) -> Result<(), String> {
+    let trimmed = did.trim();
+    if trimmed.is_empty() {
+        return Err("DID cannot be empty".to_string());
+    }
+    if trimmed.starts_with("did:plc:") {
+        if !is_valid_did_method_plc(trimmed) {
+            return Err("Invalid did:plc format".to_string());
+        }
+    } else if trimmed.starts_with("did:web:") {
+        if !is_valid_did_method_web(trimmed, true) {
+            return Err("Invalid did:web format".to_string());
+        }
+    } else {
+        return Err("Unsupported DID method (expected did:plc: or did:web:)".to_string());
+    }
+    Ok(())
+}
+
 /// Normalize a string as a DID
 fn normalize_as_did(did: &str) -> Result<LoginHintType, OAuthError> {
     if did.starts_with("did:plc:") {
