@@ -350,7 +350,7 @@ pub async fn build_openid_claims_with_document_info(
 
     // Add email information if we can provide it
     if can_provide_email && let Some(session) = session {
-        let email = if let (Some(atp_access_token), Some(pds_endpoint)) =
+        let (email, email_verified) = if let (Some(atp_access_token), Some(pds_endpoint)) =
             (&session.access_token, document.pds_endpoints().first())
         {
             fetch_email_from_pds(
@@ -361,10 +361,10 @@ pub async fn build_openid_claims_with_document_info(
             )
             .await?
         } else {
-            None
+            (None, None)
         };
         if email.is_some() {
-            claims = claims.with_email(email);
+            claims = claims.with_email(email).with_email_verified(email_verified);
         }
     }
 
@@ -379,7 +379,6 @@ struct AtpGetSessionResponse {
     #[allow(dead_code)]
     did: String,
     email: Option<String>,
-    #[allow(dead_code)]
     #[serde(rename = "emailConfirmed")]
     email_confirmed: Option<bool>,
 }
@@ -390,7 +389,7 @@ async fn fetch_email_from_pds(
     atp_access_token: &str,
     dpop_key: &str,
     pds_endpoint: &str,
-) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(Option<String>, Option<bool>), Box<dyn std::error::Error + Send + Sync>> {
     // Parse the DPoP key
     let dpop_private_key =
         identify_key(dpop_key).map_err(|e| format!("Failed to parse DPoP key: {}", e))?;
@@ -414,7 +413,7 @@ async fn fetch_email_from_pds(
     let atp_session: AtpGetSessionResponse = serde_json::from_value(session_response)
         .map_err(|e| format!("Failed to parse ATProtocol session response: {}", e))?;
 
-    Ok(atp_session.email)
+    Ok((atp_session.email, atp_session.email_confirmed))
 }
 
 #[cfg(test)]

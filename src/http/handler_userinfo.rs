@@ -9,7 +9,7 @@ use crate::oauth::openid::OpenIDClaims;
 use crate::oauth::utils_atprotocol_oauth::{
     build_openid_claims_with_document_info, get_atprotocol_session_with_refresh,
 };
-use atproto_oauth::scopes::Scope;
+use atproto_oauth::scopes::{AccountScope, Scope, TransitionScope};
 
 /// Get OpenID Connect UserInfo
 /// GET /oauth/userinfo
@@ -66,6 +66,21 @@ pub async fn get_userinfo_handler(
         None => std::collections::HashSet::new(),
     };
 
+    // Scope-gated email availability — mirrors the claim builder's check
+    // (has "email" scope + "atproto" scope + a scope granting email read).
+    let has_email_scope = scopes.iter().any(|s| matches!(s, Scope::Email));
+    let has_atproto = scopes.iter().any(|s| matches!(s, Scope::Atproto));
+    let has_transition_email = scopes
+        .iter()
+        .any(|s| matches!(s, Scope::Transition(TransitionScope::Email)));
+    let email_read_scope = Scope::Account(AccountScope {
+        resource: atproto_oauth::scopes::AccountResource::Email,
+        action: atproto_oauth::scopes::AccountAction::Read,
+    });
+    let grants_email_read =
+        has_transition_email || scopes.iter().any(|s| s.grants(&email_read_scope));
+    let can_provide_email = has_email_scope && has_atproto && grants_email_read;
+
     // Create initial UserInfo claims
     let initial_claims = OpenIDClaims::new_userinfo(user_id.clone());
 
@@ -113,7 +128,41 @@ pub async fn get_userinfo_handler(
         (status, Json(error_response))
     })?;
 
-    let final_claims = claims.with_nonce(access_token.nonce);
+    let mut final_claims = claims.with_nonce(access_token.nonce);
+
+    // byoc fork (2026-09-19): app-password logins have no interactive
+    // session_id, so the builder above cannot fetch the account email. Fall
+    // back to re-authenticating with the stored app password (createSession
+    // carries the email) so apps (Docs/People invites, etc.) can resolve the
+    // account by email.
+    if session.is_none() && can_provide_email {
+        if let Ok(Some(app_password)) = state
+            .oauth_storage
+            .get_app_password(&access_token.client_id, &user_id)
+            .await
+        {
+            if let Some(pds_endpoint) = document.pds_endpoints().first() {
+                match crate::oauth::utils_app_password::fetch_account_email_with_app_password(
+                    &state.http_client,
+                    &user_id,
+                    &app_password.app_password,
+                    pds_endpoint,
+                )
+                .await
+                {
+                    Ok((email, email_verified)) => {
+                        if email.is_some() {
+                            final_claims =
+                                final_claims.with_email(email).with_email_verified(email_verified);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(%user_id, error = %e, "app-password email fetch failed");
+                    }
+                }
+            }
+        }
+    }
 
     Ok(Json(final_claims))
 }

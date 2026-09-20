@@ -21,6 +21,12 @@ struct CreateSessionResponse {
     access_jwt: String,
     #[serde(rename = "refreshJwt")]
     refresh_jwt: String,
+    /// The account's email (absent when the PDS has no email or scope denies).
+    #[serde(default)]
+    email: Option<String>,
+    /// Whether the PDS considers the email confirmed.
+    #[serde(rename = "emailConfirmed", default)]
+    email_confirmed: bool,
 }
 
 
@@ -104,6 +110,52 @@ pub async fn create_app_password_session(
         .map_err(|e| format!("Failed to store app-password session: {}", e))?;
 
     Ok(app_password_session)
+}
+
+/// Fetch the account email with `com.atproto.server.createSession` using a
+/// stored app password (byoc fork, 2026-09-19).
+///
+/// App-password logins have no interactive ATProtocol session, so the OpenID
+/// userinfo builder cannot fetch the email like it does for OAuth sessions.
+/// The createSession response carries the account email — re-authenticating
+/// with the stored app password recovers it so apps (Docs invites, People
+/// invites, …) can resolve the account by email.
+pub async fn fetch_account_email_with_app_password(
+    http_client: &reqwest::Client,
+    did: &str,
+    app_password: &str,
+    pds_endpoint: &str,
+) -> Result<(Option<String>, Option<bool>), Box<dyn std::error::Error + Send + Sync>> {
+    let create_session_url = format!("{}/xrpc/com.atproto.server.createSession", pds_endpoint);
+
+    let request_body = CreateSessionRequest {
+        identifier: did.to_string(),
+        password: app_password.to_string(),
+    };
+
+    let response = http_client
+        .post(&create_session_url)
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| format!("ATProtocol createSession request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "ATProtocol createSession failed with status {}: {}",
+            status, body
+        )
+        .into());
+    }
+
+    let session_response: CreateSessionResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("ATProtocol createSession response parse error: {}", e))?;
+
+    Ok((session_response.email, Some(session_response.email_confirmed)))
 }
 
 /// Refresh an app-password session using ATProtocol refreshSession XRPC
