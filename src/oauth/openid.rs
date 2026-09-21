@@ -239,8 +239,14 @@ impl OpenIDClaims {
 /// Calculate hash for at_hash or c_hash claims (ES256)
 /// Uses the same implementation as atproto_oauth::pkce::challenge
 fn calculate_hash(input: &str) -> String {
-    // This matches the implementation from atproto_oauth::pkce::challenge
-    atproto_oauth::pkce::challenge(input)
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
+    use sha2::{Digest, Sha256};
+    // OIDC at_hash/c_hash = base64url(SHA-256(value) truncated to 128 bits).
+    // AIP previously emitted the full 32-byte digest, which strict OIDC
+    // clients (e.g. Grist via openid-client) reject with an at_hash mismatch.
+    let digest = Sha256::digest(input.as_bytes());
+    URL_SAFE_NO_PAD.encode(&digest[..16])
 }
 
 #[cfg(test)]
