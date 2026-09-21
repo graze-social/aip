@@ -63,7 +63,7 @@ chrono = { version = "0.4", features = ["serde"] }
 metrohash = "1.0.7"
 crockford = "1.2.1"
 duration-str = "0.11"
-rust-s3 = { version = "0.34", default-features = false, features = ["tokio-rustls-tls"] }
+object_store = { version = "0.12", default-features = false, features = ["aws"] }
 
 [dev-dependencies]
 axum-test = "15"

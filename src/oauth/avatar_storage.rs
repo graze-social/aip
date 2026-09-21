@@ -19,18 +19,26 @@
 //! ```
 //!
 //! Fail-open by design: every fetch/storage error just omits the claim.
+//!
+//! Backend: the `object_store` crate (apache-arrow), the standard object
+//! storage abstraction (S3/GS/Azure/Local), replacing a hand-rolled `rust-s3`
+//! client per upstream review feedback. Garage is path-style S3, which is
+//! object_store's default for the AWS backend. Content-type is stored on PUT;
+//! since `object_store` 0.12 does not surface it on GET, the serving handler
+//! sniffs the (image) bytes instead.
 
 use std::env;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use s3::creds::Credentials;
-use s3::{Bucket, Region};
+use object_store::aws::AmazonS3Builder;
+use object_store::path::Path as StorePath;
+use object_store::{Attribute, Attributes, ObjectStore, PutOptions, PutPayload};
 
-/// S3-compatible avatar storage handle (Garage, path-style).
+/// S3-compatible avatar storage handle (Garage).
 #[derive(Clone)]
 pub struct AvatarStorage {
-    bucket: Arc<Bucket>,
+    store: Arc<dyn ObjectStore>,
 }
 
 impl AvatarStorage {
@@ -51,77 +59,86 @@ impl AvatarStorage {
             return None;
         }
 
-        let credentials = match Credentials::new(
-            Some(&access_key),
-            Some(&secret_key),
-            None,
-            None,
-            None,
-        ) {
-            Ok(credentials) => credentials,
-            Err(e) => {
-                tracing::warn!(error = %e, "avatar storage: credentials failed to parse");
-                return None;
-            }
-        };
+        let mut builder = AmazonS3Builder::new()
+            .with_region(&region)
+            .with_bucket_name(bucket_name)
+            .with_access_key_id(access_key)
+            .with_secret_access_key(secret_key)
+            .with_endpoint(&endpoint);
 
-        let mut bucket = match Bucket::new(
-            &bucket_name,
-            Region::Custom { region, endpoint },
-            credentials,
-        ) {
-            Ok(bucket) => bucket,
-            Err(e) => {
-                tracing::warn!(error = %e, "avatar storage: bucket init failed");
-                return None;
-            }
-        };
-        // Garage is path-style S3.
-        bucket.set_path_style();
+        // Garage is plain HTTP on the cluster LAN and uses path-style
+        // addressing (object_store's default for the AWS backend).
+        if !endpoint.starts_with("https") {
+            builder = builder.with_allow_http(true);
+        }
 
-        Some(Self {
-            bucket: Arc::new(bucket),
-        })
+        match builder.build() {
+            Ok(store) => Some(Self {
+                store: Arc::new(store),
+            }),
+            Err(e) => {
+                tracing::warn!(error = %e, "avatar storage: store init failed");
+                None
+            }
+        }
     }
 
     /// Upload (idempotent by design — objects are keyed by their atproto blob
     /// CID, so re-uploading the same avatar overwrites with identical bytes).
     pub async fn put(&self, cid: &str, bytes: &[u8], content_type: &str) -> Result<(), String> {
-        let response = self
-            .bucket
-            .put_object_with_content_type(cid, bytes, content_type)
+        let mut attributes = Attributes::new();
+        attributes.insert(
+            Attribute::ContentType,
+            content_type.to_string().into(),
+        );
+
+        self.store
+            .put_opts(
+                &StorePath::from(cid),
+                PutPayload::from_bytes(Bytes::from(bytes.to_vec())),
+                PutOptions {
+                    attributes,
+                    ..Default::default()
+                },
+            )
             .await
-            .map_err(|e| format!("avatar storage put failed: {}", e))?;
-        if !(200..300).contains(&response.status_code()) {
-            return Err(format!(
-                "avatar storage put -> HTTP {}",
-                response.status_code()
-            ));
-        }
-        Ok(())
+            .map(|_| ())
+            .map_err(|e| format!("avatar storage put failed: {}", e))
     }
 
-    /// Fetch an object; returns `(bytes, content_type)`. Non-2xx (including
-    /// Garage XML error bodies, which rust-s3 returns as `Ok`) maps to `Err`
-    /// so the caller can 404 instead of streaming an error document.
-    pub async fn get(&self, cid: &str) -> Result<(Bytes, String), String> {
-        let data = self
-            .bucket
-            .get_object(cid)
+    /// Fetch an object's bytes (content-type is sniffed by the caller; see the
+    /// module docs).
+    pub async fn get(&self, cid: &str) -> Result<Bytes, String> {
+        let result = self
+            .store
+            .get(&StorePath::from(cid))
             .await
             .map_err(|e| format!("avatar storage get failed: {}", e))?;
-        if !(200..300).contains(&data.status_code()) {
-            return Err(format!(
-                "avatar storage get -> HTTP {}",
-                data.status_code()
-            ));
-        }
-        let mime = data
-            .headers()
-            .get("content-type")
-            .cloned()
-            .unwrap_or_else(|| "application/octet-stream".to_string());
-        Ok((data.bytes().clone(), mime))
+        result
+            .bytes()
+            .await
+            .map_err(|e| format!("avatar storage get stream failed: {}", e))
+    }
+}
+
+/// Best-effort content-type for avatar blobs (all common atproto avatar
+/// formats), sniffed from the leading bytes.
+pub fn sniff_image_content_type(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) {
+        "image/png"
+    } else if bytes.len() >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff {
+        "image/jpeg"
+    } else if bytes.starts_with(b"GIF8") {
+        "image/gif"
+    } else if bytes.len() >= 12
+        && bytes.starts_with(b"RIFF")
+        && &bytes[8..12] == b"WEBP"
+    {
+        "image/webp"
+    } else if bytes.starts_with(b"\x00\x00\x00") {
+        "image/heic"
+    } else {
+        "application/octet-stream"
     }
 }
 

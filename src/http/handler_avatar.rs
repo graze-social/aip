@@ -24,9 +24,10 @@ pub async fn handle_avatar(
     };
 
     match storage.get(&cid).await {
-        Ok((bytes, mime)) => {
+        Ok(bytes) => {
+            let mime = crate::oauth::avatar_storage::sniff_image_content_type(&bytes);
             let mut response = Response::new(Body::from(bytes));
-            if let Ok(value) = header::HeaderValue::from_str(&mime) {
+            if let Ok(value) = header::HeaderValue::from_str(mime) {
                 response.headers_mut().insert(header::CONTENT_TYPE, value);
             }
             response.headers_mut().insert(
