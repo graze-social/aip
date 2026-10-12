@@ -29,9 +29,55 @@ jobs:
 
       - name: create_release
         env:
-          GH_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
+          # Creating a release in this repo needs nothing more than the built-in
+          # token (contents: write is declared above). This used
+          # DISPATCH_GH_TOKEN, a cross-repo credential, for a same-repo write.
+          GH_TOKEN: ${{ github.token }}
         run: |-
           gh release create ${{ env.VERSION_TAG }} -t ${{ env.VERSION_TAG }} --generate-notes
+
+      # repo_dispatch below needs DISPATCH_GH_TOKEN to reach graze-social/turbo-deploy.
+      # Every merge here is meant to dispatch, so check the credential up front:
+      # an expired token should say so by name rather than surface as a bare
+      # "401 Bad credentials" after the release has already been cut.
+      - name: check_dispatch_credentials
+        env:
+          DISPATCH_GH_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
+          TARGET_REPO: graze-social/turbo-deploy
+        run: |
+          set -uo pipefail
+
+          if [ -z "${DISPATCH_GH_TOKEN}" ]; then
+            echo "::error title=DISPATCH_GH_TOKEN is not set::Cannot dispatch to ${TARGET_REPO}: the secret is empty or missing on ${GITHUB_REPOSITORY}."
+            echo "Runbook: https://github.com/graze-social/network/blob/main/.github/DEPLOY_DISPATCH.md"
+            exit 1
+          fi
+
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${DISPATCH_GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${TARGET_REPO}")
+
+          case "${code}" in
+            200)
+              echo "DISPATCH_GH_TOKEN authenticates against ${TARGET_REPO}."
+              ;;
+            401)
+              echo "::error title=DISPATCH_GH_TOKEN is expired or revoked::GitHub returned 401 Bad credentials for ${TARGET_REPO}. This is a credential problem, not a code problem."
+              echo "Runbook: https://github.com/graze-social/network/blob/main/.github/DEPLOY_DISPATCH.md"
+              exit 1
+              ;;
+            403 | 404)
+              echo "::error title=DISPATCH_GH_TOKEN cannot see ${TARGET_REPO}::GitHub returned ${code}. The token authenticates but lacks access to ${TARGET_REPO} (fine-grained PATs return 404 for repos outside their scope)."
+              echo "Runbook: https://github.com/graze-social/network/blob/main/.github/DEPLOY_DISPATCH.md"
+              exit 1
+              ;;
+            *)
+              echo "::error title=Could not verify DISPATCH_GH_TOKEN::Unexpected HTTP ${code} from the GitHub API for ${TARGET_REPO}."
+              exit 1
+              ;;
+          esac
 
       - name: repo_dispatch
         uses: peter-evans/repository-dispatch@v3
