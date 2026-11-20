@@ -146,6 +146,12 @@ OAUTH_SUPPORTED_SCOPES="atproto:atproto atproto:transition:generic atproto:trans
 # Default: false (disabled)
 ENABLE_CLIENT_API=false
 
+# Set to "true" to let outbound requests connect to loopback, private, and other
+# non-public addresses. Leave unset in production: PDS and authorization server
+# URLs come from DID documents anyone can publish.
+# Default: false
+ALLOW_PRIVATE_NETWORK_REQUESTS=false
+
 # Client token expiration configuration
 # Default access token lifetime (supports duration format: 1d, 12h, 3600s)
 # Default: 1d
@@ -256,6 +262,7 @@ RUST_LOG=aip=info,warn
 | `OAUTH_SIGNING_KEYS`     | auto-generated                                                        | OAuth JWT signing keys                                  |
 | `OAUTH_SUPPORTED_SCOPES` | `atproto:atproto atproto:transition:generic atproto:transition:email` | Supported OAuth scopes (space-separated)                |
 | `ENABLE_CLIENT_API`      | `false`                                                               | Enable client management API endpoints (`true`/`false`) |
+| `ALLOW_PRIVATE_NETWORK_REQUESTS` | `false`                                                     | Let outbound requests reach non-public addresses (`true`/`false`) |
 
 ### Client Management API Configuration
 

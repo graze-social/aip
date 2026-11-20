@@ -81,9 +81,21 @@ async fn main() -> Result<()> {
         client_builder = client_builder.add_root_certificate(cert);
     }
 
+    // Many of the URLs AIP fetches come from DID documents and OAuth metadata
+    // that anyone can publish. Re-check every redirect hop, and unless the
+    // operator opts out, refuse to connect to non-public addresses.
     client_builder = client_builder
         .user_agent(config.user_agent.clone())
-        .timeout(*config.http_client_timeout.as_ref());
+        .timeout(*config.http_client_timeout.as_ref())
+        .redirect(aip::oauth::atprotocol_trust::redirect_policy());
+    if config.allow_private_network_requests {
+        tracing::warn!(
+            "ALLOW_PRIVATE_NETWORK_REQUESTS is set; outbound requests may reach private addresses"
+        );
+    } else {
+        client_builder =
+            client_builder.dns_resolver(Arc::new(aip::oauth::atprotocol_trust::PublicOnlyResolver));
+    }
     let http_client = client_builder.build()?;
 
     // Initialize template engine

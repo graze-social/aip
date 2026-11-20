@@ -1,6 +1,9 @@
 //! Bridge for ATProtocol OAuth authentication within base OAuth 2.1 flows.
 
 use crate::errors::OAuthError;
+use crate::oauth::atprotocol_trust::{
+    validate_remote_endpoint, verify_expected_subject, verify_issuer, verify_subject_authority,
+};
 use crate::oauth::dpop::compute_jwk_thumbprint;
 use crate::oauth::{
     auth_server::{AuthorizationServer, AuthorizeResponse},
@@ -188,6 +191,8 @@ impl AtpBackedAuthorizationServer {
         let (did_option, authorization_server_endpoint) = if atpoauth_subject
             .starts_with("https://")
         {
+            require_allowed_endpoint(&atpoauth_subject)?;
+
             // First, try the HTTPS URL as an authorization server directly
             match oauth_authorization_server(&self.http_client, &atpoauth_subject).await {
                 Ok(_) => {
@@ -224,6 +229,7 @@ impl AtpBackedAuthorizationServer {
                                             atpoauth_subject, host
                                         ))
                                     })?.to_string();
+                                    require_allowed_endpoint(&pds_endpoint)?;
 
                                     let protected = oauth_protected_resource(
                                         &self.http_client,
@@ -295,6 +301,7 @@ impl AtpBackedAuthorizationServer {
                     ));
                 }
             };
+            require_allowed_endpoint(&pds_endpoint)?;
 
             let protected_resource =
                 match oauth_protected_resource(&self.http_client, &pds_endpoint).await {
@@ -316,6 +323,7 @@ impl AtpBackedAuthorizationServer {
             }
         };
 
+        require_allowed_endpoint(&authorization_server_endpoint)?;
         let authorization_server =
             match oauth_authorization_server(&self.http_client, &authorization_server_endpoint)
                 .await
@@ -327,6 +335,9 @@ impl AtpBackedAuthorizationServer {
                     ));
                 }
             };
+        require_allowed_endpoint(&authorization_server.pushed_authorization_request_endpoint)?;
+        require_allowed_endpoint(&authorization_server.token_endpoint)?;
+        require_allowed_endpoint(&authorization_server.authorization_endpoint)?;
 
         // Generate PKCE parameters for ATProtocol OAuth
         let (atpoauth_pkce_verifier, atpoauth_code_challenge) = pkce::generate();
@@ -491,16 +502,20 @@ impl AtpBackedAuthorizationServer {
     }
 
     /// Handle ATProtocol OAuth callback and complete base OAuth flow
+    ///
+    /// `iss` is the RFC 9207 issuer parameter from the callback, when the
+    /// authorization server sent one.
     pub async fn handle_atp_callback(
         &self,
         code: String,
         state: String,
+        iss: Option<String>,
     ) -> Result<String, OAuthError> {
         let exchange_start_time = Utc::now();
 
         // Try to execute the callback logic and handle errors
         let result = self
-            .handle_atp_callback_impl(code, state.clone(), exchange_start_time)
+            .handle_atp_callback_impl(code, state.clone(), iss, exchange_start_time)
             .await;
 
         // If there was an error, try to update the session with the error info
@@ -520,6 +535,7 @@ impl AtpBackedAuthorizationServer {
         &self,
         code: String,
         state: String,
+        iss: Option<String>,
         now: chrono::DateTime<chrono::Utc>,
     ) -> Result<String, OAuthError> {
         // Get session by ATProtocol state
@@ -555,6 +571,13 @@ impl AtpBackedAuthorizationServer {
             .map_err(|e| OAuthError::ServerError(e.to_string()))?
             .ok_or_else(|| OAuthError::InvalidState("OAuth request not found".to_string()))?;
 
+        // RFC 9207: when the authorization server names itself on the callback,
+        // it must be the one this flow was sent to.
+        if let Some(iss) = iss.as_deref() {
+            verify_issuer(&oauth_request.issuer, iss)
+                .map_err(|e| OAuthError::AuthorizationFailed(e.to_string()))?;
+        }
+
         // Parse the DPoP private key from storage
         let dpop_key = identify_key(&oauth_request.dpop_private_key)
             .map_err(|e| OAuthError::ServerError(format!("Failed to parse DPoP key: {}", e)))?;
@@ -584,6 +607,7 @@ impl AtpBackedAuthorizationServer {
 
         // Use the issuer from the OAuth request as the authorization server endpoint
         // The issuer contains the authorization server issuer URL
+        require_allowed_endpoint(&oauth_request.authorization_server)?;
         let authorization_server =
             oauth_authorization_server(&self.http_client, &oauth_request.authorization_server)
                 .await
@@ -593,6 +617,11 @@ impl AtpBackedAuthorizationServer {
                         e
                     ))
                 })?;
+        // The metadata is fetched again here, so hold it to what was recorded
+        // when the flow started.
+        verify_issuer(&oauth_request.issuer, &authorization_server.issuer)
+            .map_err(|e| OAuthError::AuthorizationFailed(e.to_string()))?;
+        require_allowed_endpoint(&authorization_server.token_endpoint)?;
 
         // Use oauth_complete to properly handle the token exchange with PKCE
         let token_response = oauth_complete(
@@ -621,16 +650,20 @@ impl AtpBackedAuthorizationServer {
             "Token response does not contain subject".to_string(),
         ))?;
 
-        let atpoauth_document = self
-            .identity_resolver
-            .resolve(&token_subject)
-            .await
-            .map_err(|e| {
-                OAuthError::AuthorizationFailed(format!(
-                    "Failed to resolve subject '{}': {:?}",
-                    token_subject, e
-                ))
-            })?;
+        // The token response's `sub` is only a claim made by the authorization
+        // server. Before AIP vouches for it downstream, the subject must be the
+        // identity this flow started with (when it started with one), and the
+        // subject's own PDS must name this authorization server.
+        verify_expected_subject(session.did.as_deref(), &token_subject)
+            .map_err(|e| OAuthError::AuthorizationFailed(e.to_string()))?;
+        let atpoauth_document = verify_subject_authority(
+            &self.http_client,
+            &self.identity_resolver,
+            &token_subject,
+            &oauth_request.authorization_server,
+        )
+        .await
+        .map_err(|e| OAuthError::AuthorizationFailed(e.to_string()))?;
 
         // Store the resolved document for later use
         self.document_storage
@@ -964,6 +997,11 @@ impl AuthorizationRequestStorage for UnifiedAuthorizationRequestStorageAdapter {
     }
 }
 
+/// Rejects a URL taken from untrusted metadata before AIP sends a request to it.
+fn require_allowed_endpoint(url: &str) -> Result<(), OAuthError> {
+    validate_remote_endpoint(url).map_err(|e| OAuthError::AuthorizationFailed(e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1289,7 +1327,11 @@ mod tests {
 
         // Test callback with invalid code (will fail at ATProtocol OAuth exchange)
         let result = server
-            .handle_atp_callback("invalid-code".to_string(), "atp-state-123".to_string())
+            .handle_atp_callback(
+                "invalid-code".to_string(),
+                "atp-state-123".to_string(),
+                None,
+            )
             .await;
 
         // Should fail during ATProtocol OAuth token exchange

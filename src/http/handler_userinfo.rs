@@ -99,10 +99,11 @@ pub async fn get_userinfo_handler(
         let (status, error_type, error_desc) = if error_msg.contains("DID document not found") {
             (StatusCode::NOT_FOUND, "not_found", "DID document not found")
         } else {
+            tracing::warn!(error = %error_msg, "building userinfo claims failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "server_error",
-                error_msg.as_str(),
+                "Internal error generating response",
             )
         };
 
@@ -181,6 +182,7 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            allow_private_network_requests: false,
             client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),

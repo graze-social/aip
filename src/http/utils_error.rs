@@ -6,10 +6,36 @@
 use axum::{Json, http::StatusCode};
 use serde_json::{Value, json};
 
-use crate::errors::StorageError;
+use crate::errors::{OAuthError, StorageError};
 
 /// Standard HTTP error response type used across handlers
 pub type HttpErrorResponse = (StatusCode, Json<Value>);
+
+/// Builds the error body returned to callers when an ATProtocol OAuth step
+/// fails.
+///
+/// Errors about the caller's own request keep their message. Every other
+/// error can carry text from remote servers (transport failures, response
+/// bodies, parser output) that would let a caller probe what AIP can reach, so
+/// the caller gets a fixed message and the detail goes to the log.
+pub fn atprotocol_oauth_error_body(error: &OAuthError, step: &'static str) -> Value {
+    let description = match error {
+        OAuthError::InvalidClient(_)
+        | OAuthError::InvalidRequest(_)
+        | OAuthError::InvalidScope(_)
+        | OAuthError::UnauthorizedClient(_)
+        | OAuthError::UnsupportedResponseType(_)
+        | OAuthError::AccessDenied(_) => error.to_string(),
+        _ => {
+            tracing::warn!(error = %error, step, "ATProtocol OAuth step failed");
+            format!("ATProtocol OAuth {step} failed")
+        }
+    };
+    json!({
+        "error": "server_error",
+        "error_description": description
+    })
+}
 
 /// Extension trait for converting storage Results to HTTP error responses
 pub trait StorageResultExt<T> {

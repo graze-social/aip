@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use crate::oauth::utils_atprotocol_oauth::create_atp_backed_server;
 
 use super::context::AppState;
+use super::utils_error::atprotocol_oauth_error_body;
 
 /// Query parameters for ATProtocol OAuth callback
 #[derive(Debug, Deserialize)]
@@ -20,6 +21,8 @@ pub struct AtpCallbackQuery {
     pub state: String,
     pub error: Option<String>,
     pub error_description: Option<String>,
+    /// RFC 9207 authorization server issuer identifier.
+    pub iss: Option<String>,
 }
 
 /// Handle ATProtocol OAuth callback
@@ -50,15 +53,12 @@ pub async fn handle_atpoauth_callback(
     })?;
 
     match atp_auth_server
-        .handle_atp_callback(query.code, query.state)
+        .handle_atp_callback(query.code, query.state, query.iss)
         .await
     {
         Ok(redirect_url) => Ok(Redirect::to(&redirect_url)),
         Err(e) => {
-            let error_response = json!({
-                "error": "server_error",
-                "error_description": e.to_string()
-            });
+            let error_response = atprotocol_oauth_error_body(&e, "callback");
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
@@ -75,6 +75,7 @@ mod tests {
             state: "test-state".to_string(),
             error: None,
             error_description: None,
+            iss: None,
         };
 
         assert_eq!(query.code, "test-code");
@@ -90,6 +91,7 @@ mod tests {
             state: "test-state".to_string(),
             error: Some("access_denied".to_string()),
             error_description: Some("User denied access".to_string()),
+            iss: None,
         };
 
         assert_eq!(query.error, Some("access_denied".to_string()));
@@ -106,6 +108,7 @@ mod tests {
             state: "test-state".to_string(),
             error: Some("server_error".to_string()),
             error_description: None,
+            iss: None,
         };
 
         assert_eq!(query.error, Some("server_error".to_string()));
@@ -120,6 +123,7 @@ mod tests {
             state: "valid-state-456".to_string(),
             error: None,
             error_description: None,
+            iss: None,
         };
 
         assert!(!query.code.is_empty());
@@ -135,6 +139,7 @@ mod tests {
             state: "state-with-dashes-and_underscores".to_string(),
             error: None,
             error_description: None,
+            iss: None,
         };
 
         assert_eq!(query.code, "code-with-special-chars_123");

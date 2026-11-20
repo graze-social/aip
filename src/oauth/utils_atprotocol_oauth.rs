@@ -27,9 +27,11 @@ pub async fn create_atp_backed_server(
         state.config.external_base.clone(),
     ));
 
-    // Use the identity resolver from state and create HTTP client for AtpOAuthServer
+    // Use the identity resolver and the shared HTTP client from state. The
+    // shared client carries the outbound-request protections configured at
+    // startup (public-only DNS, checked redirects, timeout, CA bundles).
     let identity_resolver = state.identity_resolver.clone();
-    let http_client = reqwest::Client::new();
+    let http_client = state.http_client.clone();
 
     let client_config = OAuthClientConfig {
         client_id: format!(
@@ -675,6 +677,7 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            allow_private_network_requests: false,
             client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),
@@ -761,6 +764,7 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            allow_private_network_requests: false,
             client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),
