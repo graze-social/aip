@@ -1,6 +1,7 @@
 //! OAuth 2.1 authorization and resource server with DPoP support and ATProtocol identity integration.
 
 pub mod atprotocol_bridge;
+pub mod atprotocol_trust;
 pub mod auth_server;
 pub mod avatar_storage;
 pub mod clients;

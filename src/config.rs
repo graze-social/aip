@@ -93,6 +93,9 @@ pub struct Config {
     pub database_url: Option<String>,
     pub redis_url: Option<String>,
     pub enable_client_api: bool,
+    /// Let outbound requests connect to loopback, private, and other
+    /// non-public addresses. Off by default; see `ALLOW_PRIVATE_NETWORK_REQUESTS`.
+    pub allow_private_network_requests: bool,
     pub client_default_access_token_expiration: ClientDefaultAccessTokenExpiration,
     pub client_default_refresh_token_expiration: ClientDefaultRefreshTokenExpiration,
     pub admin_dids: AdminDids,
@@ -137,6 +140,9 @@ impl Config {
         let enable_client_api = optional_env("ENABLE_CLIENT_API")
             .map(|v| v == "true")
             .unwrap_or(false);
+        let allow_private_network_requests = optional_env("ALLOW_PRIVATE_NETWORK_REQUESTS")
+            .map(|v| v == "true")
+            .unwrap_or(false);
         let client_default_access_token_expiration: ClientDefaultAccessTokenExpiration =
             default_env("CLIENT_DEFAULT_ACCESS_TOKEN_EXPIRATION", "1d").try_into()?;
         let client_default_refresh_token_expiration: ClientDefaultRefreshTokenExpiration =
@@ -173,6 +179,7 @@ impl Config {
             database_url,
             redis_url,
             enable_client_api,
+            allow_private_network_requests,
             client_default_access_token_expiration,
             client_default_refresh_token_expiration,
             admin_dids,

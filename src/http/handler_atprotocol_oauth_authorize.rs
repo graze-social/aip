@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 use super::context::AppState;
+use super::utils_error::atprotocol_oauth_error_body;
 use super::utils_oauth::normalize_login_hint;
 use crate::oauth::{
     auth_server::AuthorizeQuery, types::AuthorizationRequest,
@@ -70,10 +71,7 @@ pub async fn handle_oauth_authorize(
     {
         Ok(redirect_url) => Ok(Redirect::to(&redirect_url).into_response()),
         Err(e) => {
-            let error_response = json!({
-                "error": "server_error",
-                "error_description": e.to_string()
-            });
+            let error_response = atprotocol_oauth_error_body(&e, "authorization");
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
@@ -354,6 +352,7 @@ mod tests {
             database_url: None,
             redis_url: None,
             enable_client_api: false,
+            allow_private_network_requests: false,
             client_default_access_token_expiration: "1d".to_string().try_into().unwrap(),
             client_default_refresh_token_expiration: "14d".to_string().try_into().unwrap(),
             admin_dids: "".to_string().try_into().unwrap(),
